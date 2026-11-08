@@ -1,4 +1,4 @@
-name: CI & Windows Build
+name: CI (Windows & macOS)
 
 on:
   push:
@@ -11,7 +11,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest]
+        os: [windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
 
     steps:

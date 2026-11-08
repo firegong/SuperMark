@@ -103,17 +103,18 @@ pub fn build_bootstrap_script() -> String {
             editorConfig: window.config,
             userSettings: {{}}
         }};
-        if (!window.webkit) {{
-            window.webkit = {{
-                messageHandlers: {{
-                    bridge: {{
-                        postMessage: function(message) {{
-                            return window.__TAURI_INTERNALS__.invoke('handle_bridge_message', {{ message: message }});
-                        }}
+        // Always route the bridge through Tauri IPC: on Windows WebView2 there is no
+        // native window.webkit, and on macOS WKWebView Tauri does not register a
+        // messageHandlers.bridge handler, so the polyfill must take over in both hosts.
+        window.webkit = {{
+            messageHandlers: {{
+                bridge: {{
+                    postMessage: function(message) {{
+                        return window.__TAURI_INTERNALS__.invoke('handle_bridge_message', {{ message: message }});
                     }}
                 }}
-            }};
-        }}
+            }}
+        }};
         "#
     )
 }
