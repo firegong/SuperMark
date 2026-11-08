@@ -1,0 +1,61 @@
+name: Windows Release Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Force LF line endings (ts-gyb templates must stay platform-neutral)
+        run: git config --global core.autocrlf false
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Enable Corepack & Install CoreEditor dependencies
+        working-directory: packages/core-editor
+        run: |
+          corepack enable
+          yarn install --immutable
+
+      - name: Build CoreEditor bundle
+        working-directory: packages/core-editor
+        run: yarn build
+
+      - name: Setup Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: Bundle installers and publish release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: src-tauri
+          tagName: ${{ github.event_name == 'workflow_dispatch' && 'v__VERSION__' || github.ref_name }}
+          releaseName: 'MarkEdit-Win v__VERSION__'
+          releaseBody: 'See the assets to download and install this version of MarkEdit for Windows.'
+          releaseDraft: true
+          prerelease: false
+          includeUpdaterJson: false
