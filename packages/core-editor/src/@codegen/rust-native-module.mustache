@@ -1,0 +1,52 @@
+//
+//  {{moduleName}}.rs
+//
+//  Generated using https://github.com/microsoft/ts-gyb
+//
+//  Don't modify this file manually, it's auto generated.
+//
+//  To make changes, edit template files under /packages/core-editor/src/@codegen
+
+use serde_json::Value;
+
+pub trait {{moduleName}}: Send + Sync {
+    {{#methods}}
+    fn {{methodName}}(&self{{#parameters}}, {{name}}: {{type}}{{/parameters}}){{#returnType}} -> {{returnType}}{{/returnType}};
+    {{/methods}}
+}
+
+pub struct {{customTags.bridgeName}}<T: {{moduleName}}> {
+    module: T,
+}
+
+impl<T: {{moduleName}}> {{customTags.bridgeName}}<T> {
+    pub const NAME: &'static str = "{{customTags.invokePath}}";
+
+    pub fn new(module: T) -> Self {
+        Self { module }
+    }
+
+    pub fn invoke(&self, method: &str, parameters: &Value) -> Result<Value, String> {
+        let _ = parameters;
+        match method {
+            {{#methods}}
+            "{{methodName}}" => {
+                {{#parameters}}
+                let parameter_{{name}}: {{type}} = serde_json::from_value(
+                    parameters.get("{{name}}").cloned().unwrap_or(Value::Null)
+                ).map_err(|e| format!("Failed to decode parameter '{{name}}': {e}"))?;
+                {{/parameters}}
+                {{#returnType}}
+                let result = self.module.{{methodName}}({{#parameters}}parameter_{{name}}{{^last}}, {{/last}}{{/parameters}});
+                serde_json::to_value(result).map_err(|e| e.to_string())
+                {{/returnType}}
+                {{^returnType}}
+                self.module.{{methodName}}({{#parameters}}parameter_{{name}}{{^last}}, {{/last}}{{/parameters}});
+                Ok(Value::Null)
+                {{/returnType}}
+            }
+            {{/methods}}
+            _ => Err(format!("Unknown method on {}: {method}", Self::NAME)),
+        }
+    }
+}

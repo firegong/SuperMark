@@ -1,0 +1,52 @@
+name: CI & Windows Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify-and-build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Enable Corepack & Install CoreEditor dependencies
+        working-directory: packages/core-editor
+        run: |
+          corepack enable
+          yarn install --immutable
+
+      - name: Build & Test CoreEditor
+        working-directory: packages/core-editor
+        run: |
+          yarn build
+          yarn test
+
+      - name: Setup Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: Run Tauri Host Unit Tests
+        working-directory: src-tauri
+        run: cargo test
+
+      - name: Build Windows Release Binary
+        working-directory: src-tauri
+        run: cargo build --release

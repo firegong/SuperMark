@@ -1,0 +1,16 @@
+{
+  "name": "markedit-win",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MarkEdit for Windows (Tauri v2 + WebView2 + CodeMirror 6 CoreEditor)",
+  "scripts": {
+    "dev:editor": "yarn --cwd packages/core-editor dev",
+    "build:editor": "yarn --cwd packages/core-editor build",
+    "test:editor": "yarn --cwd packages/core-editor test",
+    "check:tauri": "cargo check --manifest-path src-tauri/Cargo.toml",
+    "test:tauri": "cargo test --manifest-path src-tauri/Cargo.toml",
+    "test": "yarn build:editor && yarn test:editor && yarn test:tauri"
+  },
+  "license": "MIT",
+  "packageManager": "yarn@4.18.0"
+}

@@ -1,0 +1,9 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Default capability for MarkEdit-Win editor windows",
+  "windows": ["*"],
+  "permissions": [
+    "core:default"
+  ]
+}

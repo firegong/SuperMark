@@ -16,11 +16,11 @@
 
 ---
 
-## Phase 1: 코어 이식 및 개념 검증 (PoC)
-- [ ] **M1.1**: 업스트림 `MarkEdit/CoreEditor` 소스 가져오기 (`packages/core-editor`) 및 Yarn 빌드/단위 테스트(`yarn test`) 통과 확인
-- [ ] **M1.2**: `CoreEditor/src/bridge/nativeModule.ts`에 Tauri v2 / WebView2 IPC 브리지 호환 레이어 추가
-- [ ] **M1.3**: `CoreEditor` 내 macOS 전용 단축키/클릭 수정자(`Cmd` → `Ctrl`) 플랫폼 분기 패치
-- [ ] **M1.4**: `src-tauri` 프로젝트 초기화 및 `CoreEditor` 단일 파일 번들을 로드해 로컬 `.md` 파일 열기·편집·저장 동작 검증
+## Phase 1: 코어 이식 및 개념 검증 (PoC) — 완료
+- [x] **M1.1**: 업스트림 `MarkEdit/CoreEditor` 소스 가져오기 (`packages/core-editor`) 및 Yarn 빌드/단위 테스트(`yarn test` 35개 스위트 / 482개 테스트) 통과 확인
+- [x] **M1.2**: `CoreEditor/src/bridge/nativeModule.ts` 및 `contextRequest.ts`에 Tauri v2 / WebView2 IPC 브리지 호환 레이어 추가
+- [x] **M1.3**: `CoreEditor` 내 Windows 단축키/클릭 수정자(`Ctrl+Click` 링크 이동 및 체크박스 토글) 플랫폼 분기 패치
+- [x] **M1.4**: `src-tauri` 프로젝트 초기화 및 `CoreEditor` 단일 파일 번들을 로드해 로컬 `.md` 파일 열기·편집·저장(UTF-8 BOM 및 LF/CRLF 보존) 동작 구현 및 검증
 
 ## Phase 2: 브리지 자동 생성 및 Windows 네이티브 셸 구축
 - [ ] **M2.1**: `CoreEditor/src/@codegen`에 Rust용 Mustache 템플릿 4종(`rust-config`, `rust-native-module`, `rust-web-module`, `rust-shared-types`) 작성 및 `ts-gyb` 연동
