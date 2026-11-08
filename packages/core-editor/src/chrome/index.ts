@@ -7,6 +7,8 @@ import { createFindBar, FindBarApi } from './findBar';
 import { createTocPopover } from './tocPopover';
 import { createStatisticsPopover } from './statisticsPopover';
 import { createGotoLinePrompt } from './gotoLine';
+import { createPromptModal } from './promptModal';
+import { showContextMenu } from './contextMenu';
 
 const rootId = 'markedit-chrome-root';
 
@@ -29,10 +31,13 @@ export function initChromeUI(): void {
 
   let activePanel: HTMLElement | null = null;
   let activeFindBar: FindBarApi | null = null;
+  let activeCloseHandler: (() => void) | null = null;
 
   const closeActive = () => {
     activeFindBar?.dispose();
     activeFindBar = null;
+    activeCloseHandler?.();
+    activeCloseHandler = null;
     activePanel?.remove();
     activePanel = null;
   };
@@ -78,6 +83,36 @@ export function initChromeUI(): void {
       activePanel = createGotoLinePrompt(() => chromeUI.closeAll());
       root.appendChild(activePanel);
       activePanel.querySelector('input')?.focus();
+    },
+    showTextBox(options) {
+      closeActive();
+
+      const modal = createPromptModal(options, () => {
+        activePanel = null;
+        activeCloseHandler = null;
+      });
+
+      activePanel = modal.element;
+      activeCloseHandler = modal.close;
+      root.appendChild(activePanel);
+      modal.focus();
+
+      return modal.promise;
+    },
+    showContextMenu(options) {
+      closeActive();
+
+      const menu = showContextMenu({
+        items: options.items,
+        location: options.location,
+      }, () => {
+        activePanel = null;
+        activeCloseHandler = null;
+      });
+
+      activePanel = menu;
+      activeCloseHandler = () => menu.remove();
+      root.appendChild(menu);
     },
     closeAll() {
       closeActive();

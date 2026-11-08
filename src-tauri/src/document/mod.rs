@@ -1,5 +1,9 @@
+pub mod textbundle;
+pub mod versions;
 pub mod watcher;
 
+use crate::bridge::secret_storage::SecretStorageManager;
+use crate::extensions::ExtensionManager;
 use chardetng::EncodingDetector;
 use encoding_rs::{Encoding, UTF_16BE, UTF_16LE, UTF_8};
 use serde::{Deserialize, Serialize};
@@ -8,6 +12,11 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
+use textbundle::{
+    is_textbundle_path, is_textpack_path, read_textbundle, read_textpack, write_textbundle,
+    write_textpack,
+};
+use versions::VersionManager;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum LineEndings {
@@ -98,6 +107,35 @@ impl DocumentSession {
 
     pub fn load_from_path(&mut self, path: impl AsRef<Path>) -> Result<String, String> {
         let path_ref = path.as_ref();
+
+        if is_textbundle_path(path_ref) {
+            let raw_text = read_textbundle(path_ref)?;
+            let line_endings = LineEndings::detect(&raw_text);
+            let normalized = raw_text.replace("\r\n", "\n").replace('\r', "\n");
+            self.file_path = Some(path_ref.to_path_buf());
+            self.bom = BomKind::None;
+            self.encoding_name = "UTF-8".to_string();
+            self.line_endings = line_endings;
+            self.is_dirty = false;
+            self.content_cache = normalized.clone();
+            self.last_modified_secs = file_mtime_secs(path_ref);
+            return Ok(normalized);
+        }
+
+        if is_textpack_path(path_ref) {
+            let raw_text = read_textpack(path_ref)?;
+            let line_endings = LineEndings::detect(&raw_text);
+            let normalized = raw_text.replace("\r\n", "\n").replace('\r', "\n");
+            self.file_path = Some(path_ref.to_path_buf());
+            self.bom = BomKind::None;
+            self.encoding_name = "UTF-8".to_string();
+            self.line_endings = line_endings;
+            self.is_dirty = false;
+            self.content_cache = normalized.clone();
+            self.last_modified_secs = file_mtime_secs(path_ref);
+            return Ok(normalized);
+        }
+
         let bytes = fs::read(path_ref).map_err(|e| e.to_string())?;
         let (bom, encoding, raw_text) = decode_bytes(&bytes);
 
@@ -127,11 +165,30 @@ impl DocumentSession {
 
     pub fn save_as(&mut self, path: impl AsRef<Path>, editor_text: &str) -> Result<(), String> {
         let target_path = path.as_ref();
+        let formatted = self.line_endings.apply(editor_text);
+
+        if is_textbundle_path(target_path) {
+            write_textbundle(target_path, &formatted)?;
+            self.file_path = Some(target_path.to_path_buf());
+            self.is_dirty = false;
+            self.content_cache = editor_text.replace("\r\n", "\n").replace('\r', "\n");
+            self.last_modified_secs = file_mtime_secs(target_path);
+            return Ok(());
+        }
+
+        if is_textpack_path(target_path) {
+            write_textpack(target_path, &formatted)?;
+            self.file_path = Some(target_path.to_path_buf());
+            self.is_dirty = false;
+            self.content_cache = editor_text.replace("\r\n", "\n").replace('\r', "\n");
+            self.last_modified_secs = file_mtime_secs(target_path);
+            return Ok(());
+        }
+
         if let Some(parent) = target_path.parent() {
             fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
 
-        let formatted = self.line_endings.apply(editor_text);
         let out_bytes = encode_text(&formatted, &self.encoding_name, &self.bom);
 
         let temp_path = target_path.with_extension("markedit.tmp");
@@ -226,6 +283,9 @@ pub struct DocumentManager {
     sessions: Mutex<HashMap<String, DocumentSession>>,
     recent_files: Mutex<Vec<PathBuf>>,
     app_data_dir: PathBuf,
+    versions: VersionManager,
+    extensions: ExtensionManager,
+    secrets: SecretStorageManager,
 }
 
 impl Default for DocumentManager {
@@ -253,11 +313,30 @@ impl DocumentManager {
             .map(|list| list.into_iter().map(PathBuf::from).collect())
             .unwrap_or_default();
 
+        let versions = VersionManager::new(&app_data_dir);
+        let extensions = ExtensionManager::new(&app_data_dir);
+        let secrets = SecretStorageManager::new(&app_data_dir);
+
         Self {
             sessions: Mutex::new(map),
             recent_files: Mutex::new(recent_loaded),
             app_data_dir,
+            versions,
+            extensions,
+            secrets,
         }
+    }
+
+    pub fn versions(&self) -> &VersionManager {
+        &self.versions
+    }
+
+    pub fn extensions(&self) -> &ExtensionManager {
+        &self.extensions
+    }
+
+    pub fn secrets(&self) -> &SecretStorageManager {
+        &self.secrets
     }
 
     pub fn with_session<F, R>(&self, label: &str, f: F) -> R
@@ -269,6 +348,17 @@ impl DocumentManager {
             .entry(label.to_string())
             .or_insert_with(|| DocumentSession::new(label));
         f(session)
+    }
+
+    pub fn next_window_label(&self) -> String {
+        let guard = self.sessions.lock().expect("DocumentManager lock");
+        for idx in 2..=1000 {
+            let candidate = format!("doc-{idx}");
+            if !guard.contains_key(&candidate) {
+                return candidate;
+            }
+        }
+        "doc-extra".to_string()
     }
 
     pub fn push_recent(&self, path: PathBuf) {
@@ -339,6 +429,26 @@ impl DocumentManager {
         let dir = self.backups_dir();
         let _ = fs::remove_file(dir.join(format!("{label}.md")));
         let _ = fs::remove_file(dir.join(format!("{label}.json")));
+    }
+
+    pub fn list_backup_labels(&self) -> Vec<String> {
+        let dir = self.backups_dir();
+        let Ok(entries) = fs::read_dir(&dir) else {
+            return Vec::new();
+        };
+        entries
+            .filter_map(|e| e.ok())
+            .filter_map(|e| {
+                let p = e.path();
+                if p.extension().and_then(|ext| ext.to_str()) == Some("json") {
+                    p.file_stem()
+                        .and_then(|s| s.to_str())
+                        .map(|s| s.to_string())
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
 }
 
@@ -439,6 +549,7 @@ mod tests {
         });
         mgr.save_backup_snapshot("main", "# Unsaved Draft")
             .expect("save backup");
+        assert_eq!(mgr.list_backup_labels(), vec!["main".to_string()]);
 
         let (meta, text) = mgr.load_backup_snapshot("main").expect("load backup");
         assert_eq!(text, "# Unsaved Draft");
@@ -446,5 +557,26 @@ mod tests {
 
         mgr.clear_backup_snapshot("main");
         assert!(mgr.load_backup_snapshot("main").is_none());
+    }
+
+    #[test]
+    fn loads_and_saves_textbundle_and_textpack_via_document_session() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let bundle_path = tmp.path().join("Doc.textbundle");
+        let mut s1 = DocumentSession::new("main");
+        s1.save_as(&bundle_path, "# Bundle Header\nLine 2")
+            .expect("save textbundle");
+
+        let mut s2 = DocumentSession::new("main");
+        let loaded = s2.load_from_path(&bundle_path).expect("load textbundle");
+        assert_eq!(loaded, "# Bundle Header\nLine 2");
+
+        let pack_path = tmp.path().join("Doc.textpack");
+        s2.save_as(&pack_path, "# Pack Header\nLine 2")
+            .expect("save textpack");
+
+        let mut s3 = DocumentSession::new("main");
+        let loaded_pack = s3.load_from_path(&pack_path).expect("load textpack");
+        assert_eq!(loaded_pack, "# Pack Header\nLine 2");
     }
 }

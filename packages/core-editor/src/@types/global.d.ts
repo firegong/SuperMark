@@ -7,6 +7,8 @@ import { NativeModuleAPI } from '../bridge/native/api';
 import { NativeModuleFoundationModels } from '../bridge/native/foundationModels';
 import { NativeModuleTranslation } from '../bridge/native/translation';
 import { NativeModuleSecretStorage } from '../bridge/native/secretStorage';
+import { WebMenuItem } from './WebMenuItem';
+import { WebPoint } from './WebPoint';
 
 import type { EditorView } from '@codemirror/view';
 import type { Extension } from '@codemirror/state';
@@ -69,6 +71,8 @@ declare global {
     toggleToc(): void;
     toggleStatistics(): void;
     openGotoLine(): void;
+    showTextBox(options?: { title?: string; defaultValue?: string; placeholder?: string }): Promise<string | undefined>;
+    showContextMenu(options: { items: WebMenuItem[]; location?: WebPoint }): void;
     closeAll(): void;
   }
 }

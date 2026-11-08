@@ -29,6 +29,29 @@
     "targets": "all",
     "icon": [
       "icons/icon.png"
-    ]
+    ],
+    "fileAssociations": [
+      {
+        "ext": ["md", "markdown", "mdown", "mkd"],
+        "name": "Markdown Document",
+        "description": "Markdown Text Document",
+        "mimeType": "text/markdown"
+      },
+      {
+        "ext": ["textpack"],
+        "name": "TextPack Archive",
+        "description": "Compressed Markdown TextBundle",
+        "mimeType": "application/x-textpack"
+      }
+    ],
+    "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper",
+        "silent": true
+      },
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    }
   }
 }

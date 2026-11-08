@@ -23,6 +23,8 @@ rfd = "0.15"
 encoding_rs = "0.8"
 chardetng = "0.1"
 notify = "6"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+arboard = "3"
 
 [dev-dependencies]
 tempfile = "3"

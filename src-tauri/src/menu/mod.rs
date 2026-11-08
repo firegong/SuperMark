@@ -1,4 +1,5 @@
 use crate::bridge::WebBridge;
+use crate::create_editor_window;
 use crate::document::{DocumentManager, LineEndings};
 use serde_json::json;
 use tauri::{
@@ -246,20 +247,30 @@ pub fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, menu_id: &str) {
     if menu_id == "file.open" {
         if let Some(webview) = app.get_webview_window("main") {
             if let Some(path) = rfd::FileDialog::new()
-                .add_filter("Markdown", &["md", "markdown", "txt"])
+                .add_filter(
+                    "Markdown & TextPack",
+                    &["md", "markdown", "mdown", "mkd", "txt", "textpack"],
+                )
                 .pick_file()
             {
                 let doc_mgr = app.state::<DocumentManager>();
-                let label = webview.label().to_string();
-                let load_res = doc_mgr.with_session(&label, |s| {
-                    let text = s.load_from_path(&path)?;
-                    Ok::<(String, String), String>((text, s.display_title()))
+                let is_busy = doc_mgr.with_session("main", |s| {
+                    s.is_dirty || s.file_path.is_some() || !s.content_cache.is_empty()
                 });
-                if let Ok((text, title)) = load_res {
-                    doc_mgr.push_recent(path);
-                    doc_mgr.clear_backup_snapshot(&label);
-                    let _ = webview.set_title(&title);
-                    let _ = webview.eval(&WebBridge::reset_editor(&text));
+
+                if is_busy {
+                    let _ = create_editor_window(app, Some(path));
+                } else {
+                    let loaded = doc_mgr.with_session("main", |s| {
+                        let text = s.load_from_path(&path)?;
+                        Ok::<(String, String), String>((text, s.display_title()))
+                    });
+
+                    if let Ok((text, title)) = loaded {
+                        doc_mgr.push_recent(path);
+                        let _ = webview.set_title(&title);
+                        let _ = webview.eval(&WebBridge::reset_editor(&text));
+                    }
                 }
             }
         }
@@ -267,32 +278,30 @@ pub fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, menu_id: &str) {
     }
 
     if menu_id == "file.new" {
-        if let Some(webview) = app.get_webview_window("main") {
-            let doc_mgr = app.state::<DocumentManager>();
-            let label = webview.label().to_string();
-            let title = doc_mgr.with_session(&label, |s| {
-                s.file_path = None;
-                s.is_dirty = false;
-                s.content_cache.clear();
+        let doc_mgr = app.state::<DocumentManager>();
+        let is_busy = doc_mgr.with_session("main", |s| {
+            s.is_dirty || s.file_path.is_some() || !s.content_cache.is_empty()
+        });
+
+        if is_busy {
+            let _ = create_editor_window(app, None);
+        } else if let Some(webview) = app.get_webview_window("main") {
+            let title = doc_mgr.with_session("main", |s| {
+                *s = crate::document::DocumentSession::new("main");
                 s.display_title()
             });
-            doc_mgr.clear_backup_snapshot(&label);
             let _ = webview.set_title(&title);
+            let _ = webview.eval(&WebBridge::reset_editor(""));
         }
+        return;
     }
 
-    if menu_id == "view.le_crlf" || menu_id == "view.le_lf" {
-        if let Some(webview) = app.get_webview_window("main") {
-            let doc_mgr = app.state::<DocumentManager>();
-            let label = webview.label().to_string();
-            doc_mgr.with_session(&label, |s| {
-                s.line_endings = if menu_id == "view.le_crlf" {
-                    LineEndings::CRLF
-                } else {
-                    LineEndings::LF
-                };
-            });
-        }
+    if menu_id == "view.le_crlf" {
+        let doc_mgr = app.state::<DocumentManager>();
+        doc_mgr.with_session("main", |s| s.line_endings = LineEndings::CRLF);
+    } else if menu_id == "view.le_lf" {
+        let doc_mgr = app.state::<DocumentManager>();
+        doc_mgr.with_session("main", |s| s.line_endings = LineEndings::LF);
     }
 
     if let Some(script) = menu_id_to_web_script(menu_id) {

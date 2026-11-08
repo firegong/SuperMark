@@ -1,5 +1,6 @@
 pub mod bridge;
 pub mod document;
+pub mod extensions;
 pub mod menu;
 pub mod settings;
 
@@ -8,7 +9,11 @@ use document::DocumentManager;
 use rfd::{MessageButtons, MessageDialog, MessageDialogResult, MessageLevel};
 use serde_json::Value;
 use settings::SettingsManager;
-use tauri::{Manager, State, WebviewWindow, WindowEvent};
+use std::path::PathBuf;
+use tauri::{
+    AppHandle, Manager, Runtime, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
+    WindowEvent,
+};
 
 #[tauri::command]
 async fn handle_bridge_message(
@@ -43,7 +48,10 @@ async fn save_document_content(
 
     let target_path = if save_as || existing_path.is_none() {
         rfd::FileDialog::new()
-            .add_filter("Markdown", &["md", "markdown", "txt"])
+            .add_filter(
+                "Markdown & TextPack",
+                &["md", "markdown", "mdown", "mkd", "txt", "textpack"],
+            )
             .set_file_name("Untitled.md")
             .save_file()
     } else {
@@ -59,6 +67,7 @@ async fn save_document_content(
         Ok::<String, String>(s.display_title())
     })?;
 
+    let _ = doc_mgr.versions().record_version(&path, &text);
     doc_mgr.push_recent(path);
     doc_mgr.clear_backup_snapshot(&label);
     let _ = window.set_title(&new_title);
@@ -109,6 +118,34 @@ pub fn build_bootstrap_script() -> String {
     )
 }
 
+/// Spawns a new document window with its own `DocumentSession` and bootstrap script.
+pub fn create_editor_window<R: Runtime>(
+    app: &AppHandle<R>,
+    initial_path: Option<PathBuf>,
+) -> tauri::Result<WebviewWindow<R>> {
+    let doc_mgr = app.state::<DocumentManager>();
+    let label = doc_mgr.next_window_label();
+    let init_script = build_bootstrap_script();
+
+    let title = doc_mgr.with_session(&label, |session| {
+        if let Some(ref p) = initial_path {
+            let _ = session.load_from_path(p);
+        }
+        session.display_title()
+    });
+
+    if let Some(p) = initial_path {
+        doc_mgr.push_recent(p);
+    }
+
+    WebviewWindowBuilder::new(app, &label, WebviewUrl::App("index.html".into()))
+        .title(&title)
+        .inner_size(960.0, 680.0)
+        .min_inner_size(420.0, 300.0)
+        .initialization_script(&init_script)
+        .build()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let init_script = build_bootstrap_script();
@@ -119,6 +156,42 @@ pub fn run() {
             let app_handle = app.handle();
             let app_menu = menu::build_app_menu(app_handle)?;
             app.set_menu(app_menu)?;
+
+            let doc_mgr = app.state::<DocumentManager>();
+            let _ = doc_mgr.extensions().ensure_directories();
+
+            // Check CLI arguments for initial file paths (e.g. double-click in Windows Explorer)
+            let cli_paths: Vec<PathBuf> = std::env::args()
+                .skip(1)
+                .filter(|arg| !arg.starts_with('-'))
+                .map(PathBuf::from)
+                .filter(|p| p.exists())
+                .collect();
+
+            if let Some(first_path) = cli_paths.first() {
+                let title = doc_mgr.with_session("main", |s| {
+                    let _ = s.load_from_path(first_path);
+                    s.display_title()
+                });
+                doc_mgr.push_recent(first_path.clone());
+                if let Some(main_win) = app.get_webview_window("main") {
+                    let _ = main_win.set_title(&title);
+                }
+                for extra_path in cli_paths.iter().skip(1) {
+                    let _ = create_editor_window(app_handle, Some(extra_path.clone()));
+                }
+            } else if let Some((meta, text)) = doc_mgr.load_backup_snapshot("main") {
+                // Hot-Exit backup restoration when launched without explicit file args
+                let title = doc_mgr.with_session("main", |s| {
+                    s.file_path = meta.original_path;
+                    s.content_cache = text;
+                    s.is_dirty = true;
+                    s.display_title()
+                });
+                if let Some(main_win) = app.get_webview_window("main") {
+                    let _ = main_win.set_title(&title);
+                }
+            }
 
             if let Some(main_win) = app.get_webview_window("main") {
                 let _ = main_win.eval(&init_script);

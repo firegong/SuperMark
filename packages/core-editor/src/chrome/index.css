@@ -271,3 +271,133 @@
   width: 160px;
   text-align: center;
 }
+
+/* Modal dialog */
+
+.markedit-chrome-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.25);
+  animation: markedit-chrome-fade-in 120ms ease-out;
+}
+
+@keyframes markedit-chrome-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.markedit-chrome-modal {
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  margin: 20px;
+}
+
+.markedit-chrome-modal-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.markedit-chrome-modal-input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.markedit-chrome-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* Context menu */
+
+.markedit-chrome-context-backdrop {
+  position: fixed;
+  inset: 0;
+  pointer-events: auto;
+}
+
+.markedit-chrome-context-menu {
+  position: absolute;
+  min-width: 180px;
+  max-width: 320px;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  overflow: auto;
+}
+
+.markedit-chrome-context-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background-color 140ms ease;
+}
+
+.markedit-chrome-context-item:hover:not(.markedit-chrome-disabled) {
+  background: var(--chrome-hover);
+}
+
+.markedit-chrome-context-item.markedit-chrome-disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.markedit-chrome-context-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.markedit-chrome-context-shortcut {
+  font-size: 12px;
+  color: var(--chrome-text-secondary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.markedit-chrome-context-separator {
+  height: 1px;
+  margin: 4px 8px;
+  background: var(--chrome-border);
+}
+
+.markedit-chrome-has-submenu {
+  position: relative;
+}
+
+.markedit-chrome-has-submenu::after {
+  content: '›';
+  margin-left: auto;
+  color: var(--chrome-text-secondary);
+}
+
+.markedit-chrome-submenu {
+  display: none;
+  position: absolute;
+  left: calc(100% - 4px);
+  top: -4px;
+}
+
+.markedit-chrome-has-submenu:hover > .markedit-chrome-submenu,
+.markedit-chrome-has-submenu:focus-within > .markedit-chrome-submenu {
+  display: flex;
+}
