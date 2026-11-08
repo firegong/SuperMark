@@ -15,6 +15,9 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
+      - name: Configure git line endings (force LF so ts-gyb templates stay platform-neutral)
+        run: git config --global core.autocrlf false
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
