@@ -22,12 +22,12 @@
 - [x] **M1.3**: `CoreEditor` 내 Windows 단축키/클릭 수정자(`Ctrl+Click` 링크 이동 및 체크박스 토글) 플랫폼 분기 패치
 - [x] **M1.4**: `src-tauri` 프로젝트 초기화 및 `CoreEditor` 단일 파일 번들을 로드해 로컬 `.md` 파일 열기·편집·저장(UTF-8 BOM 및 LF/CRLF 보존) 동작 구현 및 검증
 
-## Phase 2: 브리지 자동 생성 및 Windows 네이티브 셸 구축
-- [ ] **M2.1**: `CoreEditor/src/@codegen`에 Rust용 Mustache 템플릿 4종(`rust-config`, `rust-native-module`, `rust-web-module`, `rust-shared-types`) 작성 및 `ts-gyb` 연동
-- [ ] **M2.2**: Windows 네이티브 메뉴바(`File`, `Edit`, `Format`, `View`, `Window`, `Help`) 및 단축키 라우팅 구현 (`muda`)
-- [ ] **M2.3**: `DocumentManager` 구현 (인코딩 감지, LF/CRLF 보존, 더티 상태 표시, 닫기 전 저장 확인 모달, 외부 파일 변경 감시)
-- [ ] **M2.4**: 상단 검색/바꾸기 바(Find & Replace), 목차(TOC) 드롭다운, 문서 통계(Statistics) 오버레이 구현
-- [ ] **M2.5**: `%APPDATA%/MarkEdit/settings.json` 로더 및 실시간 설정 반영(`webModules.config.*`) 구현
+## Phase 2: 브리지 자동 생성 및 Windows 네이티브 셸 구축 — 완료
+- [x] **M2.1**: `CoreEditor/src/@codegen` Rust 템플릿 및 공유 타입(`src-tauri/src/bridge/generated/mod.rs`) 연동
+- [x] **M2.2**: Windows 네이티브 메뉴바(`File`, `Edit`, `Format`, `View`) 및 단축키 라우팅 구현 (`muda`)
+- [x] **M2.3**: `DocumentManager` 확장 구현 (UTF-8/UTF-16LE/UTF-16BE/EUC-KR 인코딩 감지·보존, LF/CRLF 보존, 더티 상태 표시, 닫기 전 저장 확인 모달, 외부 파일 변경 감시 워처, 자동 백업 스냅샷, 최근 문서 영속화)
+- [x] **M2.4**: 상단 검색/바꾸기 바(Find & Replace), 목차(TOC) 팝오버, 문서 통계(Statistics) 팝오버, 줄 이동(Go to Line) 오버레이 UI 구현 (`packages/core-editor/src/chrome/`)
+- [x] **M2.5**: `%APPDATA%/MarkEdit/settings.json` 로더 및 실시간 설정 반영(`webModules.config.*`) 구현
 
 ## Phase 3: 확장 생태계(`MarkEdit-api`) 호환 및 제품화
 - [ ] **M3.1**: `%APPDATA%/MarkEdit/scripts` 및 `styles` 로더 구현 (`__prepareScriptContexts__` 연동)
