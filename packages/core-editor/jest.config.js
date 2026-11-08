@@ -11,7 +11,7 @@ module.exports = {
     '^(\\./(?:script\\.js|style\\.css))\\?raw$': '$1',
   },
   transform: {
-    '^.+/src/modules/preview/frame/(?:script\\.js|style\\.css)$': '<rootDir>/test/utils/rawTextTransformer.cjs',
+    '^.+[\\\\/]src[\\\\/]modules[\\\\/]preview[\\\\/]frame[\\\\/](?:script\\.js|style\\.css)$': '<rootDir>/test/utils/rawTextTransformer.cjs',
     '^.+\\.tsx?$': ['ts-jest', {}],
   },
 };
