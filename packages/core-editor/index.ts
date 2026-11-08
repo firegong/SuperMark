@@ -31,6 +31,7 @@ import { loadTheme } from './src/styling/themes';
 import { startObserving } from './src/modules/events';
 import { createScriptRunner } from './src/scriptContext';
 import { setUpQuickLook } from './src/@quicklook';
+import { initChromeUI } from './src/chrome';
 
 // In release mode, window.config = "{{EDITOR_CONFIG}}" will be replaced with a JSON literal
 const config = import.meta.env.PROD ? window.config : {
@@ -148,6 +149,7 @@ function setUpMainApp(config: Config) {
 
   setUp(config, loadTheme(config.theme).colors);
   startObserving();
+  initChromeUI();
 
   // Respond to reduced motion preference changes
   const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');

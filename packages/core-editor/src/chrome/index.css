@@ -1,0 +1,273 @@
+.markedit-chrome-root {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  pointer-events: none;
+
+  /* Windows 11 acrylic/mica palette */
+  --chrome-bg: rgba(250, 250, 250, 0.82);
+  --chrome-bg-solid: #f3f3f3;
+  --chrome-border: rgba(0, 0, 0, 0.08);
+  --chrome-text: #1a1a1a;
+  --chrome-text-secondary: #5f5f5f;
+  --chrome-accent: #005fb8;
+  --chrome-accent-hover: #0066c7;
+  --chrome-hover: rgba(0, 0, 0, 0.04);
+  --chrome-active: rgba(0, 0, 0, 0.08);
+  --chrome-input-bg: rgba(255, 255, 255, 0.65);
+  --chrome-shadow: 0 8px 32px rgba(0, 0, 0, 0.14);
+
+  font-family: 'Segoe UI', 'Cascadia Mono', system-ui, -apple-system, sans-serif;
+  color: var(--chrome-text);
+}
+
+@media (prefers-color-scheme: dark) {
+  .markedit-chrome-root {
+    --chrome-bg: rgba(40, 40, 40, 0.82);
+    --chrome-bg-solid: #202020;
+    --chrome-border: rgba(255, 255, 255, 0.10);
+    --chrome-text: #f3f3f3;
+    --chrome-text-secondary: #b6b6b6;
+    --chrome-accent: #4cc2ff;
+    --chrome-accent-hover: #60c9ff;
+    --chrome-hover: rgba(255, 255, 255, 0.06);
+    --chrome-active: rgba(255, 255, 255, 0.10);
+    --chrome-input-bg: rgba(255, 255, 255, 0.08);
+    --chrome-shadow: 0 8px 32px rgba(0, 0, 0, 0.32);
+  }
+}
+
+.markedit-chrome-panel {
+  pointer-events: auto;
+  background: var(--chrome-bg);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  border: 1px solid var(--chrome-border);
+  border-radius: 8px;
+  box-shadow: var(--chrome-shadow);
+  opacity: 0;
+  transform: translateY(-6px);
+  animation: markedit-chrome-enter 140ms ease-out forwards;
+}
+
+@keyframes markedit-chrome-enter {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.markedit-chrome-hidden {
+  display: none !important;
+}
+
+/* Find bar */
+
+.markedit-chrome-findbar {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  min-width: 360px;
+  max-width: 560px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+}
+
+.markedit-chrome-findbar-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.markedit-chrome-findbar-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.markedit-chrome-counter {
+  font-size: 12px;
+  color: var(--chrome-text-secondary);
+  font-variant-numeric: tabular-nums;
+  padding: 0 4px;
+  white-space: nowrap;
+}
+
+.markedit-chrome-options-row {
+  padding-top: 4px;
+}
+
+/* Popovers */
+
+.markedit-chrome-popover {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 320px;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.markedit-chrome-popover-header {
+  padding: 10px 12px 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--chrome-text-secondary);
+  border-bottom: 1px solid var(--chrome-border);
+}
+
+.markedit-chrome-popover-body {
+  overflow: auto;
+  padding: 6px;
+}
+
+/* Shared controls */
+
+.markedit-chrome-input {
+  appearance: none;
+  background: var(--chrome-input-bg);
+  border: 1px solid var(--chrome-border);
+  border-radius: 4px;
+  color: var(--chrome-text);
+  font: inherit;
+  font-size: 13px;
+  padding: 5px 8px;
+  outline: none;
+  transition: border-color 140ms ease, background-color 140ms ease;
+}
+
+.markedit-chrome-input:focus {
+  border-color: var(--chrome-accent);
+}
+
+.markedit-chrome-button {
+  appearance: none;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--chrome-text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 5px 8px;
+  transition: background-color 140ms ease, border-color 140ms ease;
+}
+
+.markedit-chrome-button:hover {
+  background: var(--chrome-hover);
+}
+
+.markedit-chrome-button:active {
+  background: var(--chrome-active);
+}
+
+.markedit-chrome-button:focus-visible {
+  outline: 2px solid var(--chrome-accent);
+  outline-offset: 1px;
+}
+
+.markedit-chrome-icon-button {
+  padding: 5px 7px;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.markedit-chrome-action-button {
+  background: var(--chrome-accent);
+  color: #fff;
+}
+
+.markedit-chrome-action-button:hover {
+  background: var(--chrome-accent-hover);
+}
+
+.markedit-chrome-toggle {
+  font-family: 'Cascadia Mono', Consolas, monospace;
+  min-width: 28px;
+}
+
+.markedit-chrome-toggle.markedit-chrome-active {
+  background: var(--chrome-accent);
+  color: #fff;
+}
+
+.markedit-chrome-close-button {
+  font-size: 16px;
+  padding: 4px 8px;
+}
+
+/* TOC list */
+
+.markedit-chrome-filter {
+  margin: 8px 12px 4px;
+  width: calc(100% - 24px);
+  box-sizing: border-box;
+}
+
+.markedit-chrome-list-item {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--chrome-text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 12px;
+  margin-bottom: 2px;
+  transition: background-color 140ms ease;
+}
+
+.markedit-chrome-list-item:hover {
+  background: var(--chrome-hover);
+}
+
+.markedit-chrome-list-item.markedit-chrome-selected {
+  background: var(--chrome-active);
+  font-weight: 600;
+}
+
+/* Statistics */
+
+.markedit-chrome-statistics-section + .markedit-chrome-statistics-section {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--chrome-border);
+}
+
+.markedit-chrome-statistics-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--chrome-text-secondary);
+  margin-bottom: 6px;
+}
+
+.markedit-chrome-statistics-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  padding: 3px 0;
+}
+
+.markedit-chrome-statistics-value {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Go to line */
+
+.markedit-chrome-goto {
+  position: absolute;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 6px;
+}
+
+.markedit-chrome-goto-input {
+  width: 160px;
+  text-align: center;
+}

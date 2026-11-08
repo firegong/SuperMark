@@ -1,6 +1,12 @@
+pub mod generated;
+
 use crate::document::DocumentManager;
+use generated::{AlertConfiguration, FileInfo, LineColumnInfo};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::fs;
+use std::path::Path;
+use std::time::UNIX_EPOCH;
 use unicode_segmentation::UnicodeSegmentation;
 
 /// Message format sent by `CoreEditor/src/bridge/nativeModule.ts`
@@ -14,14 +20,6 @@ pub struct BridgeMessage {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct LineColumnInfo {
-    pub line_number: i64,
-    pub column_text: String,
-    pub selection_text: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct ViewDidUpdateParams {
     pub content_edited: bool,
     pub composition_ended: bool,
@@ -30,6 +28,7 @@ pub struct ViewDidUpdateParams {
 }
 
 /// Generates JavaScript expressions to invoke `window.webModules.<module>.<method>(...)`
+/// and `window.chromeUI.<method>(...)`.
 pub struct WebBridge;
 
 impl WebBridge {
@@ -40,6 +39,16 @@ impl WebBridge {
                 format!("window.webModules?.{module}?.{method}?.({serialized});")
             }
             None => format!("window.webModules?.{module}?.{method}?.();"),
+        }
+    }
+
+    pub fn format_chrome_call(method: &str, args: Option<Value>) -> String {
+        match args {
+            Some(val) => {
+                let serialized = serde_json::to_string(&val).unwrap_or_else(|_| "false".to_string());
+                format!("window.chromeUI?.{method}?.({serialized});")
+            }
+            None => format!("window.chromeUI?.{method}?.();"),
         }
     }
 
@@ -81,10 +90,7 @@ pub fn dispatch_bridge_message(
         "tokenizer" => handle_tokenizer_module(&msg.method_name, &params),
         "completion" => Ok((Value::Null, None)),
         "secretStorage" => handle_secret_storage_module(&msg.method_name, &params),
-        "translation" => Ok((
-            json!({ "succeeded": false, "text": "" }),
-            None,
-        )),
+        "translation" => Ok((json!({ "succeeded": false, "text": "" }), None)),
         "foundationModels" => handle_foundation_models_module(&msg.method_name),
         other => Err(format!("Unknown native module: {other}")),
     }
@@ -114,8 +120,16 @@ fn handle_core_module(
             }
             Ok((Value::Null, None))
         }
-        "notifyEditorDidBecomeIdle"
-        | "notifyBackgroundColorDidChange"
+        "notifyEditorDidBecomeIdle" => {
+            let is_dirty = doc_mgr.with_session(window_label, |s| s.is_dirty);
+            if is_dirty {
+                let script = "window.__TAURI_INTERNALS__?.invoke('save_idle_backup', { text: window.webModules?.core?.getEditorText?.() ?? '' });".to_string();
+                Ok((Value::Null, Some(script)))
+            } else {
+                Ok((Value::Null, None))
+            }
+        }
+        "notifyBackgroundColorDidChange"
         | "notifyViewportScaleDidChange"
         | "notifyContentHeightDidChange"
         | "notifyContentOffsetDidChange"
@@ -131,7 +145,7 @@ fn handle_core_module(
 
 fn handle_api_module(
     method: &str,
-    _params: &Value,
+    params: &Value,
     doc_mgr: &DocumentManager,
 ) -> Result<(Value, Option<String>), String> {
     match method {
@@ -139,6 +153,110 @@ fn handle_api_module(
         "getFileVersions" => Ok((json!([]), None)),
         "getPasteboardString" => Ok((Value::Null, None)),
         "getPasteboardItems" => Ok((Value::Null, None)),
+        "createFile" => {
+            let Some(options) = params.get("options") else {
+                return Ok((json!(false), None));
+            };
+            let Some(path_str) = options.get("path").and_then(|v| v.as_str()) else {
+                return Ok((json!(false), None));
+            };
+            let is_dir = options
+                .get("isDirectory")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            let overwrite = options
+                .get("overwrite")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            let path = Path::new(path_str);
+            if path.exists() && !overwrite {
+                return Ok((json!(false), None));
+            }
+            let ok = if is_dir {
+                fs::create_dir_all(path).is_ok()
+            } else {
+                let content = options
+                    .get("content")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default();
+                if let Some(parent) = path.parent() {
+                    let _ = fs::create_dir_all(parent);
+                }
+                fs::write(path, content.as_bytes()).is_ok()
+            };
+            Ok((json!(ok), None))
+        }
+        "deleteFile" => {
+            let Some(path_str) = params.get("path").and_then(|v| v.as_str()) else {
+                return Ok((json!(false), None));
+            };
+            let path = Path::new(path_str);
+            let ok = if path.is_dir() {
+                fs::remove_dir_all(path).is_ok()
+            } else {
+                fs::remove_file(path).is_ok()
+            };
+            Ok((json!(ok), None))
+        }
+        "listFiles" => {
+            let Some(path_str) = params.get("path").and_then(|v| v.as_str()) else {
+                return Ok((Value::Null, None));
+            };
+            let Ok(entries) = fs::read_dir(path_str) else {
+                return Ok((Value::Null, None));
+            };
+            let files: Vec<String> = entries
+                .filter_map(|e| e.ok())
+                .map(|e| e.path().to_string_lossy().into_owned())
+                .collect();
+            Ok((json!(files), None))
+        }
+        "getFileContent" => {
+            let Some(path_str) = params.get("path").and_then(|v| v.as_str()) else {
+                return Ok((Value::Null, None));
+            };
+            let content = fs::read_to_string(path_str).ok();
+            Ok((json!(content), None))
+        }
+        "getFileInfo" => {
+            let Some(path_str) = params.get("path").and_then(|v| v.as_str()) else {
+                return Ok((Value::Null, None));
+            };
+            let path = Path::new(path_str);
+            let Ok(meta) = fs::metadata(path) else {
+                return Ok((Value::Null, None));
+            };
+            let created = meta
+                .created()
+                .ok()
+                .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            let modified = meta
+                .modified()
+                .ok()
+                .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            let info = FileInfo {
+                file_path: path.to_string_lossy().into_owned(),
+                file_size: meta.len(),
+                creation_date: created,
+                modification_date: modified,
+                parent_path: path.parent().map(|p| p.to_string_lossy().into_owned()),
+                is_directory: meta.is_dir(),
+            };
+            let serialized = serde_json::to_string(&info).ok();
+            Ok((json!(serialized), None))
+        }
+        "showAlert" => {
+            if let Some(cfg_val) = params.get("configuration") {
+                if let Ok(cfg) = serde_json::from_value::<AlertConfiguration>(cfg_val.clone()) {
+                    let _ = cfg;
+                }
+            }
+            Ok((json!(0), None))
+        }
         _ => Ok((Value::Null, None)),
     }
 }
@@ -199,9 +317,18 @@ fn handle_secret_storage_module(
     _params: &Value,
 ) -> Result<(Value, Option<String>), String> {
     match method {
-        "has" => Ok((json!( serde_json::to_string(&json!({ "value": false })).unwrap() ), None)),
-        "get" => Ok((json!( serde_json::to_string(&json!({ "value": Value::Null })).unwrap() ), None)),
-        "set" | "delete" => Ok((json!( serde_json::to_string(&json!({ "value": true })).unwrap() ), None)),
+        "has" => Ok((
+            json!(serde_json::to_string(&json!({ "value": false })).unwrap()),
+            None,
+        )),
+        "get" => Ok((
+            json!(serde_json::to_string(&json!({ "value": Value::Null })).unwrap()),
+            None,
+        )),
+        "set" | "delete" => Ok((
+            json!(serde_json::to_string(&json!({ "value": true })).unwrap()),
+            None,
+        )),
         other => Err(format!("Unknown secretStorage method: {other}")),
     }
 }
@@ -209,7 +336,13 @@ fn handle_secret_storage_module(
 fn handle_foundation_models_module(method: &str) -> Result<(Value, Option<String>), String> {
     match method {
         "availability" => Ok((
-            json!(serde_json::to_string(&json!({ "isAvailable": false, "unavailableReason": "Unsupported platform (Windows)" })).unwrap()),
+            json!(
+                serde_json::to_string(&json!({
+                    "isAvailable": false,
+                    "unavailableReason": "Unsupported platform (Windows)"
+                }))
+                .unwrap()
+            ),
             None,
         )),
         "isResponding" => Ok((json!(false), None)),
@@ -223,7 +356,8 @@ mod tests {
 
     #[test]
     fn updates_dirty_state_on_notify_view_did_update() {
-        let doc_mgr = DocumentManager::new();
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let doc_mgr = DocumentManager::with_data_dir(tmp.path().to_path_buf());
         let msg = BridgeMessage {
             module_name: "core".to_string(),
             method_name: "notifyViewDidUpdate".to_string(),
@@ -246,11 +380,24 @@ mod tests {
 
         let is_dirty = doc_mgr.with_session("main", |s| s.is_dirty);
         assert!(is_dirty);
+
+        // Idle notification while dirty should return save_idle_backup invocation script
+        let idle_msg = BridgeMessage {
+            module_name: "core".to_string(),
+            method_name: "notifyEditorDidBecomeIdle".to_string(),
+            parameters: "{}".to_string(),
+        };
+        let (_, idle_js) =
+            dispatch_bridge_message("main", &idle_msg, &doc_mgr).expect("dispatch idle");
+        assert!(idle_js
+            .expect("idle script")
+            .contains("save_idle_backup"));
     }
 
     #[test]
     fn returns_reset_editor_script_on_notify_window_did_load() {
-        let doc_mgr = DocumentManager::new();
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let doc_mgr = DocumentManager::with_data_dir(tmp.path().to_path_buf());
         doc_mgr.with_session("main", |s| {
             s.content_cache = "# Welcome to MarkEdit-Win".to_string();
         });
@@ -270,8 +417,43 @@ mod tests {
     }
 
     #[test]
+    fn handles_api_filesystem_methods() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let doc_mgr = DocumentManager::with_data_dir(tmp.path().to_path_buf());
+        let target_file = tmp.path().join("plugin-note.md");
+
+        let create_msg = BridgeMessage {
+            module_name: "api".to_string(),
+            method_name: "createFile".to_string(),
+            parameters: serde_json::to_string(&json!({
+                "options": {
+                    "path": target_file.to_string_lossy(),
+                    "content": "# Created via API",
+                    "isDirectory": false,
+                    "overwrite": true
+                }
+            }))
+            .unwrap(),
+        };
+        let (created, _) = dispatch_bridge_message("main", &create_msg, &doc_mgr).unwrap();
+        assert_eq!(created, json!(true));
+
+        let read_msg = BridgeMessage {
+            module_name: "api".to_string(),
+            method_name: "getFileContent".to_string(),
+            parameters: serde_json::to_string(&json!({
+                "path": target_file.to_string_lossy()
+            }))
+            .unwrap(),
+        };
+        let (content, _) = dispatch_bridge_message("main", &read_msg, &doc_mgr).unwrap();
+        assert_eq!(content, json!("# Created via API"));
+    }
+
+    #[test]
     fn tokenizes_word_boundaries_accurately() {
-        let doc_mgr = DocumentManager::new();
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let doc_mgr = DocumentManager::with_data_dir(tmp.path().to_path_buf());
         let msg = BridgeMessage {
             module_name: "tokenizer".to_string(),
             method_name: "tokenize".to_string(),

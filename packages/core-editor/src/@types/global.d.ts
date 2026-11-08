@@ -59,6 +59,17 @@ declare global {
     __extractStyleRules__: (theme: Extension) => string[] | undefined;
     __extractHighlightSpecs__: (theme: Extension) => TagStyle[] | undefined;
     __flattenThemeExtensions__: (theme: Extension) => Extension[];
+
+    chromeUI?: ChromeUI;
+  }
+
+  interface ChromeUI {
+    openFindBar(withReplace?: boolean): void;
+    closeFindBar(): void;
+    toggleToc(): void;
+    toggleStatistics(): void;
+    openGotoLine(): void;
+    closeAll(): void;
   }
 }
 

@@ -5,9 +5,10 @@ pub mod settings;
 
 use bridge::{dispatch_bridge_message, BridgeMessage, WebBridge};
 use document::DocumentManager;
+use rfd::{MessageButtons, MessageDialog, MessageDialogResult, MessageLevel};
 use serde_json::Value;
 use settings::SettingsManager;
-use tauri::{Manager, State, WebviewWindow};
+use tauri::{Manager, State, WebviewWindow, WindowEvent};
 
 #[tauri::command]
 async fn handle_bridge_message(
@@ -59,9 +60,27 @@ async fn save_document_content(
     })?;
 
     doc_mgr.push_recent(path);
+    doc_mgr.clear_backup_snapshot(&label);
     let _ = window.set_title(&new_title);
     let _ = window.eval(&WebBridge::mark_content_clean());
     Ok(true)
+}
+
+#[tauri::command]
+async fn save_idle_backup(
+    window: WebviewWindow,
+    doc_mgr: State<'_, DocumentManager>,
+    text: String,
+) -> Result<(), String> {
+    let label = window.label().to_string();
+    let is_dirty = doc_mgr.with_session(&label, |s| {
+        s.content_cache = text.clone();
+        s.is_dirty
+    });
+    if is_dirty {
+        doc_mgr.save_backup_snapshot(&label, &text)?;
+    }
+    Ok(())
 }
 
 pub fn build_bootstrap_script() -> String {
@@ -109,9 +128,43 @@ pub fn run() {
         .on_menu_event(|app, event| {
             menu::handle_menu_event(app, event.id().as_ref());
         })
+        .on_window_event(|window, event| {
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                let doc_mgr = window.state::<DocumentManager>();
+                let label = window.label().to_string();
+                let is_dirty = doc_mgr.with_session(&label, |s| s.is_dirty);
+
+                if is_dirty {
+                    api.prevent_close();
+                    let result = MessageDialog::new()
+                        .set_title("MarkEdit")
+                        .set_description("Do you want to save the changes made to this document?")
+                        .set_level(MessageLevel::Warning)
+                        .set_buttons(MessageButtons::YesNoCancel)
+                        .show();
+
+                    match result {
+                        MessageDialogResult::Yes => {
+                            if let Some(webview) = window.app_handle().get_webview_window(&label) {
+                                let _ = webview.eval(
+                                    "window.__TAURI_INTERNALS__?.invoke('save_document_content', { text: window.webModules?.core?.getEditorText?.() ?? '', saveAs: false }).then((saved) => { if (saved) window.close(); });",
+                                );
+                            }
+                        }
+                        MessageDialogResult::No => {
+                            doc_mgr.with_session(&label, |s| s.is_dirty = false);
+                            doc_mgr.clear_backup_snapshot(&label);
+                            let _ = window.close();
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             handle_bridge_message,
-            save_document_content
+            save_document_content,
+            save_idle_backup
         ])
         .run(tauri::generate_context!())
         .expect("error while running MarkEdit-Win Tauri application");

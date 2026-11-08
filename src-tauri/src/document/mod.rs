@@ -1,8 +1,13 @@
+pub mod watcher;
+
+use chardetng::EncodingDetector;
+use encoding_rs::{Encoding, UTF_16BE, UTF_16LE, UTF_8};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum LineEndings {
@@ -35,14 +40,31 @@ impl LineEndings {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum BomKind {
+    None,
+    Utf8,
+    Utf16Le,
+    Utf16Be,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BackupMetadata {
+    pub window_label: String,
+    pub original_path: Option<PathBuf>,
+    pub timestamp_secs: u64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DocumentSession {
     pub window_label: String,
     pub file_path: Option<PathBuf>,
-    pub has_utf8_bom: bool,
+    pub bom: BomKind,
+    pub encoding_name: String,
     pub line_endings: LineEndings,
     pub is_dirty: bool,
     pub content_cache: String,
+    pub last_modified_secs: Option<u64>,
 }
 
 impl DocumentSession {
@@ -50,10 +72,12 @@ impl DocumentSession {
         Self {
             window_label: window_label.into(),
             file_path: None,
-            has_utf8_bom: false,
+            bom: BomKind::None,
+            encoding_name: "UTF-8".to_string(),
             line_endings: LineEndings::CRLF,
             is_dirty: false,
             content_cache: String::new(),
+            last_modified_secs: None,
         }
     }
 
@@ -75,21 +99,18 @@ impl DocumentSession {
     pub fn load_from_path(&mut self, path: impl AsRef<Path>) -> Result<String, String> {
         let path_ref = path.as_ref();
         let bytes = fs::read(path_ref).map_err(|e| e.to_string())?;
-        let (has_bom, body) = if bytes.starts_with(&[0xEF, 0xBB, 0xBF]) {
-            (true, &bytes[3..])
-        } else {
-            (false, bytes.as_slice())
-        };
+        let (bom, encoding, raw_text) = decode_bytes(&bytes);
 
-        let raw_text = String::from_utf8_lossy(body).into_owned();
         let line_endings = LineEndings::detect(&raw_text);
         let normalized_text = raw_text.replace("\r\n", "\n").replace('\r', "\n");
 
         self.file_path = Some(path_ref.to_path_buf());
-        self.has_utf8_bom = has_bom;
+        self.bom = bom;
+        self.encoding_name = encoding.name().to_string();
         self.line_endings = line_endings;
         self.is_dirty = false;
         self.content_cache = normalized_text.clone();
+        self.last_modified_secs = file_mtime_secs(path_ref);
 
         Ok(normalized_text)
     }
@@ -111,11 +132,7 @@ impl DocumentSession {
         }
 
         let formatted = self.line_endings.apply(editor_text);
-        let mut out_bytes = Vec::with_capacity(formatted.len() + 3);
-        if self.has_utf8_bom {
-            out_bytes.extend_from_slice(&[0xEF, 0xBB, 0xBF]);
-        }
-        out_bytes.extend_from_slice(formatted.as_bytes());
+        let out_bytes = encode_text(&formatted, &self.encoding_name, &self.bom);
 
         let temp_path = target_path.with_extension("markedit.tmp");
         fs::write(&temp_path, &out_bytes).map_err(|e| e.to_string())?;
@@ -124,13 +141,91 @@ impl DocumentSession {
         self.file_path = Some(target_path.to_path_buf());
         self.is_dirty = false;
         self.content_cache = editor_text.replace("\r\n", "\n").replace('\r', "\n");
+        self.last_modified_secs = file_mtime_secs(target_path);
         Ok(())
     }
+}
+
+fn decode_bytes(bytes: &[u8]) -> (BomKind, &'static Encoding, String) {
+    if bytes.starts_with(&[0xEF, 0xBB, 0xBF]) {
+        let (cow, _, _) = UTF_8.decode(&bytes[3..]);
+        return (BomKind::Utf8, UTF_8, cow.into_owned());
+    }
+    if bytes.starts_with(&[0xFF, 0xFE]) {
+        let (cow, _, _) = UTF_16LE.decode(&bytes[2..]);
+        return (BomKind::Utf16Le, UTF_16LE, cow.into_owned());
+    }
+    if bytes.starts_with(&[0xFE, 0xFF]) {
+        let (cow, _, _) = UTF_16BE.decode(&bytes[2..]);
+        return (BomKind::Utf16Be, UTF_16BE, cow.into_owned());
+    }
+    if let Ok(valid_utf8) = std::str::from_utf8(bytes) {
+        return (BomKind::None, UTF_8, valid_utf8.to_string());
+    }
+
+    let mut detector = EncodingDetector::new();
+    detector.feed(bytes, true);
+    let encoding = detector.guess(None, true);
+    let (cow, _, _) = encoding.decode(bytes);
+    (BomKind::None, encoding, cow.into_owned())
+}
+
+fn encode_text(text: &str, encoding_name: &str, bom: &BomKind) -> Vec<u8> {
+    let mut out = Vec::new();
+    match bom {
+        BomKind::Utf8 => {
+            out.extend_from_slice(&[0xEF, 0xBB, 0xBF]);
+            out.extend_from_slice(text.as_bytes());
+            return out;
+        }
+        BomKind::Utf16Le => {
+            out.extend_from_slice(&[0xFF, 0xFE]);
+            for u in text.encode_utf16() {
+                out.extend_from_slice(&u.to_le_bytes());
+            }
+            return out;
+        }
+        BomKind::Utf16Be => {
+            out.extend_from_slice(&[0xFE, 0xFF]);
+            for u in text.encode_utf16() {
+                out.extend_from_slice(&u.to_be_bytes());
+            }
+            return out;
+        }
+        BomKind::None => {}
+    }
+
+    let encoding = Encoding::for_label(encoding_name.as_bytes()).unwrap_or(UTF_8);
+    if encoding == UTF_16LE {
+        for u in text.encode_utf16() {
+            out.extend_from_slice(&u.to_le_bytes());
+        }
+        return out;
+    }
+    if encoding == UTF_16BE {
+        for u in text.encode_utf16() {
+            out.extend_from_slice(&u.to_be_bytes());
+        }
+        return out;
+    }
+
+    let (cow, _, _) = encoding.encode(text);
+    out.extend_from_slice(&cow);
+    out
+}
+
+fn file_mtime_secs(path: &Path) -> Option<u64> {
+    fs::metadata(path)
+        .ok()
+        .and_then(|m| m.modified().ok())
+        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+        .map(|d| d.as_secs())
 }
 
 pub struct DocumentManager {
     sessions: Mutex<HashMap<String, DocumentSession>>,
     recent_files: Mutex<Vec<PathBuf>>,
+    app_data_dir: PathBuf,
 }
 
 impl Default for DocumentManager {
@@ -141,11 +236,27 @@ impl Default for DocumentManager {
 
 impl DocumentManager {
     pub fn new() -> Self {
+        let base = dirs::config_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join("MarkEdit");
+        Self::with_data_dir(base)
+    }
+
+    pub fn with_data_dir(app_data_dir: PathBuf) -> Self {
         let mut map = HashMap::new();
         map.insert("main".to_string(), DocumentSession::new("main"));
+
+        let recent_path = app_data_dir.join("recent.json");
+        let recent_loaded: Vec<PathBuf> = fs::read_to_string(&recent_path)
+            .ok()
+            .and_then(|raw| serde_json::from_str::<Vec<String>>(&raw).ok())
+            .map(|list| list.into_iter().map(PathBuf::from).collect())
+            .unwrap_or_default();
+
         Self {
             sessions: Mutex::new(map),
-            recent_files: Mutex::new(Vec::new()),
+            recent_files: Mutex::new(recent_loaded),
+            app_data_dir,
         }
     }
 
@@ -165,6 +276,15 @@ impl DocumentManager {
         recent.retain(|p| p != &path);
         recent.insert(0, path);
         recent.truncate(15);
+
+        let _ = fs::create_dir_all(&self.app_data_dir);
+        let serialized: Vec<String> = recent
+            .iter()
+            .map(|p| p.to_string_lossy().into_owned())
+            .collect();
+        if let Ok(json_str) = serde_json::to_string_pretty(&serialized) {
+            let _ = fs::write(self.app_data_dir.join("recent.json"), json_str);
+        }
     }
 
     pub fn recent_paths_strings(&self) -> Vec<String> {
@@ -173,6 +293,52 @@ impl DocumentManager {
             .iter()
             .map(|p| p.to_string_lossy().into_owned())
             .collect()
+    }
+
+    pub fn backups_dir(&self) -> PathBuf {
+        self.app_data_dir.join("Backups")
+    }
+
+    pub fn save_backup_snapshot(&self, label: &str, text: &str) -> Result<PathBuf, String> {
+        let dir = self.backups_dir();
+        fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+
+        let md_path = dir.join(format!("{label}.md"));
+        let meta_path = dir.join(format!("{label}.json"));
+
+        let original_path = self.with_session(label, |s| s.file_path.clone());
+        let now_secs = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+
+        let meta = BackupMetadata {
+            window_label: label.to_string(),
+            original_path,
+            timestamp_secs: now_secs,
+        };
+
+        fs::write(&md_path, text.as_bytes()).map_err(|e| e.to_string())?;
+        let meta_json = serde_json::to_string_pretty(&meta).map_err(|e| e.to_string())?;
+        fs::write(&meta_path, meta_json).map_err(|e| e.to_string())?;
+        Ok(md_path)
+    }
+
+    pub fn load_backup_snapshot(&self, label: &str) -> Option<(BackupMetadata, String)> {
+        let dir = self.backups_dir();
+        let md_path = dir.join(format!("{label}.md"));
+        let meta_path = dir.join(format!("{label}.json"));
+
+        let text = fs::read_to_string(&md_path).ok()?;
+        let meta_raw = fs::read_to_string(&meta_path).ok()?;
+        let meta = serde_json::from_str::<BackupMetadata>(&meta_raw).ok()?;
+        Some((meta, text))
+    }
+
+    pub fn clear_backup_snapshot(&self, label: &str) {
+        let dir = self.backups_dir();
+        let _ = fs::remove_file(dir.join(format!("{label}.md")));
+        let _ = fs::remove_file(dir.join(format!("{label}.json")));
     }
 }
 
@@ -192,7 +358,7 @@ mod tests {
         let mut session = DocumentSession::new("main");
         let loaded = session.load_from_path(&file_path).expect("load_from_path");
 
-        assert!(session.has_utf8_bom);
+        assert_eq!(session.bom, BomKind::Utf8);
         assert_eq!(session.line_endings, LineEndings::CRLF);
         assert_eq!(loaded, "# Title\n\n- [ ] Task 1\n");
         assert_eq!(session.display_title(), "note.md — MarkEdit");
@@ -208,5 +374,77 @@ mod tests {
         let saved_bytes = fs::read(&file_path).expect("read saved file");
         assert!(saved_bytes.starts_with(&[0xEF, 0xBB, 0xBF]));
         assert_eq!(&saved_bytes[3..], b"# Title\r\n\r\n- [x] Task 1\r\n");
+    }
+
+    #[test]
+    fn detects_and_preserves_utf16le_bom_and_euckr() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+
+        // 1. UTF-16LE with BOM
+        let utf16_path = tmp.path().join("utf16.md");
+        let sample = "# 한글 마크다운\r\n본문입니다.";
+        let mut utf16_bytes = vec![0xFF, 0xFE];
+        for u in sample.encode_utf16() {
+            utf16_bytes.extend_from_slice(&u.to_le_bytes());
+        }
+        fs::write(&utf16_path, &utf16_bytes).expect("write utf16");
+
+        let mut session = DocumentSession::new("main");
+        let loaded = session.load_from_path(&utf16_path).expect("load utf16");
+        assert_eq!(session.bom, BomKind::Utf16Le);
+        assert_eq!(loaded, "# 한글 마크다운\n본문입니다.");
+
+        session
+            .save_to_disk("# 한글 마크다운\n본문입니다.")
+            .expect("save utf16");
+        let saved = fs::read(&utf16_path).expect("read saved utf16");
+        assert_eq!(saved, utf16_bytes);
+
+        // 2. EUC-KR encoding detection & roundtrip
+        let euckr_path = tmp.path().join("euckr.md");
+        let kor_text = "# 한국어 인코딩 테스트\n안녕하세요 반갑습니다. 마크다운 문서입니다.";
+        let (encoded, _, _) = encoding_rs::EUC_KR.encode(kor_text);
+        fs::write(&euckr_path, &encoded).expect("write euckr");
+
+        let mut session2 = DocumentSession::new("main");
+        let loaded2 = session2.load_from_path(&euckr_path).expect("load euckr");
+        assert_eq!(loaded2, kor_text);
+        assert_eq!(session2.encoding_name, "EUC-KR");
+    }
+
+    #[test]
+    fn persists_recent_documents_and_hot_exit_backups() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let mgr = DocumentManager::with_data_dir(tmp.path().to_path_buf());
+
+        let p1 = tmp.path().join("a.md");
+        let p2 = tmp.path().join("b.md");
+        mgr.push_recent(p1.clone());
+        mgr.push_recent(p2.clone());
+        mgr.push_recent(p1.clone()); // deduplicate and move to front
+
+        let recents = mgr.recent_paths_strings();
+        assert_eq!(recents.len(), 2);
+        assert!(recents[0].ends_with("a.md"));
+        assert!(recents[1].ends_with("b.md"));
+
+        // Verify persistence across reload
+        let mgr_reloaded = DocumentManager::with_data_dir(tmp.path().to_path_buf());
+        assert_eq!(mgr_reloaded.recent_paths_strings(), recents);
+
+        // Backup snapshot lifecycle
+        mgr.with_session("main", |s| {
+            s.file_path = Some(p1.clone());
+            s.is_dirty = true;
+        });
+        mgr.save_backup_snapshot("main", "# Unsaved Draft")
+            .expect("save backup");
+
+        let (meta, text) = mgr.load_backup_snapshot("main").expect("load backup");
+        assert_eq!(text, "# Unsaved Draft");
+        assert_eq!(meta.original_path, Some(p1));
+
+        mgr.clear_backup_snapshot("main");
+        assert!(mgr.load_backup_snapshot("main").is_none());
     }
 }

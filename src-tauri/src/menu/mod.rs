@@ -1,5 +1,5 @@
 use crate::bridge::WebBridge;
-use crate::document::DocumentManager;
+use crate::document::{DocumentManager, LineEndings};
 use serde_json::json;
 use tauri::{
     menu::{Menu, MenuBuilder, MenuItemBuilder, SubmenuBuilder},
@@ -49,9 +49,60 @@ pub fn build_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> 
         .copy()
         .paste()
         .select_all()
+        .separator()
+        .item(
+            &MenuItemBuilder::with_id("edit.find", "Find...")
+                .accelerator("CmdOrCtrl+F")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::with_id("edit.replace", "Replace...")
+                .accelerator("CmdOrCtrl+H")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::with_id("edit.goto_line", "Go to Line...")
+                .accelerator("CmdOrCtrl+G")
+                .build(app)?,
+        )
+        .build()?;
+
+    let headers_submenu = SubmenuBuilder::new(app, "Headings")
+        .item(
+            &MenuItemBuilder::with_id("format.h1", "Heading 1")
+                .accelerator("CmdOrCtrl+1")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::with_id("format.h2", "Heading 2")
+                .accelerator("CmdOrCtrl+2")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::with_id("format.h3", "Heading 3")
+                .accelerator("CmdOrCtrl+3")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::with_id("format.h4", "Heading 4")
+                .accelerator("CmdOrCtrl+4")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::with_id("format.h5", "Heading 5")
+                .accelerator("CmdOrCtrl+5")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::with_id("format.h6", "Heading 6")
+                .accelerator("CmdOrCtrl+6")
+                .build(app)?,
+        )
         .build()?;
 
     let format_menu = SubmenuBuilder::new(app, "Format")
+        .item(&headers_submenu)
+        .separator()
         .item(
             &MenuItemBuilder::with_id("format.bold", "Bold")
                 .accelerator("CmdOrCtrl+B")
@@ -69,22 +120,68 @@ pub fn build_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> 
         )
         .separator()
         .item(
+            &MenuItemBuilder::with_id("format.bullet", "Bullet List")
+                .accelerator("CmdOrCtrl+L")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::with_id("format.numbering", "Numbered List")
+                .accelerator("CmdOrCtrl+Shift+L")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::with_id("format.todo", "Todo List")
+                .accelerator("CmdOrCtrl+Shift+T")
+                .build(app)?,
+        )
+        .separator()
+        .item(
             &MenuItemBuilder::with_id("format.inline_code", "Inline Code")
                 .accelerator("CmdOrCtrl+E")
                 .build(app)?,
         )
-        .item(&MenuItemBuilder::with_id("format.code_block", "Code Block").build(app)?)
-        .item(&MenuItemBuilder::with_id("format.blockquote", "Blockquote").build(app)?)
         .item(
-            &MenuItemBuilder::with_id("format.todo", "Toggle Todo")
-                .accelerator("CmdOrCtrl+L")
+            &MenuItemBuilder::with_id("format.code_block", "Code Block")
+                .accelerator("CmdOrCtrl+Shift+C")
                 .build(app)?,
         )
+        .item(
+            &MenuItemBuilder::with_id("format.blockquote", "Blockquote")
+                .accelerator("CmdOrCtrl+Shift+Q")
+                .build(app)?,
+        )
+        .separator()
+        .item(
+            &MenuItemBuilder::with_id("format.link", "Insert Hyperlink")
+                .accelerator("CmdOrCtrl+K")
+                .build(app)?,
+        )
+        .item(&MenuItemBuilder::with_id("format.table", "Insert Table").build(app)?)
+        .item(&MenuItemBuilder::with_id("format.hr", "Horizontal Rule").build(app)?)
+        .build()?;
+
+    let line_endings_submenu = SubmenuBuilder::new(app, "Line Endings")
+        .item(&MenuItemBuilder::with_id("view.le_crlf", "Windows (CRLF)").build(app)?)
+        .item(&MenuItemBuilder::with_id("view.le_lf", "Unix / macOS (LF)").build(app)?)
         .build()?;
 
     let view_menu = SubmenuBuilder::new(app, "View")
+        .item(
+            &MenuItemBuilder::with_id("view.toc", "Table of Contents")
+                .accelerator("CmdOrCtrl+Shift+O")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::with_id("view.stats", "Document Statistics")
+                .accelerator("CmdOrCtrl+Shift+I")
+                .build(app)?,
+        )
+        .separator()
+        .item(&MenuItemBuilder::with_id("view.line_numbers", "Toggle Line Numbers").build(app)?)
         .item(&MenuItemBuilder::with_id("view.typewriter", "Toggle Typewriter Mode").build(app)?)
         .item(&MenuItemBuilder::with_id("view.focus", "Toggle Focus Mode").build(app)?)
+        .separator()
+        .item(&line_endings_submenu)
         .build()?;
 
     MenuBuilder::new(app)
@@ -105,25 +202,42 @@ pub fn menu_id_to_web_script(menu_id: &str) -> Option<String> {
         ),
         "edit.undo" => Some(WebBridge::format_call("history", "undo", None)),
         "edit.redo" => Some(WebBridge::format_call("history", "redo", None)),
+        "edit.find" => Some(WebBridge::format_chrome_call("openFindBar", Some(json!(false)))),
+        "edit.replace" => Some(WebBridge::format_chrome_call("openFindBar", Some(json!(true)))),
+        "edit.goto_line" => Some(WebBridge::format_chrome_call("openGotoLine", None)),
+        "format.h1" => Some(WebBridge::format_call("format", "toggleHeading", Some(json!({ "level": 1 })))),
+        "format.h2" => Some(WebBridge::format_call("format", "toggleHeading", Some(json!({ "level": 2 })))),
+        "format.h3" => Some(WebBridge::format_call("format", "toggleHeading", Some(json!({ "level": 3 })))),
+        "format.h4" => Some(WebBridge::format_call("format", "toggleHeading", Some(json!({ "level": 4 })))),
+        "format.h5" => Some(WebBridge::format_call("format", "toggleHeading", Some(json!({ "level": 5 })))),
+        "format.h6" => Some(WebBridge::format_call("format", "toggleHeading", Some(json!({ "level": 6 })))),
         "format.bold" => Some(WebBridge::format_call("format", "toggleBold", None)),
         "format.italic" => Some(WebBridge::format_call("format", "toggleItalic", None)),
         "format.strikethrough" => {
             Some(WebBridge::format_call("format", "toggleStrikethrough", None))
         }
+        "format.bullet" => Some(WebBridge::format_call("format", "toggleBullet", None)),
+        "format.numbering" => Some(WebBridge::format_call("format", "toggleNumbering", None)),
+        "format.todo" => Some(WebBridge::format_call("format", "toggleTodo", None)),
         "format.inline_code" => Some(WebBridge::format_call("format", "toggleInlineCode", None)),
         "format.code_block" => Some(WebBridge::format_call("format", "insertCodeBlock", None)),
         "format.blockquote" => Some(WebBridge::format_call("format", "toggleBlockquote", None)),
-        "format.todo" => Some(WebBridge::format_call("format", "toggleTodo", None)),
-        "view.typewriter" => Some(WebBridge::format_call(
-            "config",
-            "setTypewriterMode",
-            Some(json!({ "enabled": true })),
-        )),
-        "view.focus" => Some(WebBridge::format_call(
-            "config",
-            "setFocusMode",
-            Some(json!({ "enabled": true })),
-        )),
+        "format.link" => Some(WebBridge::format_call("format", "insertHyperLink", Some(json!({ "title": "Link", " url": "https://" })))),
+        "format.table" => Some(WebBridge::format_call("format", "insertTable", Some(json!({ "columnName": "Column", "ItemName": "Item" })))),
+        "format.hr" => Some(WebBridge::format_call("format", "insertHorizontalRule", None)),
+        "view.toc" => Some(WebBridge::format_chrome_call("toggleToc", None)),
+        "view.stats" => Some(WebBridge::format_chrome_call("toggleStatistics", None)),
+        "view.line_numbers" => Some(
+            "window.config.showLineNumbers = !window.config.showLineNumbers; window.webModules?.config?.setShowLineNumbers?.({ enabled: window.config.showLineNumbers });".to_string()
+        ),
+        "view.typewriter" => Some(
+            "window.config.typewriterMode = !window.config.typewriterMode; window.webModules?.config?.setTypewriterMode?.({ enabled: window.config.typewriterMode });".to_string()
+        ),
+        "view.focus" => Some(
+            "window.config.focusMode = !window.config.focusMode; window.webModules?.config?.setFocusMode?.({ enabled: window.config.focusMode });".to_string()
+        ),
+        "view.le_crlf" => Some(WebBridge::format_call("lineEndings", "setLineEndings", Some(json!({ "lineEndings": 2 })))),
+        "view.le_lf" => Some(WebBridge::format_call("lineEndings", "setLineEndings", Some(json!({ "lineEndings": 1 })))),
         _ => None,
     }
 }
@@ -143,6 +257,7 @@ pub fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, menu_id: &str) {
                 });
                 if let Ok((text, title)) = load_res {
                     doc_mgr.push_recent(path);
+                    doc_mgr.clear_backup_snapshot(&label);
                     let _ = webview.set_title(&title);
                     let _ = webview.eval(&WebBridge::reset_editor(&text));
                 }
@@ -161,7 +276,22 @@ pub fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, menu_id: &str) {
                 s.content_cache.clear();
                 s.display_title()
             });
+            doc_mgr.clear_backup_snapshot(&label);
             let _ = webview.set_title(&title);
+        }
+    }
+
+    if menu_id == "view.le_crlf" || menu_id == "view.le_lf" {
+        if let Some(webview) = app.get_webview_window("main") {
+            let doc_mgr = app.state::<DocumentManager>();
+            let label = webview.label().to_string();
+            doc_mgr.with_session(&label, |s| {
+                s.line_endings = if menu_id == "view.le_crlf" {
+                    LineEndings::CRLF
+                } else {
+                    LineEndings::LF
+                };
+            });
         }
     }
 
