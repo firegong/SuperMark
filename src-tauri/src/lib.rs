@@ -211,7 +211,7 @@ pub fn run() {
                 if is_dirty {
                     api.prevent_close();
                     let result = MessageDialog::new()
-                        .set_title("MarkEdit")
+                        .set_title("MarkEdit-Rust")
                         .set_description("Do you want to save the changes made to this document?")
                         .set_level(MessageLevel::Warning)
                         .set_buttons(MessageButtons::YesNoCancel)
