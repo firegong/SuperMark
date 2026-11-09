@@ -9,6 +9,7 @@ import { createStatisticsPopover } from './statisticsPopover';
 import { createGotoLinePrompt } from './gotoLine';
 import { createPromptModal } from './promptModal';
 import { showContextMenu } from './contextMenu';
+import { createExtensionsModal, ExtensionsManagerTab } from './extensionsModal';
 
 const rootId = 'markedit-chrome-root';
 
@@ -114,6 +115,19 @@ export function initChromeUI(): void {
       activeCloseHandler = () => menu.remove();
       root.appendChild(menu);
     },
+    openExtensionsManager(initialTab = 'discover') {
+      closeActive();
+
+      const modal = createExtensionsModal(initialTab as ExtensionsManagerTab, () => {
+        activePanel = null;
+        activeCloseHandler = null;
+      });
+
+      activePanel = modal.element;
+      activeCloseHandler = () => modal.element.remove();
+      root.appendChild(activePanel);
+      modal.focus();
+    },
     closeAll() {
       closeActive();
     },
@@ -147,6 +161,9 @@ export function initChromeUI(): void {
       event.preventDefault();
     } else if (event.shiftKey && event.key === 'I') {
       chromeUI.toggleStatistics();
+      event.preventDefault();
+    } else if (event.shiftKey && event.key === 'X') {
+      chromeUI.openExtensionsManager('discover');
       event.preventDefault();
     }
   }, true);

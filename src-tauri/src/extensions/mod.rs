@@ -16,6 +16,25 @@ pub struct ScriptDescriptor {
     pub capability: String,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExtensionUpdateInfo {
+    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub installed_version: Option<String>,
+    pub latest_version: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExtensionsManagerState {
+    pub catalog: Vec<IndexEntry>,
+    pub installed: Vec<config::Installed>,
+    pub updates: Vec<ExtensionUpdateInfo>,
+    pub update_behavior: UpdateBehavior,
+    pub app_version: String,
+}
+
 /// Mirror of upstream `EditorUserAsset.applyThemePatch` — dirty patch for the
 /// CodeMirror circular-reference issue in legacy themes (`markedit-theme-*.js`).
 /// Idempotent: skipped when the theme is already patched (`circularReferencePatched`).
@@ -208,6 +227,174 @@ impl ExtensionManager {
 
         snippets.join("\n")
     }
+
+    pub fn registry(&self, app_version: &str) -> ExtensionRegistry {
+        let cfg = self.config().read();
+        ExtensionRegistry::new(
+            self.registry_cache_dir(),
+            cfg.registry_url().to_string(),
+            app_version.to_string(),
+        )
+    }
+
+    pub fn get_manager_state(&self, force_refresh: bool, app_version: &str) -> ExtensionsManagerState {
+        let _ = self.ensure_directories();
+        let config = self.config();
+        let _ = config.reconcile_installed(&self.scripts_dir());
+
+        let registry = self.registry(app_version);
+        let index = if force_refresh || registry.cached_index().is_none() {
+            registry
+                .refresh(force_refresh, false)
+                .ok()
+                .flatten()
+                .or_else(|| registry.cached_index())
+        } else {
+            registry.cached_index()
+        };
+
+        let catalog = index.map(|idx| idx.extensions).unwrap_or_default();
+        let pending = registry.pending_updates(&config);
+        let updates = pending
+            .into_iter()
+            .map(|(record, entry)| ExtensionUpdateInfo {
+                id: entry.id,
+                installed_version: record.version,
+                latest_version: entry.latest.version,
+            })
+            .collect();
+
+        let current_cfg = config.read();
+        ExtensionsManagerState {
+            catalog,
+            installed: current_cfg.installed.clone(),
+            updates,
+            update_behavior: current_cfg.update_behavior(),
+            app_version: app_version.to_string(),
+        }
+    }
+
+    pub fn install_catalog_entry(
+        &self,
+        id: &str,
+        app_version: &str,
+    ) -> Result<ExtensionsManagerState, String> {
+        let _ = self.ensure_directories();
+        let config = self.config();
+        let registry = self.registry(app_version);
+        let index = match registry.cached_index() {
+            Some(cached) => cached,
+            None => registry
+                .refresh(true, false)?
+                .ok_or_else(|| "Extension catalog is unavailable".to_string())?,
+        };
+
+        let entry = index
+            .extensions
+            .iter()
+            .find(|item| item.id == id)
+            .ok_or_else(|| format!("Extension '{id}' not found in catalog"))?;
+
+        let existing = config.read().find(id).cloned();
+        let pending = PendingInstall::from_release(entry, &entry.latest);
+        let response = ureq::get(&entry.latest.url).call().map_err(|e| e.to_string())?;
+        let mut bytes = Vec::new();
+        std::io::Read::read_to_end(&mut response.into_reader(), &mut bytes)
+            .map_err(|e| e.to_string())?;
+
+        install_bytes(
+            &self.scripts_dir(),
+            &pending,
+            &bytes,
+            &config,
+            app_version,
+            existing.as_ref(),
+        )?;
+
+        Ok(self.get_manager_state(false, app_version))
+    }
+
+    pub fn install_from_url_state(
+        &self,
+        url: &str,
+        app_version: &str,
+    ) -> Result<ExtensionsManagerState, String> {
+        let _ = self.ensure_directories();
+        let config = self.config();
+        install_url(url.trim(), &config, &self.scripts_dir(), app_version)?;
+        Ok(self.get_manager_state(false, app_version))
+    }
+
+    pub fn uninstall_extension(
+        &self,
+        id: &str,
+        app_version: &str,
+    ) -> Result<ExtensionsManagerState, String> {
+        let _ = self.ensure_directories();
+        let config = self.config();
+        uninstall(id, &self.scripts_dir(), &config)?;
+        Ok(self.get_manager_state(false, app_version))
+    }
+
+    pub fn set_extension_enabled(
+        &self,
+        id: &str,
+        enabled: bool,
+        app_version: &str,
+    ) -> Result<ExtensionsManagerState, String> {
+        let _ = self.ensure_directories();
+        let config = self.config();
+        let _ = config.reconcile_installed(&self.scripts_dir());
+        config.update(|cfg| {
+            if let Some(record) = cfg.installed.iter_mut().find(|item| item.id == id) {
+                record.enabled = if enabled { None } else { Some(false) };
+            }
+        })?;
+        Ok(self.get_manager_state(false, app_version))
+    }
+
+    pub fn update_extensions(
+        &self,
+        target_id: Option<&str>,
+        app_version: &str,
+    ) -> Result<ExtensionsManagerState, String> {
+        let _ = self.ensure_directories();
+        let config = self.config();
+        let registry = self.registry(app_version);
+        if registry.cached_index().is_none() {
+            let _ = registry.refresh(true, false);
+        }
+
+        let updates = registry.pending_updates(&config);
+        for (record, entry) in &updates {
+            if let Some(id) = target_id {
+                if entry.id != id {
+                    continue;
+                }
+            }
+            downloader::download_update(
+                &self.scripts_dir(),
+                record,
+                entry,
+                &config,
+                app_version,
+            )?;
+        }
+
+        Ok(self.get_manager_state(false, app_version))
+    }
+
+    pub fn set_update_behavior(
+        &self,
+        behavior: UpdateBehavior,
+        app_version: &str,
+    ) -> Result<ExtensionsManagerState, String> {
+        let config = self.config();
+        config.update(|cfg| {
+            cfg.update_behavior = Some(behavior);
+        })?;
+        Ok(self.get_manager_state(false, app_version))
+    }
 }
 
 #[cfg(test)]
@@ -332,5 +519,58 @@ mod tests {
         assert_eq!(reconciled.installed[0].enabled, Some(false));
 
         assert!(mgr.build_extension_bootstrap_js().is_empty());
+    }
+
+    #[test]
+    fn manager_state_enable_toggle_uninstall_and_behavior() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let mgr = ExtensionManager::new(tmp.path());
+        mgr.ensure_directories().expect("ensure dirs");
+
+        // Pre-seed cached registry index so get_manager_state does not hit network.
+        fs::create_dir_all(mgr.registry_cache_dir()).expect("cache dir");
+        fs::write(
+            mgr.registry_cache_dir().join("index.json"),
+            r#"{
+              "schemaVersion": 1,
+              "extensions": [
+                {
+                  "id": "markedit-preview",
+                  "name": "MarkEdit-preview",
+                  "description": "Preview extension",
+                  "category": "extension",
+                  "featured": true,
+                  "latest": {
+                    "version": "1.2.0",
+                    "url": "https://example.com/markedit-preview.js",
+                    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                  }
+                }
+              ]
+            }"#,
+        )
+        .expect("write cached index");
+
+        fs::write(mgr.scripts_dir().join("markedit-preview.js"), "// v1").expect("write script");
+
+        let state = mgr.get_manager_state(false, "0.1.0");
+        assert_eq!(state.catalog.len(), 1);
+        assert_eq!(state.installed.len(), 1);
+        assert_eq!(state.updates.len(), 1); // version-less markedit-* migrates to 1.2.0
+
+        let disabled_state = mgr
+            .set_extension_enabled("markedit-preview", false, "0.1.0")
+            .expect("disable");
+        assert_eq!(disabled_state.installed[0].enabled, Some(false));
+
+        let behavior_state = mgr
+            .set_update_behavior(UpdateBehavior::Notify, "0.1.0")
+            .expect("behavior");
+        assert_eq!(behavior_state.update_behavior, UpdateBehavior::Notify);
+
+        let uninstalled_state = mgr
+            .uninstall_extension("markedit-preview", "0.1.0")
+            .expect("uninstall");
+        assert!(uninstalled_state.installed.is_empty());
     }
 }

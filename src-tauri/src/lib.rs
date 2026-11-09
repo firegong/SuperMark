@@ -95,12 +95,10 @@ async fn save_idle_backup(
 #[tauri::command]
 async fn install_extension_from_url(
     window: WebviewWindow,
+    doc_mgr: State<'_, DocumentManager>,
     url: String,
 ) -> Result<bool, String> {
-    let base = dirs::config_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("MarkEdit");
-    let mgr = crate::extensions::ExtensionManager::new(base);
+    let mgr = doc_mgr.extensions();
     let _ = mgr.ensure_directories();
 
     let app_version = env!("CARGO_PKG_VERSION").to_string();
@@ -111,8 +109,127 @@ async fn install_extension_from_url(
         &app_version,
     )?;
 
-    let _ = window.eval(&menu::extensions_reload_script(&mgr));
+    let _ = window.eval(&menu::extensions_reload_script(mgr));
     Ok(true)
+}
+
+#[tauri::command]
+async fn extensions_get_state(
+    doc_mgr: State<'_, DocumentManager>,
+    force_refresh: Option<bool>,
+) -> Result<crate::extensions::ExtensionsManagerState, String> {
+    let mgr = doc_mgr.extensions().clone();
+    let force = force_refresh.unwrap_or(false);
+    let state = std::thread::spawn(move || {
+        mgr.get_manager_state(force, env!("CARGO_PKG_VERSION"))
+    })
+    .join()
+    .map_err(|_| "Failed to join extension state worker".to_string())?;
+    Ok(state)
+}
+
+#[tauri::command]
+async fn extensions_install(
+    window: WebviewWindow,
+    doc_mgr: State<'_, DocumentManager>,
+    id: String,
+) -> Result<crate::extensions::ExtensionsManagerState, String> {
+    let mgr = doc_mgr.extensions().clone();
+    let state = std::thread::spawn(move || {
+        mgr.install_catalog_entry(&id, env!("CARGO_PKG_VERSION"))
+    })
+    .join()
+    .map_err(|_| "Failed to join extension install worker".to_string())??;
+
+    let _ = window.eval(&menu::extensions_reload_script(doc_mgr.extensions()));
+    Ok(state)
+}
+
+#[tauri::command]
+async fn extensions_install_url(
+    window: WebviewWindow,
+    doc_mgr: State<'_, DocumentManager>,
+    url: String,
+) -> Result<crate::extensions::ExtensionsManagerState, String> {
+    let mgr = doc_mgr.extensions().clone();
+    let state = std::thread::spawn(move || {
+        mgr.install_from_url_state(&url, env!("CARGO_PKG_VERSION"))
+    })
+    .join()
+    .map_err(|_| "Failed to join extension URL install worker".to_string())??;
+
+    let _ = window.eval(&menu::extensions_reload_script(doc_mgr.extensions()));
+    Ok(state)
+}
+
+#[tauri::command]
+async fn extensions_uninstall(
+    window: WebviewWindow,
+    doc_mgr: State<'_, DocumentManager>,
+    id: String,
+) -> Result<crate::extensions::ExtensionsManagerState, String> {
+    let mgr = doc_mgr.extensions();
+    let state = mgr.uninstall_extension(&id, env!("CARGO_PKG_VERSION"))?;
+    let _ = window.eval(&menu::extensions_reload_script(mgr));
+    Ok(state)
+}
+
+#[tauri::command]
+async fn extensions_set_enabled(
+    window: WebviewWindow,
+    doc_mgr: State<'_, DocumentManager>,
+    id: String,
+    enabled: bool,
+) -> Result<crate::extensions::ExtensionsManagerState, String> {
+    let mgr = doc_mgr.extensions();
+    let state = mgr.set_extension_enabled(&id, enabled, env!("CARGO_PKG_VERSION"))?;
+    let _ = window.eval(&menu::extensions_reload_script(mgr));
+    Ok(state)
+}
+
+#[tauri::command]
+async fn extensions_update(
+    window: WebviewWindow,
+    doc_mgr: State<'_, DocumentManager>,
+    id: Option<String>,
+) -> Result<crate::extensions::ExtensionsManagerState, String> {
+    let mgr = doc_mgr.extensions().clone();
+    let state = std::thread::spawn(move || {
+        mgr.update_extensions(id.as_deref(), env!("CARGO_PKG_VERSION"))
+    })
+    .join()
+    .map_err(|_| "Failed to join extension update worker".to_string())??;
+
+    let _ = window.eval(&menu::extensions_reload_script(doc_mgr.extensions()));
+    Ok(state)
+}
+
+#[tauri::command]
+async fn extensions_set_update_behavior(
+    doc_mgr: State<'_, DocumentManager>,
+    behavior: crate::extensions::UpdateBehavior,
+) -> Result<crate::extensions::ExtensionsManagerState, String> {
+    let mgr = doc_mgr.extensions();
+    mgr.set_update_behavior(behavior, env!("CARGO_PKG_VERSION"))
+}
+
+#[tauri::command]
+async fn extensions_open_folder(
+    doc_mgr: State<'_, DocumentManager>,
+) -> Result<(), String> {
+    let mgr = doc_mgr.extensions();
+    let _ = mgr.ensure_directories();
+    menu::open_in_shell(&mgr.scripts_dir().to_string_lossy());
+    Ok(())
+}
+
+#[tauri::command]
+async fn extensions_open_homepage(url: String) -> Result<(), String> {
+    let trimmed = url.trim();
+    if trimmed.starts_with("https://") || trimmed.starts_with("http://") {
+        menu::open_in_shell(trimmed);
+    }
+    Ok(())
 }
 
 pub fn build_bootstrap_script() -> String {
@@ -377,7 +494,16 @@ pub fn run() {
             handle_bridge_message,
             save_document_content,
             save_idle_backup,
-            install_extension_from_url
+            install_extension_from_url,
+            extensions_get_state,
+            extensions_install,
+            extensions_install_url,
+            extensions_uninstall,
+            extensions_set_enabled,
+            extensions_update,
+            extensions_set_update_behavior,
+            extensions_open_folder,
+            extensions_open_homepage
         ])
         .run(tauri::generate_context!())
         .expect("error while running MarkEdit-Win Tauri application");

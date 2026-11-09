@@ -360,7 +360,7 @@ pub fn build_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> 
 
     // ---- Extensions ----
     let extensions_menu = SubmenuBuilder::new(app, "Extensions")
-        .item(&MenuItemBuilder::with_id("extensions.manage", "Browse Extensions...").build(app)?)
+        .item(&MenuItemBuilder::with_id("extensions.manage", "Manage Extensions...").build(app)?)
         .item(&MenuItemBuilder::with_id("extensions.check_updates", "Check for Updates").build(app)?)
         .item(&MenuItemBuilder::with_id("extensions.install_url", "Install Extension from URL...").build(app)?)
         .separator()
@@ -480,10 +480,6 @@ pub fn menu_id_to_web_script(menu_id: &str) -> Option<String> {
 }
 
 pub fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, menu_id: &str) {
-    if handle_app_menu_event(app, menu_id) {
-        return;
-    }
-
     if menu_id == "file.open" {
         if let Some(path) = rfd::FileDialog::new()
             .add_filter(
@@ -712,37 +708,13 @@ fn focused_webview<R: Runtime>(app: &AppHandle<R>) -> Option<tauri::WebviewWindo
     app.get_webview_window("main")
 }
 
-fn open_in_shell(target: &str) {
+pub fn open_in_shell(target: &str) {
     #[cfg(target_os = "macos")]
     let _ = std::process::Command::new("open").arg(target).spawn();
     #[cfg(target_os = "windows")]
     let _ = std::process::Command::new("explorer").arg(target).spawn();
     #[cfg(all(unix, not(target_os = "macos")))]
     let _ = std::process::Command::new("xdg-open").arg(target).spawn();
-}
-
-/// Handles app-level (non-web) menu ids. Returns true when the id was consumed.
-fn handle_app_menu_event<R: Runtime>(_app: &AppHandle<R>, menu_id: &str) -> bool {
-    matches!(
-        menu_id,
-        "app.about"
-            | "app.updates"
-            | "app.settings"
-            | "file.close"
-            | "file.revert"
-            | "file.print"
-            | "file.clear_recents"
-            | "view.zoom_in"
-            | "view.zoom_out"
-            | "view.zoom_actual"
-            | "view.fullscreen"
-            | "window.minimize"
-            | "window.zoom"
-            | "window.front_all"
-            | "help.repo"
-            | "help.issues"
-            | "help.upstream"
-    ) || menu_id.starts_with("file.recent.")
 }
 
 pub fn extensions_reload_script(mgr: &crate::extensions::ExtensionManager) -> String {
@@ -769,7 +741,7 @@ fn handle_extension_menu_event<R: Runtime>(app: &AppHandle<R>, menu_id: &str) {
     match menu_id {
         "extensions.manage" => {
             if let Some(webview) = webview {
-                let _ = webview.eval("window.open('https://github.com/MarkEdit-app/extensions');");
+                let _ = webview.eval("window.chromeUI?.openExtensionsManager?.('discover');");
             }
         }
         "extensions.check_updates" => {

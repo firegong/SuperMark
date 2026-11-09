@@ -20,7 +20,7 @@ pub struct ExtensionRelease {
     pub version: String,
     pub url: String,
     pub sha256: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "minAppVersion", default, skip_serializing_if = "Option::is_none")]
     pub min_app_version: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub date: Option<String>,

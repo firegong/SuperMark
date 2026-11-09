@@ -1,4 +1,5 @@
 import { describe, expect, test, beforeEach, jest } from '@jest/globals';
+import type { ExtensionUpdateBehavior, ExtensionsManagerState } from '../src/chrome/extensionsModal';
 import * as editor from './utils/editor';
 import { initChromeUI } from '../src/chrome';
 
@@ -269,5 +270,281 @@ describe('Chrome UI', () => {
     const submenu = document.querySelector('.markedit-chrome-submenu');
     expect(submenu).not.toBeNull();
     expect(submenu?.textContent).toContain('Email');
+  });
+});
+
+describe('Extensions Manager', () => {
+  let invokeMock: jest.Mock<(_cmd: string, args?: Record<string, unknown>) => Promise<ExtensionsManagerState>>;
+
+  const sampleState: ExtensionsManagerState = {
+    catalog: [
+      {
+        id: 'markedit-preview',
+        name: 'MarkEdit Preview',
+        description: 'Live preview panel for Markdown.',
+        author: 'MarkEdit Team',
+        category: 'extension',
+        featured: true,
+        latest: { version: '1.2.0', url: 'https://example.com/preview.zip', sha256: 'abc', notes: 'Bug fixes' },
+      },
+      {
+        id: 'markedit-theme-catppuccin',
+        name: 'Catppuccin Theme',
+        description: 'A soothing pastel theme.',
+        author: 'Catppuccin',
+        category: 'theme',
+        featured: false,
+        latest: { version: '2.0.0', url: 'https://example.com/catppuccin.zip', sha256: 'def' },
+      },
+    ],
+    installed: [
+      {
+        id: 'markedit-preview',
+        version: '1.1.0',
+        file: 'markedit-preview.zip',
+        enabled: true,
+      },
+    ],
+    updates: [
+      {
+        id: 'markedit-preview',
+        installedVersion: '1.1.0',
+        latestVersion: '1.2.0',
+      },
+    ],
+    updateBehavior: 'quiet',
+    appVersion: '1.0.0',
+  };
+
+  const refreshedState: ExtensionsManagerState = {
+    catalog: sampleState.catalog,
+    installed: [],
+    updates: [],
+    updateBehavior: 'notify',
+    appVersion: '1.0.0',
+  };
+
+  const tick = () => new Promise(resolve => { setTimeout(resolve, 0); });
+
+  async function openAndRender(tab: 'discover' | 'installed' | 'updates'): Promise<void> {
+    (window.chromeUI as ChromeUI).openExtensionsManager(tab);
+    await tick();
+  }
+
+  beforeEach(() => {
+    document.body.innerHTML = '';
+    editor.setUp('# Hello\n\nWorld.');
+
+    invokeMock = jest.fn(async (_cmd: string, args?: Record<string, unknown>): Promise<ExtensionsManagerState> => {
+      if (args !== undefined && 'behavior' in args) {
+        return { ...sampleState, updateBehavior: args.behavior as ExtensionUpdateBehavior };
+      }
+
+      return sampleState;
+    });
+
+    window.__TAURI_INTERNALS__ = { invoke: invokeMock } as unknown as typeof window.__TAURI_INTERNALS__;
+    window.webModules = {
+      core: { restoreFocus: jest.fn() },
+    } as unknown as typeof window.webModules;
+    initChromeUI();
+  });
+
+  test('openExtensionsManager renders Discover cards and fetches state', async () => {
+    await openAndRender('discover');
+
+    expect(document.querySelector('.markedit-chrome-extensions-backdrop')).not.toBeNull();
+    expect(document.querySelector('.markedit-chrome-extensions-title')?.textContent).toBe('Extensions');
+    expect(invokeMock).toHaveBeenCalledWith('extensions_get_state', { forceRefresh: false });
+
+    const cards = document.querySelectorAll('.markedit-chrome-extensions-card');
+    expect(cards.length).toBe(2);
+    expect(cards[0].textContent).toContain('MarkEdit Preview');
+    expect(cards[0].textContent).toContain('★ Featured');
+    expect(cards[1].textContent).toContain('Catppuccin Theme');
+  });
+
+  test('search filters Discover cards', async () => {
+    await openAndRender('discover');
+
+    const search = document.querySelector('.markedit-chrome-extensions-search') as HTMLInputElement;
+    search.value = 'catppuccin';
+    search.dispatchEvent(new Event('input', { bubbles: true }));
+
+    const cards = document.querySelectorAll('.markedit-chrome-extensions-card');
+    expect(cards.length).toBe(1);
+    expect(cards[0].textContent).toContain('Catppuccin Theme');
+  });
+
+  test('category pills filter Discover cards', async () => {
+    await openAndRender('discover');
+
+    const pills = document.querySelectorAll('.markedit-chrome-extensions-pill');
+    const themesPill = Array.from(pills).find(pill => pill.textContent === 'Themes') as HTMLButtonElement;
+    themesPill.click();
+
+    const cards = document.querySelectorAll('.markedit-chrome-extensions-card');
+    expect(cards.length).toBe(1);
+    expect(cards[0].textContent).toContain('Catppuccin Theme');
+  });
+
+  test('clicking Install invokes extensions_install', async () => {
+    await openAndRender('discover');
+
+    const installButton = document.querySelector('[data-action="install"][data-extension-id="markedit-theme-catppuccin"]') as HTMLButtonElement;
+    expect(installButton).not.toBeNull();
+    installButton.click();
+
+    expect(invokeMock).toHaveBeenCalledWith('extensions_install', { id: 'markedit-theme-catppuccin' });
+  });
+
+  test('clicking Update on a discover card invokes extensions_update', async () => {
+    await openAndRender('discover');
+
+    const updateButton = document.querySelector('[data-action="update"][data-extension-id="markedit-preview"]') as HTMLButtonElement;
+    expect(updateButton).not.toBeNull();
+    updateButton.click();
+
+    expect(invokeMock).toHaveBeenCalledWith('extensions_update', { id: 'markedit-preview' });
+  });
+
+  test('Installed tab lists extensions and supports toggle/uninstall', async () => {
+    await openAndRender('installed');
+
+    const rows = document.querySelectorAll('.markedit-chrome-extensions-row');
+    expect(rows.length).toBe(1);
+    expect(rows[0].textContent).toContain('MarkEdit Preview');
+
+    const toggle = document.querySelector('[data-action="toggle-enabled"][data-extension-id="markedit-preview"]') as HTMLInputElement;
+    expect(toggle.checked).toBe(true);
+    toggle.click();
+
+    expect(invokeMock).toHaveBeenCalledWith('extensions_set_enabled', { id: 'markedit-preview', enabled: false });
+
+    await tick();
+
+    const uninstallButton = document.querySelector('[data-action="uninstall"][data-extension-id="markedit-preview"]') as HTMLButtonElement;
+    uninstallButton.click();
+
+    expect(invokeMock).toHaveBeenCalledWith('extensions_uninstall', { id: 'markedit-preview' });
+  });
+
+  test('Updates tab lists pending updates and Update All invokes extensions_update', async () => {
+    await openAndRender('updates');
+
+    const rows = document.querySelectorAll('.markedit-chrome-extensions-row');
+    expect(rows.length).toBe(1);
+    expect(rows[0].textContent).toContain('1.1.0');
+    expect(rows[0].textContent).toContain('1.2.0');
+
+    const updateAllButton = document.querySelector('[data-action="update-all"]') as HTMLButtonElement;
+    expect(updateAllButton).not.toBeNull();
+    expect(updateAllButton.textContent).toBe('Update All (1)');
+    updateAllButton.click();
+
+    expect(invokeMock).toHaveBeenCalledWith('extensions_update', {});
+  });
+
+  test('changing update behavior invokes extensions_set_update_behavior', async () => {
+    await openAndRender('discover');
+
+    const select = document.querySelector('[data-action="update-behavior"]') as HTMLSelectElement;
+    select.value = 'automatic';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+
+    expect(invokeMock).toHaveBeenCalledWith('extensions_set_update_behavior', { behavior: 'automatic' });
+  });
+
+  test('refresh button invokes extensions_get_state with forceRefresh', async () => {
+    await openAndRender('discover');
+
+    const refreshButton = Array.from(document.querySelectorAll('.markedit-chrome-extensions-header-actions .markedit-chrome-button'))
+      .find(button => button.textContent === '↻') as HTMLButtonElement;
+    refreshButton.click();
+
+    expect(invokeMock).toHaveBeenCalledWith('extensions_get_state', { forceRefresh: true });
+  });
+
+  test('Install from URL expands input and invokes extensions_install_url', async () => {
+    await openAndRender('discover');
+
+    const urlButton = Array.from(document.querySelectorAll('.markedit-chrome-extensions-header-actions .markedit-chrome-button'))
+      .find(button => button.textContent === 'Install from URL...') as HTMLButtonElement;
+    urlButton.click();
+
+    const urlInput = document.querySelector('.markedit-chrome-extensions-url-input') as HTMLInputElement;
+    expect(urlInput).not.toBeNull();
+
+    urlInput.value = 'https://example.com/custom.zip';
+    urlInput.dispatchEvent(new Event('input', { bubbles: true }));
+    urlInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+
+    expect(invokeMock).toHaveBeenCalledWith('extensions_install_url', { url: 'https://example.com/custom.zip' });
+  });
+
+  test('Open Folder invokes extensions_open_folder', async () => {
+    await openAndRender('discover');
+
+    const folderButton = Array.from(document.querySelectorAll('.markedit-chrome-extensions-header-actions .markedit-chrome-button'))
+      .find(button => button.textContent === 'Open Folder') as HTMLButtonElement;
+    folderButton.click();
+
+    expect(invokeMock).toHaveBeenCalledWith('extensions_open_folder', {});
+  });
+
+  test('Ctrl+Shift+X opens Extensions Manager', () => {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'X', ctrlKey: true, shiftKey: true, bubbles: true }));
+
+    expect(document.querySelector('.markedit-chrome-extensions-backdrop')).not.toBeNull();
+  });
+
+  test('Escape closes Extensions Manager and restores focus', async () => {
+    await openAndRender('discover');
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+
+    expect(document.querySelector('.markedit-chrome-extensions-backdrop')).toBeNull();
+    expect((window.webModules.core as { restoreFocus: jest.Mock }).restoreFocus).toHaveBeenCalled();
+  });
+
+  test('gracefully falls back to empty state when Tauri internals are unavailable', async () => {
+    window.__TAURI_INTERNALS__ = undefined;
+    (window.chromeUI as ChromeUI).openExtensionsManager('discover');
+
+    await tick();
+
+    expect(document.querySelector('.markedit-chrome-extensions-empty')?.textContent).toBe('No extensions found.');
+  });
+
+  test('displays error banner when IPC call rejects', async () => {
+    let installCalls = 0;
+    invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>): Promise<ExtensionsManagerState> => {
+      if (cmd === 'extensions_install' && args !== undefined && 'id' in args && args.id === 'markedit-theme-catppuccin') {
+        installCalls += 1;
+        if (installCalls === 1) {
+          throw new Error('Network unavailable');
+        }
+      }
+
+      return sampleState;
+    });
+
+    await openAndRender('discover');
+
+    const installButton = document.querySelector('[data-action="install"][data-extension-id="markedit-theme-catppuccin"]') as HTMLButtonElement;
+    installButton.click();
+
+    await tick();
+
+    const errorBanner = document.querySelector('.markedit-chrome-extensions-error') as HTMLElement;
+    expect(errorBanner).not.toBeNull();
+    expect(errorBanner.textContent).toContain('Network unavailable');
+  });
+
+  test('Update All button is hidden when no updates are available', async () => {
+    invokeMock.mockResolvedValue(refreshedState);
+    await openAndRender('updates');
+
+    const updateAllButton = document.querySelector('[data-action="update-all"]') as HTMLButtonElement;
+    expect(updateAllButton.classList.contains('markedit-chrome-hidden')).toBe(true);
   });
 });

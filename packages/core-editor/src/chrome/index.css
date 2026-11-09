@@ -401,3 +401,409 @@
 .markedit-chrome-has-submenu:focus-within > .markedit-chrome-submenu {
   display: flex;
 }
+
+/* Extensions manager */
+
+.markedit-chrome-extensions-backdrop {
+  padding: 24px;
+}
+
+.markedit-chrome-extensions-modal {
+  width: 100%;
+  max-width: 720px;
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.markedit-chrome-extensions-header {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 16px 12px;
+  border-bottom: 1px solid var(--chrome-border);
+  flex-shrink: 0;
+}
+
+.markedit-chrome-extensions-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.markedit-chrome-extensions-title {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.markedit-chrome-extensions-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.markedit-chrome-extensions-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  background: var(--chrome-active);
+  border-radius: 6px;
+  align-self: flex-start;
+}
+
+.markedit-chrome-extensions-tab {
+  appearance: none;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--chrome-text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: background-color 140ms ease, box-shadow 140ms ease;
+}
+
+.markedit-chrome-extensions-tab:hover {
+  background: var(--chrome-hover);
+}
+
+.markedit-chrome-extensions-tab.markedit-chrome-active {
+  background: var(--chrome-bg-solid);
+  border-color: var(--chrome-border);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.markedit-chrome-extensions-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 10px;
+  background: var(--chrome-active);
+  color: var(--chrome-text-secondary);
+  line-height: 1;
+}
+
+.markedit-chrome-extensions-tab.markedit-chrome-active .markedit-chrome-extensions-badge {
+  background: var(--chrome-accent);
+  color: #fff;
+}
+
+.markedit-chrome-extensions-url-bar {
+  display: flex;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.markedit-chrome-extensions-url-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.markedit-chrome-extensions-subtoolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--chrome-border);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.markedit-chrome-extensions-search {
+  flex: 1;
+  min-width: 220px;
+}
+
+.markedit-chrome-extensions-pills {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.markedit-chrome-extensions-pill {
+  font-size: 12px;
+  padding: 4px 10px;
+}
+
+.markedit-chrome-extensions-pill.markedit-chrome-active {
+  background: var(--chrome-accent);
+  color: #fff;
+}
+
+.markedit-chrome-extensions-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 10px 16px 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(196, 43, 28, 0.12);
+  color: #c42b1c;
+  font-size: 13px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .markedit-chrome-extensions-error {
+    background: rgba(255, 133, 133, 0.14);
+    color: #ff8585;
+  }
+}
+
+.markedit-chrome-extensions-error .markedit-chrome-button {
+  flex-shrink: 0;
+  margin: -4px -6px -4px auto;
+}
+
+.markedit-chrome-extensions-body {
+  flex: 1;
+  overflow: auto;
+  padding: 10px 16px 16px;
+}
+
+.markedit-chrome-extensions-empty {
+  text-align: center;
+  padding: 48px 20px;
+  color: var(--chrome-text-secondary);
+  font-size: 14px;
+}
+
+.markedit-chrome-extensions-card {
+  display: flex;
+  gap: 14px;
+  padding: 14px;
+  margin-bottom: 10px;
+  border: 1px solid var(--chrome-border);
+  border-radius: 8px;
+  background: var(--chrome-input-bg);
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.markedit-chrome-extensions-card:hover {
+  border-color: var(--chrome-accent);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.markedit-chrome-extensions-icon {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--chrome-accent), var(--chrome-accent-hover));
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.markedit-chrome-extensions-icon-small {
+  width: 36px;
+  height: 36px;
+  font-size: 12px;
+}
+
+.markedit-chrome-extensions-card-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.markedit-chrome-extensions-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.markedit-chrome-extensions-card-name {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.markedit-chrome-extensions-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--chrome-text-secondary);
+}
+
+.markedit-chrome-extensions-category,
+.markedit-chrome-extensions-version,
+.markedit-chrome-extensions-author {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--chrome-active);
+}
+
+.markedit-chrome-extensions-featured {
+  background: rgba(249, 191, 59, 0.18);
+  color: #b8860b;
+}
+
+@media (prefers-color-scheme: dark) {
+  .markedit-chrome-extensions-featured {
+    color: #f9bf3b;
+  }
+}
+
+.markedit-chrome-extensions-card-description {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--chrome-text-secondary);
+}
+
+.markedit-chrome-extensions-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.markedit-chrome-extensions-status {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--chrome-accent);
+  padding: 4px 8px;
+}
+
+.markedit-chrome-extensions-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+  border: 1px solid var(--chrome-border);
+  border-radius: 8px;
+  background: var(--chrome-input-bg);
+}
+
+.markedit-chrome-extensions-row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.markedit-chrome-extensions-row-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.markedit-chrome-extensions-row-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.markedit-chrome-extensions-row-description,
+.markedit-chrome-extensions-row-meta {
+  font-size: 12px;
+  color: var(--chrome-text-secondary);
+}
+
+.markedit-chrome-extensions-row-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.markedit-chrome-extensions-release-notes {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--chrome-text-secondary);
+  white-space: pre-line;
+}
+
+.markedit-chrome-extensions-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.markedit-chrome-extensions-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 36px;
+  height: 20px;
+  cursor: pointer;
+}
+
+.markedit-chrome-extensions-toggle input {
+  appearance: none;
+  width: 0;
+  height: 0;
+  opacity: 0;
+}
+
+.markedit-chrome-extensions-toggle-slider {
+  position: absolute;
+  inset: 0;
+  border-radius: 20px;
+  background: var(--chrome-active);
+  transition: background-color 140ms ease;
+}
+
+.markedit-chrome-extensions-toggle-slider::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  transition: transform 140ms ease;
+}
+
+.markedit-chrome-extensions-toggle input:checked + .markedit-chrome-extensions-toggle-slider {
+  background: var(--chrome-accent);
+}
+
+.markedit-chrome-extensions-toggle input:checked + .markedit-chrome-extensions-toggle-slider::before {
+  transform: translateX(16px);
+}
+
+.markedit-chrome-extensions-toggle input:disabled + .markedit-chrome-extensions-toggle-slider {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.markedit-chrome-extensions-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--chrome-border);
+  flex-shrink: 0;
+  font-size: 13px;
+}
+
+.markedit-chrome-extensions-behavior-label {
+  color: var(--chrome-text-secondary);
+}
+
+.markedit-chrome-extensions-behavior-select {
+  font-size: 13px;
+  padding: 4px 8px;
+  min-width: 170px;
+}
