@@ -377,6 +377,12 @@ impl DocumentManager {
         }
     }
 
+    pub fn clear_recents(&self) {
+        let mut recent = self.recent_files.lock().expect("recent_files lock");
+        recent.clear();
+        let _ = fs::write(self.app_data_dir.join("recent.json"), "[]");
+    }
+
     pub fn recent_paths_strings(&self) -> Vec<String> {
         let recent = self.recent_files.lock().expect("recent_files lock");
         recent
