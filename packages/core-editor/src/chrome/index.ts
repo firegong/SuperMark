@@ -10,6 +10,8 @@ import { createGotoLinePrompt } from './gotoLine';
 import { createPromptModal } from './promptModal';
 import { showContextMenu } from './contextMenu';
 import { createExtensionsModal, ExtensionsManagerTab } from './extensionsModal';
+import { createSettingsModal, SettingsTab } from './settingsModal';
+import { createVersionHistoryModal } from './versionHistoryModal';
 
 const rootId = 'markedit-chrome-root';
 
@@ -119,6 +121,32 @@ export function initChromeUI(): void {
       closeActive();
 
       const modal = createExtensionsModal(initialTab as ExtensionsManagerTab, () => {
+        activePanel = null;
+        activeCloseHandler = null;
+      });
+
+      activePanel = modal.element;
+      activeCloseHandler = () => modal.element.remove();
+      root.appendChild(activePanel);
+      modal.focus();
+    },
+    openSettings(initialTab = 'editor') {
+      closeActive();
+
+      const modal = createSettingsModal(initialTab as SettingsTab, () => {
+        activePanel = null;
+        activeCloseHandler = null;
+      });
+
+      activePanel = modal.element;
+      activeCloseHandler = () => modal.element.remove();
+      root.appendChild(activePanel);
+      modal.focus();
+    },
+    openVersionHistory() {
+      closeActive();
+
+      const modal = createVersionHistoryModal(() => {
         activePanel = null;
         activeCloseHandler = null;
       });

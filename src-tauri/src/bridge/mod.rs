@@ -2,7 +2,7 @@ pub mod generated;
 pub mod secret_storage;
 
 use crate::document::DocumentManager;
-use generated::{AlertConfiguration, FileInfo, LineColumnInfo};
+use generated::{AlertConfiguration, FileInfo, LineColumnInfo, MenuItem};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::fs;
@@ -384,6 +384,32 @@ fn handle_api_module(
             };
             let serialized = serde_json::to_string(&info).ok();
             Ok((json!(serialized), None))
+        }
+        "addMainMenuItems" => {
+            if let Some(items_val) = params.get("items") {
+                if let Ok(items) = serde_json::from_value::<Vec<MenuItem>>(items_val.clone()) {
+                    doc_mgr.set_user_menu_items(items);
+                }
+            }
+            Ok((Value::Null, None))
+        }
+        "openFile" => {
+            if let Some(path_str) = params.get("path").and_then(|v| v.as_str()) {
+                crate::menu::open_in_shell(path_str);
+                return Ok((json!(true), None));
+            }
+            Ok((json!(false), None))
+        }
+        "revealFile" => {
+            if let Some(path_str) = params.get("path").and_then(|v| v.as_str()) {
+                crate::menu::reveal_in_file_manager(Path::new(path_str));
+                return Ok((json!(true), None));
+            }
+            Ok((json!(false), None))
+        }
+        "showPrintPanel" => {
+            let script = "window.print();".to_string();
+            Ok((json!(true), Some(script)))
         }
         "showContextMenu" => {
             let script = WebBridge::format_chrome_call("showContextMenu", Some(params.clone()));

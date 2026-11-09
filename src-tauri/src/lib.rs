@@ -29,6 +29,12 @@ async fn handle_bridge_message(
         let _ = window.set_title(&new_title);
     }
 
+    if message.module_name == "api"
+        && (message.method_name == "addMainMenuItems" || message.method_name == "openDocument")
+    {
+        menu::refresh_app_menu(window.app_handle());
+    }
+
     if let Some(script) = followup_js {
         let _ = window.eval(&script);
     }
@@ -70,6 +76,7 @@ async fn save_document_content(
     let _ = doc_mgr.versions().record_version(&path, &text);
     doc_mgr.push_recent(path);
     doc_mgr.clear_backup_snapshot(&label);
+    menu::refresh_app_menu(window.app_handle());
     let _ = window.set_title(&new_title);
     let _ = window.eval(&WebBridge::mark_content_clean());
     Ok(true)
@@ -232,9 +239,127 @@ async fn extensions_open_homepage(url: String) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+async fn settings_get_state() -> Result<crate::settings::UserSettings, String> {
+    Ok(SettingsManager::new().load_user_settings())
+}
+
+#[tauri::command]
+async fn settings_update(
+    app: AppHandle,
+    patch: Value,
+) -> Result<crate::settings::UserSettings, String> {
+    let mgr = SettingsManager::new();
+    let updated = mgr.update_user_settings(&patch)?;
+    let sync_js = mgr.build_live_sync_js(&updated);
+    for (_, webview) in app.webview_windows() {
+        let _ = webview.eval(&sync_js);
+    }
+    Ok(updated)
+}
+
+#[tauri::command]
+async fn settings_reset(app: AppHandle) -> Result<crate::settings::UserSettings, String> {
+    let mgr = SettingsManager::new();
+    let defaults = mgr.reset_user_settings()?;
+    let sync_js = mgr.build_live_sync_js(&defaults);
+    for (_, webview) in app.webview_windows() {
+        let _ = webview.eval(&sync_js);
+    }
+    Ok(defaults)
+}
+
+#[tauri::command]
+async fn settings_open_file() -> Result<(), String> {
+    let mgr = SettingsManager::new();
+    let path = mgr.settings_file_path();
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    if !path.exists() {
+        let _ = mgr.save(&mgr.load_or_default());
+    }
+    menu::open_in_shell(&path.to_string_lossy());
+    Ok(())
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VersionsListResponse {
+    path: Option<String>,
+    versions: Vec<String>,
+}
+
+#[tauri::command]
+async fn versions_list(
+    window: WebviewWindow,
+    doc_mgr: State<'_, DocumentManager>,
+) -> Result<VersionsListResponse, String> {
+    let label = window.label().to_string();
+    let current_path = doc_mgr.with_session(&label, |s| s.file_path.clone());
+    let versions = current_path
+        .as_deref()
+        .map(|p| doc_mgr.versions().list_versions(p))
+        .unwrap_or_default();
+    Ok(VersionsListResponse {
+        path: current_path.map(|p| p.to_string_lossy().into_owned()),
+        versions,
+    })
+}
+
+#[tauri::command]
+async fn versions_get_content(
+    window: WebviewWindow,
+    doc_mgr: State<'_, DocumentManager>,
+    version: String,
+) -> Result<Option<String>, String> {
+    let label = window.label().to_string();
+    let current_path = doc_mgr.with_session(&label, |s| s.file_path.clone());
+    Ok(current_path
+        .as_deref()
+        .and_then(|p| doc_mgr.versions().get_version_content(p, &version)))
+}
+
+#[tauri::command]
+async fn versions_restore(
+    window: WebviewWindow,
+    doc_mgr: State<'_, DocumentManager>,
+    version: String,
+) -> Result<bool, String> {
+    let label = window.label().to_string();
+    let Some(path) = doc_mgr.with_session(&label, |s| s.file_path.clone()) else {
+        return Ok(false);
+    };
+    let restored = doc_mgr.versions().restore_version(&path, &version)?;
+    let new_title = doc_mgr.with_session(&label, |s| {
+        s.content_cache = restored.clone();
+        s.is_dirty = false;
+        s.display_title()
+    });
+    let _ = window.set_title(&new_title);
+    let _ = window.eval(&WebBridge::reset_editor(&restored));
+    Ok(true)
+}
+
+#[tauri::command]
+async fn versions_delete_all(
+    window: WebviewWindow,
+    doc_mgr: State<'_, DocumentManager>,
+) -> Result<bool, String> {
+    let label = window.label().to_string();
+    let Some(path) = doc_mgr.with_session(&label, |s| s.file_path.clone()) else {
+        return Ok(false);
+    };
+    doc_mgr.versions().delete_local_versions(&path)
+}
+
 pub fn build_bootstrap_script() -> String {
-    let settings = SettingsManager::new().load_or_default();
+    let mgr = SettingsManager::new();
+    let settings = mgr.load_or_default();
+    let user_settings = mgr.load_user_settings();
     let config_json = serde_json::to_string(&settings).unwrap_or_else(|_| "{}".to_string());
+    let user_settings_json =
+        serde_json::to_string(&user_settings).unwrap_or_else(|_| "{}".to_string());
 
     format!(
         r#"
@@ -245,8 +370,9 @@ pub fn build_bootstrap_script() -> String {
         if (!window.config.host) {{ window.config.host = 'mainApp'; }}
         window.MarkEdit = window.MarkEdit || {{
             editorConfig: window.config,
-            userSettings: {{}}
+            userSettings: {user_settings_json}
         }};
+        window.MarkEdit.userSettings = {user_settings_json};
         // Always route the bridge through Tauri IPC: on Windows WebView2 there is no
         // native window.webkit, and on macOS WKWebView Tauri does not register a
         // messageHandlers.bridge handler, so the polyfill must take over in both hosts.
@@ -503,7 +629,15 @@ pub fn run() {
             extensions_update,
             extensions_set_update_behavior,
             extensions_open_folder,
-            extensions_open_homepage
+            extensions_open_homepage,
+            settings_get_state,
+            settings_update,
+            settings_reset,
+            settings_open_file,
+            versions_list,
+            versions_get_content,
+            versions_restore,
+            versions_delete_all
         ])
         .run(tauri::generate_context!())
         .expect("error while running MarkEdit-Win Tauri application");

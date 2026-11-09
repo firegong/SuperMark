@@ -48,6 +48,10 @@ pub struct IndexEntry {
     pub added_date: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub category: Option<Category>,
+    #[serde(rename = "colorScheme", default, skip_serializing_if = "Option::is_none")]
+    pub color_scheme: Option<String>,
+    #[serde(rename = "colorPatterns", default, skip_serializing_if = "Option::is_none")]
+    pub color_patterns: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub featured: Option<bool>,
     pub latest: ExtensionRelease,

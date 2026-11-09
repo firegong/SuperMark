@@ -11,6 +11,8 @@ export interface ExtensionCatalogEntry {
   homepage?: string;
   addedDate?: string;
   category?: 'extension' | 'theme';
+  colorScheme?: 'light' | 'dark' | 'both';
+  colorPatterns?: string[];
   featured?: boolean;
   latest: {
     version: string;
@@ -72,6 +74,145 @@ const categoryLabels: Record<'all' | 'extension' | 'theme', string> = {
   theme: 'Themes',
 };
 
+const svgNS = 'http://www.w3.org/2000/svg';
+
+function svgIcon(pathD: string | string[], size = 16): SVGSVGElement {
+  const svg = document.createElementNS(svgNS, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${size} ${size}`);
+  svg.setAttribute('width', String(size));
+  svg.setAttribute('height', String(size));
+  svg.setAttribute('fill', 'currentColor');
+  const ds = Array.isArray(pathD) ? pathD : [pathD];
+  for (const d of ds) {
+    const path = document.createElementNS(svgNS, 'path');
+    path.setAttribute('d', d);
+    svg.appendChild(path);
+  }
+
+  return svg;
+}
+
+function createCategoryIcon(category: 'extension' | 'theme' | 'local', size = 16): SVGSVGElement {
+  const paths: Record<typeof category, string | string[]> = {
+    theme: 'M12.82 5.58l-1.41-1.41A3.996 3.996 0 0012 2a4 4 0 00-4 4c0 .73.21 1.41.56 2H5.44c.35-.59.56-1.27.56-2a4 4 0 00-4-4 .996.996 0 00-.707.293C.388 1.962 0 3.458 0 5c0 3.06 1.9 5.67 4.58 6.74L4 14c0 .55.45 1 1 1h6c.55 0 1-.45 1-1l-.58-2.26C14.1 10.67 16 8.06 16 5c0-1.542-.388-3.038-1.293-3.707A.996.996 0 0014 2c.73 0 1.41.21 2 .56l-1.18 3.02z',
+    extension: 'M13.5 7.5h-1.88A4.98 4.98 0 008.5 4.38V2.5a1.5 1.5 0 00-3 0v1.88A4.98 4.98 0 002.38 7.5H.5a1.5 1.5 0 000 3h1.88a4.98 4.98 0 002.62 2.62v1.88a1.5 1.5 0 003 0v-1.88a4.98 4.98 0 002.62-2.62h1.88a1.5 1.5 0 000-3zM7 10.5A2.5 2.5 0 117 5.5a2.5 2.5 0 010 5z',
+    local: [
+      'M5.5 1A3.5 3.5 0 0 0 2 4.5c0 1.06.47 2.01 1.21 2.66L1.5 9.5l1 1 1.71-1.71A3.5 3.5 0 1 0 5.5 1z',
+      'M12 1h2v4h-2V1zm1 5 2 7h-6l2-7z',
+    ],
+  };
+
+  return svgIcon(paths[category], size);
+}
+
+function createSparklesIcon(size = 14): SVGSVGElement {
+  return svgIcon('M11.5 2.5c-.28 0-.5.22-.5.5v1.5h-1.5c-.28 0-.5.22-.5.5s.22.5.5.5h1.5V7c0 .28.22.5.5.5s.5-.22.5-.5V5.5h1.5c.28 0 .5-.22.5-.5s-.22-.5-.5-.5H12V3c0-.28-.22-.5-.5-.5zM5 1c-.55 0-1 .45-1 1v1.5H2.5c-.28 0-.5.22-.5.5s.22.5.5.5H4V6c0 .55.45 1 1 1s1-.45 1-1V4.5h1.5c.28 0 .5-.22.5-.5s-.22-.5-.5-.5H6V2c0-.55-.45-1-1-1zm3.5 7c-.28 0-.5.22-.5.5v1h-1c-.28 0-.5.22-.5.5s.22.5.5.5h1v1c0 .28.22.5.5.5s.5-.22.5-.5v-1h1c.28 0 .5-.22.5-.5s-.22-.5-.5-.5h-1v-1c0-.28-.22-.5-.5-.5z', size);
+}
+
+function createBoxIcon(size = 14): SVGSVGElement {
+  return svgIcon('M14.25 4.2l-6-2.5a.75.75 0 00-.5 0l-6 2.5A.75.75 0 001 4.9v6.2c0 .3.18.57.45.7l6 2.5a.75.75 0 00.1.04l.05.01h.05a.75.75 0 00.2-.05l6-2.5a.75.75 0 00.45-.7V4.9a.75.75 0 00-.45-.7zm-6.75-1l4.78 2-1.78.74-4.78-2 1.78-.74zM2.5 5.55l4.5 1.88v5.42l-4.5-1.88V5.55zm6 7.3V7.43l4.5-1.88v5.42l-4.5 1.88z', size);
+}
+
+function createUpdateIcon(size = 14): SVGSVGElement {
+  return svgIcon('M7 0a7 7 0 100 14A7 7 0 007 0zm0 12.5A5.5 5.5 0 017 1.5a5.5 5.5 0 010 11zm.75-5.75V3.5a.75.75 0 00-1.5 0v3.25H4.5a.75.75 0 000 1.5h3.25a.75.75 0 00.75-.75v-.75z', size);
+}
+
+function createVerifiedSeal(size = 14): SVGSVGElement {
+  return svgIcon('M7 .5l1.74 1.05L10.9.9l.65 2.16L13.7 3.8l-.75 2.25 1.05 1.74-1.74 1.05.75 2.25-2.15.74-.65 2.16-2.16-.65-2.25 1.05-1.74-1.05L3.1 13.1l-2.16.65-.65-2.16-2.15-.74.75-2.25-1.05-1.74 1.05-1.74-.75-2.25 2.15-.74.65-2.16 2.16.65L7 .5zm2.85 5.35L6.5 9.21 4.65 7.35l-1.05 1.06 2.9 2.9 4.4-4.4-1.05-1.06z', size);
+}
+
+function createLaurelIcon(size = 14): SVGSVGElement {
+  return svgIcon('M7 1c-.55 0-1 .45-1 1 0 1.66-1.34 3-3 3-.55 0-1 .45-1 1s.45 1 1 1c1.66 0 3 1.34 3 3 0 .55.45 1 1 1s1-.45 1-1c0-1.66 1.34-3 3-3 .55 0 1-.45 1-1s-.45-1-1-1c-1.66 0-3-1.34-3-3 0-.55-.45-1-1-1zm-2.12 2.88C3.5 4.5 2.25 5.75 1.38 7.38c.87 1.62 2.12 2.87 3.5 3.5-.5-1.62-.5-3.38 0-5zm4.24 0c.5 1.62.5 3.38 0 5 1.38-.63 2.63-1.88 3.5-3.5-.87-1.63-2.12-2.88-3.5-3.5z', size);
+}
+
+function deriveGitHubOwner(author?: string, homepage?: string): string | undefined {
+  if (homepage !== undefined && homepage.length > 0) {
+    const match = /^https:\/\/github\.com\/([A-Za-z0-9_.-]+)\//i.exec(homepage);
+    if (match !== null && match[1].length > 0) {
+      return match[1];
+    }
+  }
+
+  if (author !== undefined && /^[A-Za-z0-9-]+$/.test(author)) {
+    return author;
+  }
+
+  return undefined;
+}
+
+function createExtensionIcon(entry: ExtensionCatalogEntry | null, record?: InstalledExtensionRecord): HTMLElement {
+  const category = entry?.category ?? 'extension';
+  const isLocal = record !== undefined && record.version === undefined && entry === null;
+  const effectiveCategory: 'extension' | 'theme' | 'local' = isLocal ? 'local' : category;
+
+  const wrapper = createElement('div', 'markedit-ext-icon');
+  const fallback = createCategoryIcon(effectiveCategory, 20);
+  fallback.classList.add('markedit-ext-icon-fallback');
+  wrapper.appendChild(fallback);
+
+  const owner = deriveGitHubOwner(entry?.author, entry?.homepage);
+  if (owner !== undefined) {
+    const img = document.createElement('img');
+    img.className = 'markedit-ext-icon-img';
+    img.src = `https://github.com/${owner}.png?size=80`;
+    img.alt = '';
+    img.loading = 'lazy';
+    img.addEventListener('load', () => {
+      wrapper.classList.add('is-loaded');
+    });
+    img.addEventListener('error', () => {
+      img.remove();
+      wrapper.classList.remove('is-loaded');
+    });
+    wrapper.appendChild(img);
+
+    const badge = createElement('div', 'markedit-ext-icon-badge', wrapper);
+    badge.appendChild(createCategoryIcon(category, 12));
+  }
+
+  return wrapper;
+}
+
+function createThemePreview(entry: ExtensionCatalogEntry): HTMLElement | null {
+  if (entry.category !== 'theme' || entry.colorPatterns === undefined || entry.colorPatterns.length === 0) {
+    return null;
+  }
+
+  const patterns = entry.colorPatterns;
+  const both = entry.colorScheme === 'both' && patterns.length >= 2;
+  const first = patterns[0].split(',').map(color => color.trim());
+  const second = both ? patterns[1].split(',').map(color => color.trim()) : [];
+
+  if (first.length < 6) {
+    return null;
+  }
+
+  const rows = [[2, 3], [4, 1], [3, 5], [5], [2, 1]];
+  const container = createElement('div', 'markedit-ext-theme-preview');
+
+  const createPane = (colors: string[]) => {
+    const pane = createElement('div', 'markedit-ext-theme-pane');
+    pane.style.backgroundColor = colors[0];
+    const content = createElement('div', 'markedit-ext-theme-pane-content', pane);
+    for (const columns of rows) {
+      const row = createElement('div', 'markedit-ext-theme-row', content);
+      for (const index of columns) {
+        const token = createElement('span', 'markedit-ext-theme-token', row);
+        token.style.backgroundColor = colors[index];
+      }
+    }
+
+    return pane;
+  };
+
+  container.appendChild(createPane(first));
+  if (both && second.length >= 6) {
+    container.appendChild(createPane(second));
+  }
+
+  return container;
+}
+
 async function invokeTauri<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   const invoke = window.__TAURI_INTERNALS__?.invoke;
   if (invoke === undefined) {
@@ -83,16 +224,6 @@ async function invokeTauri<T>(cmd: string, args?: Record<string, unknown>): Prom
   }
 
   return await invoke(cmd, args) as T;
-}
-
-function getInitials(name: string): string {
-  return name
-    .split(/[\s\-_]+/)
-    .map(part => part[0])
-    .filter(Boolean)
-    .join('')
-    .slice(0, 2)
-    .toUpperCase();
 }
 
 function matchesSearch(entry: ExtensionCatalogEntry, query: string): boolean {
@@ -158,10 +289,10 @@ export function createExtensionsModal(
   headerActions.appendChild(closeButton);
 
   const tabsRow = createElement('div', 'markedit-chrome-extensions-tabs', header);
-  const tabs: Record<ExtensionsManagerTab, { label: string; count: () => number }> = {
-    discover: { label: 'Discover', count: () => getFilteredCatalog().length },
-    installed: { label: 'Installed', count: () => state.installed.length },
-    updates: { label: 'Updates', count: () => state.updates.length },
+  const tabs: Record<ExtensionsManagerTab, { label: string; icon: () => SVGSVGElement; count: () => number }> = {
+    discover: { label: 'Discover', icon: () => createSparklesIcon(), count: () => getFilteredCatalog().length },
+    installed: { label: 'Installed', icon: () => createBoxIcon(), count: () => state.installed.length },
+    updates: { label: 'Updates', icon: () => createUpdateIcon(), count: () => state.updates.length },
   };
 
   const tabButtons = new Map<ExtensionsManagerTab, HTMLButtonElement>();
@@ -336,6 +467,7 @@ export function createExtensionsModal(
       const count = tabs[key].count();
       button.classList.toggle('markedit-chrome-active', isActive);
       button.innerHTML = '';
+      button.appendChild(tabs[key].icon());
       createElement('span', '', button, tabs[key].label);
       createElement('span', 'markedit-chrome-extensions-badge', button, String(count));
     }
@@ -378,8 +510,9 @@ export function createExtensionsModal(
 
     const card = createElement('div', 'markedit-chrome-extensions-card');
 
-    const icon = createElement('div', 'markedit-chrome-extensions-icon', card);
-    createElement('span', '', icon, getInitials(entry.name));
+    const icon = createExtensionIcon(entry);
+    icon.classList.add('markedit-chrome-extensions-card-icon');
+    card.appendChild(icon);
 
     const content = createElement('div', 'markedit-chrome-extensions-card-content', card);
     const top = createElement('div', 'markedit-chrome-extensions-card-top', content);
@@ -387,16 +520,30 @@ export function createExtensionsModal(
 
     const meta = createElement('div', 'markedit-chrome-extensions-card-meta', top);
     if (entry.featured === true) {
-      createElement('span', 'markedit-chrome-extensions-badge markedit-chrome-extensions-featured', meta, '★ Featured');
+      const featuredBadge = createElement('span', 'markedit-chrome-extensions-badge markedit-ext-badge-featured', meta);
+      featuredBadge.appendChild(createLaurelIcon());
+      createElement('span', '', featuredBadge, 'Featured');
+      featuredBadge.appendChild(createLaurelIcon());
     }
 
     createElement('span', 'markedit-chrome-extensions-category', meta, entry.category === 'theme' ? 'Theme' : 'Extension');
     createElement('span', 'markedit-chrome-extensions-version', meta, `v${entry.latest.version}`);
     if (entry.author !== undefined && entry.author.length > 0) {
       createElement('span', 'markedit-chrome-extensions-author', meta, `by ${entry.author}`);
+      if (entry.author.toLowerCase() === 'markedit-app') {
+        const seal = createVerifiedSeal();
+        seal.classList.add('markedit-ext-verified-seal');
+        seal.setAttribute('title', 'Official MarkEdit Extension');
+        meta.appendChild(seal);
+      }
     }
 
     createElement('div', 'markedit-chrome-extensions-card-description', content, entry.description);
+
+    const themePreview = createThemePreview(entry);
+    if (themePreview !== null) {
+      content.appendChild(themePreview);
+    }
 
     const actions = createElement('div', 'markedit-chrome-extensions-card-actions', content);
 
@@ -442,18 +589,30 @@ export function createExtensionsModal(
     const catalog = getCatalogEntry(record.id);
     const row = createElement('div', 'markedit-chrome-extensions-row');
 
-    const main = createElement('div', 'markedit-chrome-extensions-row-main', row);
-    const icon = createElement('div', 'markedit-chrome-extensions-icon markedit-chrome-extensions-icon-small', main);
-    createElement('span', '', icon, getInitials(catalog?.name ?? record.id));
+    const icon = createExtensionIcon(catalog ?? null, record);
+    icon.classList.add('markedit-chrome-extensions-row-icon');
+    row.appendChild(icon);
 
+    const main = createElement('div', 'markedit-chrome-extensions-row-main', row);
     const info = createElement('div', 'markedit-chrome-extensions-row-info', main);
-    createElement('div', 'markedit-chrome-extensions-row-name', info, catalog?.name ?? record.id);
+    const nameRow = createElement('div', 'markedit-chrome-extensions-row-name-line', info);
+    createElement('span', '', nameRow, catalog?.name ?? record.id);
+    if (catalog?.author?.toLowerCase() === 'markedit-app') {
+      const seal = createVerifiedSeal();
+      seal.classList.add('markedit-ext-verified-seal');
+      seal.setAttribute('title', 'Official MarkEdit Extension');
+      nameRow.appendChild(seal);
+    }
+
     createElement('div', 'markedit-chrome-extensions-row-description', info, catalog?.description ?? record.file);
 
-    const actions = createElement('div', 'markedit-chrome-extensions-row-actions', row);
+    const meta = createElement('div', 'markedit-chrome-extensions-row-meta', info);
+    createElement('span', 'markedit-chrome-extensions-version', meta, record.version ?? 'Local');
+    if (catalog?.category !== undefined) {
+      createElement('span', 'markedit-chrome-extensions-category', meta, catalog.category === 'theme' ? 'Theme' : 'Extension');
+    }
 
-    const versionBadge = createElement('span', 'markedit-chrome-extensions-version', actions, record.version ?? 'Local');
-    versionBadge.title = `Installed: ${record.file}`;
+    const actions = createElement('div', 'markedit-chrome-extensions-row-actions', row);
 
     const toggle = createElement('label', 'markedit-chrome-extensions-toggle');
     const toggleInput = createElement('input', '') as HTMLInputElement;
@@ -483,12 +642,20 @@ export function createExtensionsModal(
     const catalog = getCatalogEntry(update.id);
     const row = createElement('div', 'markedit-chrome-extensions-row');
 
-    const main = createElement('div', 'markedit-chrome-extensions-row-main', row);
-    const icon = createElement('div', 'markedit-chrome-extensions-icon markedit-chrome-extensions-icon-small', main);
-    createElement('span', '', icon, getInitials(catalog?.name ?? update.id));
+    const icon = createExtensionIcon(catalog ?? null);
+    icon.classList.add('markedit-chrome-extensions-row-icon');
+    row.appendChild(icon);
 
+    const main = createElement('div', 'markedit-chrome-extensions-row-main', row);
     const info = createElement('div', 'markedit-chrome-extensions-row-info', main);
-    createElement('div', 'markedit-chrome-extensions-row-name', info, catalog?.name ?? update.id);
+    const nameRow = createElement('div', 'markedit-chrome-extensions-row-name-line', info);
+    createElement('span', '', nameRow, catalog?.name ?? update.id);
+    if (catalog?.author?.toLowerCase() === 'markedit-app') {
+      const seal = createVerifiedSeal();
+      seal.classList.add('markedit-ext-verified-seal');
+      seal.setAttribute('title', 'Official MarkEdit Extension');
+      nameRow.appendChild(seal);
+    }
 
     const meta = createElement('div', 'markedit-chrome-extensions-row-meta', info);
     createElement('span', 'markedit-chrome-extensions-version', meta, `v${update.installedVersion ?? 'unknown'}`);

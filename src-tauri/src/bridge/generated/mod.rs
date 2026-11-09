@@ -80,10 +80,13 @@ fn default_true() -> bool {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MenuItem {
+    #[serde(default)]
     pub separator: Option<bool>,
     pub title: Option<String>,
     pub icon: Option<String>,
+    #[serde(alias = "actionID")]
     pub action_id: Option<String>,
+    #[serde(alias = "stateGetterID")]
     pub state_id: Option<String>,
     pub key: Option<String>,
     pub modifiers: Option<Vec<String>>,

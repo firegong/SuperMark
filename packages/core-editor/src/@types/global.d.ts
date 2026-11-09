@@ -74,6 +74,8 @@ declare global {
     showTextBox(options?: { title?: string; defaultValue?: string; placeholder?: string }): Promise<string | undefined>;
     showContextMenu(options: { items: WebMenuItem[]; location?: WebPoint }): void;
     openExtensionsManager(initialTab?: 'discover' | 'installed' | 'updates'): void;
+    openSettings(initialTab?: 'editor' | 'assistant' | 'general' | 'window'): void;
+    openVersionHistory(): void;
     closeAll(): void;
   }
 }

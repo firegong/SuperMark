@@ -230,6 +230,8 @@ mod tests {
             homepage: None,
             added_date: None,
             category: None,
+            color_scheme: None,
+            color_patterns: None,
             featured: None,
             latest: ExtensionRelease {
                 version: "1.2.3".to_string(),
@@ -282,6 +284,8 @@ mod tests {
             homepage: None,
             added_date: None,
             category: None,
+            color_scheme: None,
+            color_patterns: None,
             featured: None,
             latest: ExtensionRelease {
                 version: "1.0.0".to_string(),
@@ -320,6 +324,8 @@ mod tests {
             homepage: None,
             added_date: None,
             category: None,
+            color_scheme: None,
+            color_patterns: None,
             featured: None,
             latest: incompatible,
         };
@@ -362,6 +368,8 @@ mod tests {
             homepage: None,
             added_date: None,
             category: None,
+            color_scheme: None,
+            color_patterns: None,
             featured: None,
             latest: ExtensionRelease {
                 version: "1.1.0".to_string(),

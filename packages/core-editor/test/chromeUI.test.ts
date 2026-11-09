@@ -1,5 +1,6 @@
 import { describe, expect, test, beforeEach, jest } from '@jest/globals';
 import type { ExtensionUpdateBehavior, ExtensionsManagerState } from '../src/chrome/extensionsModal';
+import type { UserSettings } from '../src/chrome/settingsModal';
 import * as editor from './utils/editor';
 import { initChromeUI } from '../src/chrome';
 
@@ -282,7 +283,8 @@ describe('Extensions Manager', () => {
         id: 'markedit-preview',
         name: 'MarkEdit Preview',
         description: 'Live preview panel for Markdown.',
-        author: 'MarkEdit Team',
+        author: 'MarkEdit-app',
+        homepage: 'https://github.com/MarkEdit-app/markedit-preview',
         category: 'extension',
         featured: true,
         latest: { version: '1.2.0', url: 'https://example.com/preview.zip', sha256: 'abc', notes: 'Bug fixes' },
@@ -292,7 +294,13 @@ describe('Extensions Manager', () => {
         name: 'Catppuccin Theme',
         description: 'A soothing pastel theme.',
         author: 'Catppuccin',
+        homepage: 'https://github.com/Catppuccin/markedit-theme-catppuccin',
         category: 'theme',
+        colorScheme: 'both',
+        colorPatterns: [
+          '#eff1f5,#4c4f69,#1e66f5,#d20f39,#40a02b,#9ca0b0',
+          '#1e1e2e,#cdd6f4,#89b4fa,#f38ba8,#a6e3a1,#6c7086',
+        ],
         featured: false,
         latest: { version: '2.0.0', url: 'https://example.com/catppuccin.zip', sha256: 'def' },
       },
@@ -360,8 +368,19 @@ describe('Extensions Manager', () => {
     const cards = document.querySelectorAll('.markedit-chrome-extensions-card');
     expect(cards.length).toBe(2);
     expect(cards[0].textContent).toContain('MarkEdit Preview');
-    expect(cards[0].textContent).toContain('★ Featured');
+    expect(cards[0].textContent).toContain('Featured');
     expect(cards[1].textContent).toContain('Catppuccin Theme');
+
+    const icons = document.querySelectorAll('.markedit-ext-icon');
+    expect(icons.length).toBe(2);
+
+    const previewImg = document.querySelector('.markedit-chrome-extensions-card-icon .markedit-ext-icon-img') as HTMLImageElement | null;
+    expect(previewImg).not.toBeNull();
+    expect(previewImg?.src).toBe('https://github.com/MarkEdit-app.png?size=80');
+
+    expect(document.querySelector('.markedit-ext-verified-seal')).not.toBeNull();
+    expect(document.querySelector('.markedit-ext-theme-preview')).not.toBeNull();
+    expect(document.querySelectorAll('.markedit-ext-theme-pane').length).toBe(2);
   });
 
   test('search filters Discover cards', async () => {
@@ -546,5 +565,268 @@ describe('Extensions Manager', () => {
 
     const updateAllButton = document.querySelector('[data-action="update-all"]') as HTMLButtonElement;
     expect(updateAllButton.classList.contains('markedit-chrome-hidden')).toBe(true);
+  });
+});
+
+describe('Settings Modal', () => {
+  let settingsInvokeMock: jest.Mock<(_cmd: string, _args?: Record<string, unknown>) => Promise<UserSettings>>;
+  let configSetters: Record<string, jest.Mock>;
+
+  const sampleSettings: UserSettings = {
+    theme: 'github-light',
+    fontFamily: 'ui-monospace',
+    fontSize: 16,
+    showLineNumbers: true,
+    showActiveLineIndicator: true,
+    invisiblesBehavior: 'selection',
+    typewriterMode: false,
+    focusMode: false,
+    lineWrapping: true,
+    lineHeight: 1.5,
+    tabKeyBehavior: 2,
+    indentUnit: '    ',
+    suggestWhileTyping: true,
+    autoCharacterPairs: true,
+    smartQuotesEnabled: true,
+    insertFinalNewline: true,
+    trimTrailingWhitespace: false,
+    appearance: 'system',
+    newFilenameExtension: 'md',
+    defaultTextEncoding: 'UTF-8',
+    defaultLineBreak: '\n',
+    reduceTransparency: false,
+  };
+
+  const tick = () => new Promise(resolve => { setTimeout(resolve, 0); });
+
+  beforeEach(() => {
+    document.body.innerHTML = '';
+    editor.setUp('# Hello\n\nWorld.');
+
+    settingsInvokeMock = jest.fn(async (cmd: string, _args?: Record<string, unknown>): Promise<UserSettings> => {
+      if (cmd === 'extensions_get_state') {
+        return {
+          catalog: [],
+          installed: [],
+          updates: [],
+          updateBehavior: 'quiet',
+          appVersion: '1.0.0',
+        } as unknown as UserSettings;
+      }
+
+      return sampleSettings;
+    });
+    window.__TAURI_INTERNALS__ = { invoke: settingsInvokeMock } as unknown as typeof window.__TAURI_INTERNALS__;
+
+    configSetters = {
+      setTheme: jest.fn(),
+      setFontSize: jest.fn(),
+      setShowLineNumbers: jest.fn(),
+      setShowActiveLineIndicator: jest.fn(),
+      setInvisiblesBehavior: jest.fn(),
+      setTypewriterMode: jest.fn(),
+      setFocusMode: jest.fn(),
+      setLineWrapping: jest.fn(),
+      setLineHeight: jest.fn(),
+      setTabKeyBehavior: jest.fn(),
+      setIndentUnit: jest.fn(),
+      setSuggestWhileTyping: jest.fn(),
+      setSmartQuotesEnabled: jest.fn(),
+      setDefaultLineBreak: jest.fn(),
+    };
+
+    window.webModules = {
+      core: { restoreFocus: jest.fn() },
+      config: configSetters,
+    } as unknown as typeof window.webModules;
+
+    initChromeUI();
+  });
+
+  test('openSettings renders tabs and theme grid', async () => {
+    (window.chromeUI as ChromeUI).openSettings('editor');
+    await tick();
+
+    expect(document.querySelector('.markedit-chrome-settings-backdrop')).not.toBeNull();
+    expect(document.querySelector('.markedit-chrome-settings-title')?.textContent).toBe('Settings');
+
+    const tabs = document.querySelectorAll('.markedit-chrome-settings-tab');
+    expect(tabs.length).toBe(4);
+    expect(Array.from(tabs).map(tab => tab.textContent)).toEqual(['Editor', 'Assistant', 'General', 'Window']);
+
+    const themeCards = document.querySelectorAll('.markedit-settings-theme-card');
+    expect(themeCards.length).toBe(16);
+
+    expect(document.querySelector('.markedit-settings-more-themes')).not.toBeNull();
+  });
+
+  test('selecting a theme invokes settings_update and config.setTheme', async () => {
+    (window.chromeUI as ChromeUI).openSettings('editor');
+    await tick();
+
+    const themeCards = document.querySelectorAll('.markedit-settings-theme-card');
+    const darkCard = Array.from(themeCards).find(card => card.textContent.includes('GitHub (Dark)'));
+    expect(darkCard).toBeDefined();
+    (darkCard as HTMLButtonElement).click();
+
+    await tick();
+
+    expect(settingsInvokeMock).toHaveBeenCalledWith('settings_update', { patch: { theme: 'github-dark' } });
+    expect(configSetters.setTheme).toHaveBeenCalledWith({ name: 'github-dark' });
+  });
+
+  test('toggle switch invokes settings_update and config setter', async () => {
+    (window.chromeUI as ChromeUI).openSettings('editor');
+    await tick();
+
+    const toggle = document.querySelector('.markedit-settings-toggle input') as HTMLInputElement;
+    expect(toggle).not.toBeNull();
+    toggle.click();
+
+    await tick();
+
+    expect(settingsInvokeMock).toHaveBeenCalledWith('settings_update', { patch: { showLineNumbers: false } });
+    expect(configSetters.setShowLineNumbers).toHaveBeenCalledWith({ enabled: false });
+  });
+
+  test('Assistant tab renders its controls', async () => {
+    (window.chromeUI as ChromeUI).openSettings('assistant');
+    await tick();
+
+    const toggles = document.querySelectorAll('.markedit-settings-toggle');
+    expect(toggles.length).toBeGreaterThanOrEqual(3);
+    expect(document.body.textContent).toContain('Insert Final Newline');
+    expect(document.body.textContent).toContain('Smart Quotes');
+  });
+
+  test('General tab renders controls and Reset to Defaults invokes settings_reset', async () => {
+    (window.chromeUI as ChromeUI).openSettings('general');
+    await tick();
+
+    expect(document.body.textContent).toContain('Appearance');
+    expect(document.body.textContent).toContain('Default Line Endings');
+
+    const resetButton = Array.from(document.querySelectorAll('.markedit-chrome-button'))
+      .find(button => button.textContent === 'Reset to Defaults') as HTMLButtonElement;
+    expect(resetButton).not.toBeNull();
+    resetButton.click();
+
+    await tick();
+
+    expect(settingsInvokeMock).toHaveBeenCalledWith('settings_reset', undefined);
+  });
+
+  test('Window tab renders Reduce Transparency toggle', async () => {
+    (window.chromeUI as ChromeUI).openSettings('window');
+    await tick();
+
+    expect(document.body.textContent).toContain('Reduce Transparency');
+  });
+
+  test('Get More Themes opens Extensions Manager', async () => {
+    (window.chromeUI as ChromeUI).openSettings('editor');
+    await tick();
+
+    const moreButton = document.querySelector('.markedit-settings-more-themes') as HTMLButtonElement;
+    moreButton.click();
+
+    expect(document.querySelector('.markedit-chrome-extensions-backdrop')).not.toBeNull();
+  });
+});
+
+describe('Version History Modal', () => {
+  let versionsInvokeMock: jest.Mock<(cmd: string, args?: Record<string, unknown>) => Promise<unknown>>;
+  const tick = () => new Promise(resolve => { setTimeout(resolve, 0); });
+
+  beforeEach(() => {
+    document.body.innerHTML = '';
+    editor.setUp('# Hello\n\nWorld.');
+
+    versionsInvokeMock = jest.fn(async (cmd: string, args?: Record<string, unknown>): Promise<unknown> => {
+      if (cmd === 'versions_list') {
+        return { filePath: '/docs/note.md', versions: ['v3', 'v2', 'v1'] };
+      }
+
+      if (cmd === 'versions_get_content' && args !== undefined && 'version' in args) {
+        return `Content of ${args.version}`;
+      }
+
+      if (cmd === 'versions_restore') {
+        return true;
+      }
+
+      if (cmd === 'versions_delete_all') {
+        return true;
+      }
+
+      return undefined;
+    });
+
+    window.__TAURI_INTERNALS__ = { invoke: versionsInvokeMock } as unknown as typeof window.__TAURI_INTERNALS__;
+    window.webModules = {
+      core: { restoreFocus: jest.fn() },
+    } as unknown as typeof window.webModules;
+
+    initChromeUI();
+  });
+
+  test('openVersionHistory lists versions and previews first', async () => {
+    (window.chromeUI as ChromeUI).openVersionHistory();
+    await tick();
+
+    expect(document.querySelector('.markedit-chrome-versions-backdrop')).not.toBeNull();
+    expect(document.querySelector('.markedit-chrome-versions-title')?.textContent).toBe('Version History');
+    expect(versionsInvokeMock).toHaveBeenCalledWith('versions_list', undefined);
+
+    const items = document.querySelectorAll('.markedit-chrome-versions-item');
+    expect(items.length).toBe(3);
+    expect(items[0].textContent).toBe('v3');
+    expect(items[0].classList.contains('is-selected')).toBe(true);
+
+    expect(versionsInvokeMock).toHaveBeenCalledWith('versions_get_content', { version: 'v3' });
+
+    const preview = document.querySelector('.markedit-chrome-versions-preview-content') as HTMLTextAreaElement;
+    expect(preview.value).toBe('Content of v3');
+  });
+
+  test('selecting a version loads its content', async () => {
+    (window.chromeUI as ChromeUI).openVersionHistory();
+    await tick();
+
+    const items = document.querySelectorAll('.markedit-chrome-versions-item') as NodeListOf<HTMLButtonElement>;
+    items[2].click();
+
+    await tick();
+
+    expect(versionsInvokeMock).toHaveBeenCalledWith('versions_get_content', { version: 'v1' });
+
+    const preview = document.querySelector('.markedit-chrome-versions-preview-content') as HTMLTextAreaElement;
+    expect(preview.value).toBe('Content of v1');
+  });
+
+  test('restore selected version invokes versions_restore and closes modal', async () => {
+    (window.chromeUI as ChromeUI).openVersionHistory();
+    await tick();
+
+    const restoreButton = document.querySelector('[data-action="restore-version"]') as HTMLButtonElement;
+    restoreButton.click();
+
+    await tick();
+
+    expect(versionsInvokeMock).toHaveBeenCalledWith('versions_restore', { version: 'v3' });
+    expect(document.querySelector('.markedit-chrome-versions-backdrop')).toBeNull();
+  });
+
+  test('delete all versions invokes versions_delete_all', async () => {
+    (window.chromeUI as ChromeUI).openVersionHistory();
+    await tick();
+
+    const deleteButton = document.querySelector('[data-action="delete-all-versions"]') as HTMLButtonElement;
+    deleteButton.click();
+
+    await tick();
+
+    expect(versionsInvokeMock).toHaveBeenCalledWith('versions_delete_all', undefined);
+    expect(document.querySelectorAll('.markedit-chrome-versions-item').length).toBe(0);
   });
 });

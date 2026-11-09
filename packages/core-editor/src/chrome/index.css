@@ -471,6 +471,11 @@
   transition: background-color 140ms ease, box-shadow 140ms ease;
 }
 
+.markedit-chrome-extensions-tab svg {
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+
 .markedit-chrome-extensions-tab:hover {
   background: var(--chrome-hover);
 }
@@ -591,24 +596,69 @@
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 
-.markedit-chrome-extensions-icon {
-  width: 44px;
-  height: 44px;
+.markedit-chrome-extensions-card-icon,
+.markedit-chrome-extensions-row-icon {
+  width: 38px;
+  height: 38px;
   flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+}
+
+.markedit-ext-icon {
+  position: relative;
+  width: 38px;
+  height: 38px;
   border-radius: 10px;
   background: linear-gradient(135deg, var(--chrome-accent), var(--chrome-accent-hover));
   color: #fff;
-  font-size: 14px;
-  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
 }
 
-.markedit-chrome-extensions-icon-small {
-  width: 36px;
-  height: 36px;
-  font-size: 12px;
+.markedit-ext-icon-fallback {
+  width: 20px;
+  height: 20px;
+  opacity: 0.95;
+}
+
+.markedit-ext-icon-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+
+.markedit-ext-icon.is-loaded .markedit-ext-icon-img {
+  opacity: 1;
+}
+
+.markedit-ext-icon.is-loaded .markedit-ext-icon-fallback {
+  opacity: 0;
+}
+
+.markedit-ext-icon-badge {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--chrome-bg-solid);
+  color: var(--chrome-text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--chrome-border);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.markedit-ext-icon-badge svg {
+  width: 12px;
+  height: 12px;
 }
 
 .markedit-chrome-extensions-card-content {
@@ -648,21 +698,78 @@
   background: var(--chrome-active);
 }
 
-.markedit-chrome-extensions-featured {
+.markedit-ext-badge-featured {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   background: rgba(249, 191, 59, 0.18);
   color: #b8860b;
 }
 
+.markedit-ext-badge-featured svg {
+  width: 12px;
+  height: 12px;
+}
+
 @media (prefers-color-scheme: dark) {
-  .markedit-chrome-extensions-featured {
+  .markedit-ext-badge-featured {
     color: #f9bf3b;
   }
+}
+
+.markedit-ext-verified-seal {
+  width: 14px;
+  height: 14px;
+  color: var(--chrome-accent);
+  flex-shrink: 0;
 }
 
 .markedit-chrome-extensions-card-description {
   font-size: 13px;
   line-height: 1.45;
   color: var(--chrome-text-secondary);
+}
+
+.markedit-ext-theme-preview {
+  width: 116px;
+  height: 56px;
+  border-radius: 6px;
+  overflow: hidden;
+  display: flex;
+  border: 1px solid var(--chrome-border);
+  flex-shrink: 0;
+}
+
+.markedit-ext-theme-pane {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 7px;
+  display: flex;
+  align-items: center;
+}
+
+.markedit-ext-theme-pane + .markedit-ext-theme-pane {
+  border-left: 1px solid rgba(128, 128, 128, 0.25);
+}
+
+.markedit-ext-theme-pane-content {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.markedit-ext-theme-row {
+  display: flex;
+  gap: 4px;
+  height: 5px;
+}
+
+.markedit-ext-theme-token {
+  height: 5px;
+  border-radius: 2.5px;
+  min-width: 10px;
+  flex: 1;
 }
 
 .markedit-chrome-extensions-card-actions {
@@ -706,7 +813,10 @@
   gap: 2px;
 }
 
-.markedit-chrome-extensions-row-name {
+.markedit-chrome-extensions-row-name-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 13px;
   font-weight: 600;
 }
@@ -806,4 +916,373 @@
   font-size: 13px;
   padding: 4px 8px;
   min-width: 170px;
+}
+
+/* Settings modal */
+
+.markedit-chrome-settings-backdrop {
+  padding: 24px;
+}
+
+.markedit-chrome-settings-modal {
+  width: 100%;
+  max-width: 600px;
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.markedit-chrome-settings-header {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 16px 12px;
+  border-bottom: 1px solid var(--chrome-border);
+  flex-shrink: 0;
+}
+
+.markedit-chrome-settings-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.markedit-chrome-settings-title {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.markedit-chrome-settings-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  background: var(--chrome-active);
+  border-radius: 6px;
+  align-self: flex-start;
+}
+
+.markedit-chrome-settings-tab {
+  appearance: none;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--chrome-text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 12px;
+  transition: background-color 140ms ease, box-shadow 140ms ease;
+}
+
+.markedit-chrome-settings-tab:hover {
+  background: var(--chrome-hover);
+}
+
+.markedit-chrome-settings-tab.markedit-chrome-active {
+  background: var(--chrome-bg-solid);
+  border-color: var(--chrome-border);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.markedit-chrome-settings-body {
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+}
+
+.markedit-settings-section {
+  margin-bottom: 20px;
+}
+
+.markedit-settings-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--chrome-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: 10px;
+}
+
+.markedit-settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.markedit-settings-field-label {
+  font-size: 12px;
+  color: var(--chrome-text-secondary);
+}
+
+.markedit-settings-select,
+.markedit-settings-number {
+  font-size: 13px;
+  padding: 4px 8px;
+  min-width: 160px;
+}
+
+.markedit-settings-number {
+  width: 80px;
+}
+
+.markedit-settings-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  margin-bottom: 8px;
+}
+
+.markedit-settings-toggle input {
+  appearance: none;
+  width: 0;
+  height: 0;
+  opacity: 0;
+}
+
+.markedit-settings-toggle-slider {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  border-radius: 20px;
+  background: var(--chrome-active);
+  transition: background-color 140ms ease;
+  flex-shrink: 0;
+}
+
+.markedit-settings-toggle-slider::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  transition: transform 140ms ease;
+}
+
+.markedit-settings-toggle input:checked + .markedit-settings-toggle-slider {
+  background: var(--chrome-accent);
+}
+
+.markedit-settings-toggle input:checked + .markedit-settings-toggle-slider::before {
+  transform: translateX(16px);
+}
+
+.markedit-settings-toggle-label {
+  font-size: 13px;
+}
+
+.markedit-settings-theme-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(116px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.markedit-settings-theme-card {
+  appearance: none;
+  background: var(--chrome-input-bg);
+  border: 1px solid var(--chrome-border);
+  border-radius: 8px;
+  padding: 8px;
+  cursor: pointer;
+  text-align: center;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.markedit-settings-theme-card:hover {
+  border-color: var(--chrome-accent);
+}
+
+.markedit-settings-theme-card.is-selected {
+  border-color: var(--chrome-accent);
+  box-shadow: 0 0 0 2px var(--chrome-accent);
+}
+
+.markedit-settings-theme-swatch {
+  width: 100%;
+  height: 56px;
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.markedit-settings-theme-swatch-content {
+  width: calc(100% - 16px);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.markedit-settings-theme-swatch-row {
+  display: flex;
+  gap: 4px;
+  height: 5px;
+}
+
+.markedit-settings-theme-swatch-token {
+  flex: 1;
+  min-width: 10px;
+  height: 5px;
+  border-radius: 2.5px;
+}
+
+.markedit-settings-theme-label {
+  font-size: 11px;
+  color: var(--chrome-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.markedit-settings-more-themes {
+  font-size: 12px;
+}
+
+.markedit-settings-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+/* Version history modal */
+
+.markedit-chrome-versions-backdrop {
+  padding: 24px;
+}
+
+.markedit-chrome-versions-modal {
+  width: 100%;
+  max-width: 760px;
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.markedit-chrome-versions-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px 16px 12px;
+  border-bottom: 1px solid var(--chrome-border);
+  flex-shrink: 0;
+}
+
+.markedit-chrome-versions-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.markedit-chrome-versions-title {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.markedit-chrome-versions-subtitle {
+  font-size: 12px;
+  color: var(--chrome-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.markedit-chrome-versions-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.markedit-chrome-versions-sidebar {
+  width: 200px;
+  flex-shrink: 0;
+  overflow: auto;
+  border-right: 1px solid var(--chrome-border);
+  padding: 8px;
+}
+
+.markedit-chrome-versions-item {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--chrome-text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  padding: 6px 8px;
+  margin-bottom: 2px;
+  transition: background-color 140ms ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.markedit-chrome-versions-item:hover {
+  background: var(--chrome-hover);
+}
+
+.markedit-chrome-versions-item.is-selected {
+  background: var(--chrome-active);
+  font-weight: 600;
+}
+
+.markedit-chrome-versions-preview {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.markedit-chrome-versions-preview-content {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  resize: none;
+  border: none;
+  background: var(--chrome-bg-solid);
+  color: var(--chrome-text);
+  font-family: 'Cascadia Mono', Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 12px;
+  outline: none;
+}
+
+.markedit-chrome-versions-empty {
+  text-align: center;
+  padding: 32px 16px;
+  color: var(--chrome-text-secondary);
+  font-size: 13px;
+}
+
+.markedit-chrome-versions-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--chrome-border);
+  flex-shrink: 0;
+}
+
+.markedit-chrome-versions-footer [data-action="delete-all-versions"] {
+  margin-right: auto;
 }

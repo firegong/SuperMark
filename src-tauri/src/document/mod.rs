@@ -153,6 +153,72 @@ impl DocumentSession {
         Ok(normalized_text)
     }
 
+    pub fn load_from_path_with_encoding(
+        &mut self,
+        path: impl AsRef<Path>,
+        encoding_label: &str,
+    ) -> Result<String, String> {
+        let path_ref = path.as_ref();
+        if is_textbundle_path(path_ref) || is_textpack_path(path_ref) {
+            return self.load_from_path(path_ref);
+        }
+
+        let bytes = fs::read(path_ref).map_err(|e| e.to_string())?;
+        let upper = encoding_label.trim().to_ascii_uppercase();
+        let (bom, encoding_name, raw_text) = match upper.as_str() {
+            "UTF-8-BOM" => {
+                let slice = if bytes.starts_with(&[0xEF, 0xBB, 0xBF]) {
+                    &bytes[3..]
+                } else {
+                    &bytes[..]
+                };
+                let (cow, _, _) = UTF_8.decode(slice);
+                (BomKind::Utf8, "UTF-8".to_string(), cow.into_owned())
+            }
+            "UTF-16LE" => {
+                let slice = if bytes.starts_with(&[0xFF, 0xFE]) {
+                    &bytes[2..]
+                } else {
+                    &bytes[..]
+                };
+                let (cow, _, _) = UTF_16LE.decode(slice);
+                (BomKind::Utf16Le, "UTF-16LE".to_string(), cow.into_owned())
+            }
+            "UTF-16BE" => {
+                let slice = if bytes.starts_with(&[0xFE, 0xFF]) {
+                    &bytes[2..]
+                } else {
+                    &bytes[..]
+                };
+                let (cow, _, _) = UTF_16BE.decode(slice);
+                (BomKind::Utf16Be, "UTF-16BE".to_string(), cow.into_owned())
+            }
+            _ => {
+                let slice = if bytes.starts_with(&[0xEF, 0xBB, 0xBF]) {
+                    &bytes[3..]
+                } else {
+                    &bytes[..]
+                };
+                let enc = Encoding::for_label(encoding_label.trim().as_bytes()).unwrap_or(UTF_8);
+                let (cow, _, _) = enc.decode(slice);
+                (BomKind::None, enc.name().to_string(), cow.into_owned())
+            }
+        };
+
+        let line_endings = LineEndings::detect(&raw_text);
+        let normalized_text = raw_text.replace("\r\n", "\n").replace('\r', "\n");
+
+        self.file_path = Some(path_ref.to_path_buf());
+        self.bom = bom;
+        self.encoding_name = encoding_name;
+        self.line_endings = line_endings;
+        self.is_dirty = false;
+        self.content_cache = normalized_text.clone();
+        self.last_modified_secs = file_mtime_secs(path_ref);
+
+        Ok(normalized_text)
+    }
+
     pub fn save_to_disk(&mut self, editor_text: &str) -> Result<PathBuf, String> {
         let target_path = self
             .file_path
@@ -282,6 +348,7 @@ fn file_mtime_secs(path: &Path) -> Option<u64> {
 pub struct DocumentManager {
     sessions: Mutex<HashMap<String, DocumentSession>>,
     recent_files: Mutex<Vec<PathBuf>>,
+    user_menu_items: Mutex<Vec<crate::bridge::generated::MenuItem>>,
     app_data_dir: PathBuf,
     versions: VersionManager,
     extensions: ExtensionManager,
@@ -320,11 +387,25 @@ impl DocumentManager {
         Self {
             sessions: Mutex::new(map),
             recent_files: Mutex::new(recent_loaded),
+            user_menu_items: Mutex::new(Vec::new()),
             app_data_dir,
             versions,
             extensions,
             secrets,
         }
+    }
+
+    pub fn set_user_menu_items(&self, items: Vec<crate::bridge::generated::MenuItem>) {
+        if let Ok(mut guard) = self.user_menu_items.lock() {
+            *guard = items;
+        }
+    }
+
+    pub fn user_menu_items(&self) -> Vec<crate::bridge::generated::MenuItem> {
+        self.user_menu_items
+            .lock()
+            .map(|g| g.clone())
+            .unwrap_or_default()
     }
 
     pub fn versions(&self) -> &VersionManager {
