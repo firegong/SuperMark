@@ -526,7 +526,24 @@ pub fn build_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> 
         .item(&MenuItemBuilder::with_id("view.le_cr", "Classic Mac (CR)").build(app)?)
         .build()?;
 
+    let preview_submenu = SubmenuBuilder::new(app, "Markdown Preview")
+        .item(
+            &MenuItemBuilder::with_id("view.preview_split", "Toggle Split Preview")
+                .accelerator("CmdOrCtrl+Shift+P")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::with_id("view.preview_full", "Toggle Markdown View Mode")
+                .accelerator("CmdOrCtrl+Alt+P")
+                .build(app)?,
+        )
+        .separator()
+        .item(&MenuItemBuilder::with_id("view.preview_off", "Editor Only Mode").build(app)?)
+        .build()?;
+
     let view_menu = SubmenuBuilder::new(app, "View")
+        .item(&preview_submenu)
+        .separator()
         .item(&MenuItemBuilder::with_id("view.toc", "Table of Contents").build(app)?)
         .item(&MenuItemBuilder::with_id("view.stats", "Document Statistics").build(app)?)
         .separator()
@@ -861,6 +878,18 @@ pub fn menu_id_to_web_script(menu_id: &str) -> Option<String> {
             Some(json!({ "columnName": "Column", "itemName": "Item" })),
         )),
         "format.hr" => Some(WebBridge::format_call("format", "insertHorizontalRule", None)),
+        "view.preview_split" => Some(WebBridge::format_chrome_call(
+            "toggleMarkdownPreview",
+            Some(json!("split")),
+        )),
+        "view.preview_full" => Some(WebBridge::format_chrome_call(
+            "toggleMarkdownPreview",
+            Some(json!("preview")),
+        )),
+        "view.preview_off" => Some(WebBridge::format_chrome_call(
+            "setMarkdownPreviewMode",
+            Some(json!("editor")),
+        )),
         "view.toc" | "go.header" => Some(WebBridge::format_chrome_call("toggleToc", None)),
         "view.stats" => Some(WebBridge::format_chrome_call("toggleStatistics", None)),
         "view.line_numbers" => Some(
@@ -1524,6 +1553,14 @@ mod tests {
 
         let settings = menu_id_to_web_script("app.settings").expect("app.settings");
         assert!(settings.contains("openSettings"));
+
+        let preview_split =
+            menu_id_to_web_script("view.preview_split").expect("view.preview_split");
+        assert!(preview_split.contains("toggleMarkdownPreview"));
+
+        let preview_full =
+            menu_id_to_web_script("view.preview_full").expect("view.preview_full");
+        assert!(preview_full.contains("toggleMarkdownPreview"));
 
         let user_ext =
             menu_id_to_web_script("user_ext_action.custom_1").expect("user_ext_action");

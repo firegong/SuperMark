@@ -76,6 +76,9 @@ declare global {
     openExtensionsManager(initialTab?: 'discover' | 'installed' | 'updates'): void;
     openSettings(initialTab?: 'editor' | 'assistant' | 'general' | 'window'): void;
     openVersionHistory(): void;
+    toggleMarkdownPreview(preferredMode?: 'split' | 'preview'): void;
+    setMarkdownPreviewMode(mode: 'editor' | 'split' | 'preview'): void;
+    getMarkdownPreviewMode(): 'editor' | 'split' | 'preview';
     closeAll(): void;
   }
 }

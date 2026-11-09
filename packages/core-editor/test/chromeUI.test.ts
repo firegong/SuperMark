@@ -1,6 +1,7 @@
 import { describe, expect, test, beforeEach, jest } from '@jest/globals';
 import type { ExtensionUpdateBehavior, ExtensionsManagerState } from '../src/chrome/extensionsModal';
 import type { UserSettings } from '../src/chrome/settingsModal';
+import { renderMarkdownToHtml } from '../src/chrome/markdownPreview';
 import * as editor from './utils/editor';
 import { initChromeUI } from '../src/chrome';
 
@@ -828,5 +829,120 @@ describe('Version History Modal', () => {
 
     expect(versionsInvokeMock).toHaveBeenCalledWith('versions_delete_all', undefined);
     expect(document.querySelectorAll('.markedit-chrome-versions-item').length).toBe(0);
+  });
+});
+
+describe('Markdown Preview', () => {
+  const tick = () => new Promise(resolve => { setTimeout(resolve, 0); });
+
+  beforeEach(() => {
+    document.body.className = '';
+    (window.chromeUI as ChromeUI).setMarkdownPreviewMode('editor');
+  });
+
+  test('renderMarkdownToHtml simple', () => {
+    const html = renderMarkdownToHtml('# Heading\n\nHello world.');
+    expect(html).toContain('<h1');
+  });
+
+  test('renderMarkdownToHtml handles headings, tables, tasks, code, alerts, frontmatter', () => {
+    const html = renderMarkdownToHtml('---\nfront: value\n---\n\n# Heading\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n- [ ] task a\n- [x] task b\n\n> [!WARNING]\n> Watch out\n\n```js\nconst x = 1;\n```\n\n---');
+
+    expect(html).toContain('<h1');
+    expect(html).toContain('<table');
+    expect(html).toContain('markedit-preview-task-checkbox');
+    expect(html).toContain('markedit-preview-code-block');
+    expect(html).toContain('is-warning');
+    expect(html).toContain('markedit-preview-frontmatter');
+  });
+
+  test('renderMarkdownToHtml table only', () => {
+    const html = renderMarkdownToHtml('| a | b |\n|---|---|\n| 1 | 2 |');
+    expect(html).toContain('<table');
+  });
+
+  test('renderMarkdownToHtml task list only', () => {
+    const html = renderMarkdownToHtml('- [ ] task a\n- [x] task b');
+    expect(html).toContain('markedit-preview-task-checkbox');
+  });
+
+  test('renderMarkdownToHtml alert only', () => {
+    const html = renderMarkdownToHtml('> [!WARNING]\n> Watch out');
+    expect(html).toContain('is-warning');
+  });
+
+  test('renderMarkdownToHtml code only', () => {
+    const html = renderMarkdownToHtml('```js\nconst x = 1;\n```');
+    expect(html).toContain('markedit-preview-code-block');
+  });
+
+  test('renderMarkdownToHtml frontmatter only', () => {
+    const html = renderMarkdownToHtml('---\nfront: value\n---');
+    expect(html).toContain('markedit-preview-frontmatter');
+  });
+
+  test('toggleMarkdownPreview switches to split and back', async () => {
+    expect((window.chromeUI as ChromeUI).getMarkdownPreviewMode()).toBe('editor');
+
+    (window.chromeUI as ChromeUI).toggleMarkdownPreview('split');
+    await tick();
+
+    expect((window.chromeUI as ChromeUI).getMarkdownPreviewMode()).toBe('split');
+    expect(document.body.classList.contains('markedit-mode-split')).toBe(true);
+    expect(document.querySelector('.markedit-markdown-preview-pane')).not.toBeNull();
+    expect(document.querySelector('.markedit-preview-body')?.textContent).toContain('Hello');
+
+    (window.chromeUI as ChromeUI).toggleMarkdownPreview('split');
+    await tick();
+
+    expect((window.chromeUI as ChromeUI).getMarkdownPreviewMode()).toBe('editor');
+    expect(document.body.classList.contains('markedit-mode-split')).toBe(false);
+  });
+
+  test('setMarkdownPreviewMode switches between modes', async () => {
+    (window.chromeUI as ChromeUI).setMarkdownPreviewMode('preview');
+    await tick();
+
+    expect((window.chromeUI as ChromeUI).getMarkdownPreviewMode()).toBe('preview');
+    expect(document.body.classList.contains('markedit-mode-preview')).toBe(true);
+
+    (window.chromeUI as ChromeUI).setMarkdownPreviewMode('editor');
+    await tick();
+
+    expect(document.body.classList.contains('markedit-mode-preview')).toBe(false);
+  });
+
+  test('mode switcher toolbar buttons change mode', async () => {
+    (window.chromeUI as ChromeUI).setMarkdownPreviewMode('split');
+    await tick();
+
+    const previewButton = document.querySelector('[data-mode="preview"]') as HTMLButtonElement;
+    previewButton.click();
+    await tick();
+
+    expect((window.chromeUI as ChromeUI).getMarkdownPreviewMode()).toBe('preview');
+
+    const editorButton = document.querySelector('[data-mode="editor"]') as HTMLButtonElement;
+    editorButton.click();
+    await tick();
+
+    expect((window.chromeUI as ChromeUI).getMarkdownPreviewMode()).toBe('editor');
+  });
+
+  test('close button returns to editor mode', async () => {
+    (window.chromeUI as ChromeUI).setMarkdownPreviewMode('preview');
+    await tick();
+
+    const closeButton = document.querySelector('.markedit-preview-toolbar .markedit-chrome-close-button') as HTMLButtonElement;
+    closeButton.click();
+    await tick();
+
+    expect((window.chromeUI as ChromeUI).getMarkdownPreviewMode()).toBe('editor');
+  });
+
+  test('Ctrl+Shift+P toggles split preview', () => {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'P', ctrlKey: true, shiftKey: true, bubbles: true }));
+
+    expect((window.chromeUI as ChromeUI).getMarkdownPreviewMode()).toBe('split');
   });
 });

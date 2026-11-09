@@ -12,6 +12,7 @@ import { showContextMenu } from './contextMenu';
 import { createExtensionsModal, ExtensionsManagerTab } from './extensionsModal';
 import { createSettingsModal, SettingsTab } from './settingsModal';
 import { createVersionHistoryModal } from './versionHistoryModal';
+import { getMarkdownPreviewMode, setMarkdownPreviewMode, toggleMarkdownPreview, MarkdownPreviewMode } from './markdownPreview';
 
 const rootId = 'markedit-chrome-root';
 
@@ -156,8 +157,21 @@ export function initChromeUI(): void {
       root.appendChild(activePanel);
       modal.focus();
     },
+    toggleMarkdownPreview(preferredMode) {
+      toggleMarkdownPreview(preferredMode as 'split' | 'preview' | undefined);
+    },
+    setMarkdownPreviewMode(mode) {
+      setMarkdownPreviewMode(mode as MarkdownPreviewMode);
+    },
+    getMarkdownPreviewMode() {
+      return getMarkdownPreviewMode();
+    },
     closeAll() {
+      const previewMode = getMarkdownPreviewMode();
       closeActive();
+      if (previewMode === 'preview') {
+        setMarkdownPreviewMode('editor');
+      }
     },
   };
 
@@ -171,27 +185,34 @@ export function initChromeUI(): void {
       return;
     }
 
-    if (!event.ctrlKey) {
+    const modifier = event.ctrlKey || event.metaKey;
+    if (!modifier) {
       return;
     }
 
-    if (!event.shiftKey && event.key === 'f') {
+    if (!event.shiftKey && !event.altKey && event.key === 'f') {
       chromeUI.openFindBar(false);
       event.preventDefault();
-    } else if (!event.shiftKey && event.key === 'h') {
+    } else if (!event.shiftKey && !event.altKey && event.key === 'h') {
       chromeUI.openFindBar(true);
       event.preventDefault();
-    } else if (!event.shiftKey && event.key === 'g') {
+    } else if (!event.shiftKey && !event.altKey && event.key === 'g') {
       chromeUI.openGotoLine();
       event.preventDefault();
-    } else if (event.shiftKey && event.key === 'O') {
+    } else if (event.shiftKey && !event.altKey && event.key === 'O') {
       chromeUI.toggleToc();
       event.preventDefault();
-    } else if (event.shiftKey && event.key === 'I') {
+    } else if (event.shiftKey && !event.altKey && event.key === 'I') {
       chromeUI.toggleStatistics();
       event.preventDefault();
-    } else if (event.shiftKey && event.key === 'X') {
+    } else if (event.shiftKey && !event.altKey && event.key === 'X') {
       chromeUI.openExtensionsManager('discover');
+      event.preventDefault();
+    } else if (event.shiftKey && !event.altKey && (event.key === 'P' || event.key === 'p')) {
+      chromeUI.toggleMarkdownPreview('split');
+      event.preventDefault();
+    } else if (event.altKey && (event.key === 'p' || event.key === 'P')) {
+      chromeUI.toggleMarkdownPreview('preview');
       event.preventDefault();
     }
   }, true);

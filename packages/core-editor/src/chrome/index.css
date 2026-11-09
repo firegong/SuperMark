@@ -1286,3 +1286,427 @@
 .markedit-chrome-versions-footer [data-action="delete-all-versions"] {
   margin-right: auto;
 }
+
+/* Markdown preview */
+
+.markedit-mode-split #editor {
+  position: fixed;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 50%;
+  height: 100vh;
+  z-index: 1;
+}
+
+.markedit-mode-preview #editor {
+  display: none;
+}
+
+.markedit-markdown-preview-pane {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 50%;
+  height: 100vh;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  background: var(--preview-bg, var(--chrome-bg-solid));
+  color: var(--preview-fg, var(--chrome-text));
+}
+
+.markedit-mode-preview .markedit-markdown-preview-pane {
+  width: 100vw;
+  left: 0;
+}
+
+.markedit-preview-resizer {
+  position: fixed;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  z-index: 3;
+  cursor: col-resize;
+  background: var(--chrome-border);
+  transition: background-color 140ms ease;
+}
+
+.markedit-preview-resizer:hover {
+  background: var(--chrome-accent);
+}
+
+.markedit-preview-toolbar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--chrome-border);
+  background: var(--chrome-bg);
+  backdrop-filter: blur(12px) saturate(140%);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+}
+
+.markedit-preview-toolbar-left,
+.markedit-preview-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.markedit-preview-mode-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  background: var(--chrome-active);
+  border-radius: 6px;
+}
+
+.markedit-preview-mode-button {
+  appearance: none;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--chrome-text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 3px 10px;
+  transition: background-color 140ms ease, box-shadow 140ms ease;
+}
+
+.markedit-preview-mode-button:hover {
+  background: var(--chrome-hover);
+}
+
+.markedit-preview-mode-button.is-active {
+  background: var(--chrome-bg-solid);
+  border-color: var(--chrome-border);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.markedit-preview-summary {
+  font-size: 12px;
+  color: var(--chrome-text-secondary);
+}
+
+.markedit-preview-toolbar-button {
+  font-size: 12px;
+  padding: 4px 8px;
+}
+
+.markedit-preview-toolbar-button.is-active {
+  background: var(--chrome-accent);
+  color: #fff;
+}
+
+.markedit-preview-body {
+  flex: 1;
+  overflow: auto;
+  padding: 28px 32px;
+}
+
+.markedit-preview-body > * {
+  max-width: 860px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.markedit-preview-body h1,
+.markedit-preview-body h2,
+.markedit-preview-body h3,
+.markedit-preview-body h4,
+.markedit-preview-body h5,
+.markedit-preview-body h6 {
+  margin-top: 24px;
+  margin-bottom: 12px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.markedit-preview-body h1 { font-size: 28px; }
+.markedit-preview-body h2 { font-size: 24px; }
+.markedit-preview-body h3 { font-size: 20px; }
+.markedit-preview-body h4 { font-size: 17px; }
+.markedit-preview-body h5 { font-size: 15px; }
+.markedit-preview-body h6 { font-size: 13px; color: var(--chrome-text-secondary); }
+
+.markedit-preview-heading {
+  position: relative;
+}
+
+.markedit-preview-anchor {
+  position: absolute;
+  left: -20px;
+  color: var(--chrome-text-secondary);
+  text-decoration: none;
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+
+.markedit-preview-heading:hover .markedit-preview-anchor {
+  opacity: 1;
+}
+
+.markedit-preview-body p {
+  margin: 0 0 14px;
+  line-height: 1.6;
+}
+
+.markedit-preview-body a {
+  color: var(--preview-accent, var(--chrome-accent));
+  text-decoration: none;
+}
+
+.markedit-preview-body a:hover {
+  text-decoration: underline;
+}
+
+.markedit-preview-body strong {
+  font-weight: 700;
+}
+
+.markedit-preview-body em {
+  font-style: italic;
+}
+
+.markedit-preview-body del {
+  text-decoration: line-through;
+}
+
+.markedit-preview-body mark {
+  background: rgba(249, 191, 59, 0.35);
+  padding: 1px 3px;
+  border-radius: 3px;
+}
+
+.markedit-preview-body code {
+  font-family: 'Cascadia Mono', Consolas, monospace;
+  font-size: 0.92em;
+  background: var(--chrome-active);
+  padding: 2px 5px;
+  border-radius: 4px;
+}
+
+.markedit-preview-body pre {
+  margin: 0;
+  padding: 14px 16px;
+  overflow: auto;
+  background: var(--chrome-bg-solid);
+  border-radius: 0 0 6px 6px;
+}
+
+.markedit-preview-body pre code {
+  background: transparent;
+  padding: 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.markedit-preview-code-block {
+  position: relative;
+  margin: 16px 0;
+  border: 1px solid var(--chrome-border);
+  border-radius: 6px;
+  background: var(--chrome-bg-solid);
+}
+
+.markedit-preview-code-lang {
+  position: absolute;
+  top: 8px;
+  left: 12px;
+  font-size: 11px;
+  color: var(--chrome-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.markedit-preview-code-copy {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  appearance: none;
+  background: var(--chrome-input-bg);
+  border: 1px solid var(--chrome-border);
+  border-radius: 4px;
+  color: var(--chrome-text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  padding: 3px 8px;
+}
+
+.markedit-preview-code-copy:hover {
+  background: var(--chrome-hover);
+}
+
+.markedit-preview-body blockquote {
+  margin: 14px 0;
+  padding: 8px 16px;
+  border-left: 4px solid var(--chrome-accent);
+  background: var(--chrome-input-bg);
+  border-radius: 0 6px 6px 0;
+}
+
+.markedit-preview-body blockquote p:last-child {
+  margin-bottom: 0;
+}
+
+.markedit-preview-alert {
+  margin: 16px 0;
+  padding: 12px 16px;
+  border-radius: 6px;
+  border: 1px solid;
+}
+
+.markedit-preview-alert-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.markedit-preview-alert-title svg {
+  flex-shrink: 0;
+}
+
+.markedit-preview-alert-content p:last-child {
+  margin-bottom: 0;
+}
+
+.markedit-preview-alert.is-note {
+  background: rgba(9, 105, 218, 0.08);
+  border-color: rgba(9, 105, 218, 0.3);
+  color: #1f6feb;
+}
+
+.markedit-preview-alert.is-tip {
+  background: rgba(31, 136, 61, 0.08);
+  border-color: rgba(31, 136, 61, 0.3);
+  color: #1a7f37;
+}
+
+.markedit-preview-alert.is-important {
+  background: rgba(130, 80, 223, 0.08);
+  border-color: rgba(130, 80, 223, 0.3);
+  color: #7c3aed;
+}
+
+.markedit-preview-alert.is-warning {
+  background: rgba(157, 106, 0, 0.08);
+  border-color: rgba(157, 106, 0, 0.3);
+  color: #9a6700;
+}
+
+.markedit-preview-alert.is-caution {
+  background: rgba(207, 34, 46, 0.08);
+  border-color: rgba(207, 34, 46, 0.3);
+  color: #cf222e;
+}
+
+.markedit-preview-body ul,
+.markedit-preview-body ol {
+  margin: 0 0 14px;
+  padding-left: 24px;
+}
+
+.markedit-preview-body li {
+  margin-bottom: 4px;
+  line-height: 1.55;
+}
+
+.markedit-preview-body li > ul,
+.markedit-preview-body li > ol {
+  margin-top: 4px;
+}
+
+.markedit-preview-task-checkbox {
+  margin-right: 6px;
+  cursor: pointer;
+}
+
+.markedit-preview-body hr {
+  margin: 20px 0;
+  border: none;
+  border-top: 1px solid var(--chrome-border);
+}
+
+.markedit-preview-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 16px 0;
+  font-size: 14px;
+}
+
+.markedit-preview-table th,
+.markedit-preview-table td {
+  padding: 8px 12px;
+  border: 1px solid var(--chrome-border);
+}
+
+.markedit-preview-table th {
+  background: var(--chrome-active);
+  font-weight: 600;
+}
+
+.markedit-preview-table tbody tr:nth-child(even) {
+  background: var(--chrome-input-bg);
+}
+
+.markedit-preview-image {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+  margin: 12px 0;
+}
+
+.markedit-preview-math-block {
+  margin: 16px 0;
+  padding: 12px;
+  text-align: center;
+  font-family: 'Cambria Math', 'Times New Roman', serif;
+  font-size: 16px;
+  overflow-x: auto;
+}
+
+.markedit-preview-math-inline {
+  font-family: 'Cambria Math', 'Times New Roman', serif;
+}
+
+.markedit-preview-frontmatter {
+  margin: 0 auto 20px;
+  padding: 12px 16px;
+  border: 1px solid var(--chrome-border);
+  border-radius: 6px;
+  background: var(--chrome-input-bg);
+  font-size: 13px;
+}
+
+.markedit-preview-frontmatter table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.markedit-preview-frontmatter th,
+.markedit-preview-frontmatter td {
+  padding: 4px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.markedit-preview-frontmatter th {
+  width: 120px;
+  color: var(--chrome-text-secondary);
+  font-weight: 600;
+}
+
+.markedit-preview-footnote-ref a {
+  text-decoration: none;
+}
