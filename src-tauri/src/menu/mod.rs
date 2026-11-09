@@ -185,8 +185,17 @@ pub fn build_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> 
         .item(&line_endings_submenu)
         .build()?;
 
+    let extensions_menu = SubmenuBuilder::new(app, "Extensions")
+        .item(&MenuItemBuilder::with_id("extensions.manage", "Browse Extensions...").build(app)?)
+        .item(&MenuItemBuilder::with_id("extensions.check_updates", "Check for Updates").build(app)?)
+        .item(&MenuItemBuilder::with_id("extensions.install_url", "Install Extension from URL...").build(app)?)
+        .separator()
+        .item(&MenuItemBuilder::with_id("extensions.open_folder", "Open Extensions Folder").build(app)?)
+        .item(&MenuItemBuilder::with_id("extensions.reload", "Reload Extensions").build(app)?)
+        .build()?;
+
     MenuBuilder::new(app)
-        .items(&[&file_menu, &edit_menu, &format_menu, &view_menu])
+        .items(&[&file_menu, &edit_menu, &format_menu, &view_menu, &extensions_menu])
         .build()
 }
 
@@ -304,9 +313,133 @@ pub fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, menu_id: &str) {
         doc_mgr.with_session("main", |s| s.line_endings = LineEndings::LF);
     }
 
+    handle_extension_menu_event(app, menu_id);
+
     if let Some(script) = menu_id_to_web_script(menu_id) {
         if let Some(webview) = app.get_webview_window("main") {
             let _ = webview.eval(&script);
         }
     }
+}
+
+pub fn extensions_reload_script(mgr: &crate::extensions::ExtensionManager) -> String {
+    let mut script = String::from(
+        "document.querySelectorAll('style[data-markedit-user-style]').forEach((el) => el.remove());",
+    );
+    let bootstrap = mgr.build_extension_bootstrap_js();
+    if !bootstrap.is_empty() {
+        script.push('\n');
+        script.push_str(&bootstrap);
+    }
+    script
+}
+
+fn handle_extension_menu_event<R: Runtime>(app: &AppHandle<R>, menu_id: &str) {
+    if !menu_id.starts_with("extensions.") {
+        return;
+    }
+
+    let doc_mgr = app.state::<DocumentManager>();
+    let mgr = doc_mgr.extensions().clone();
+    let webview = app.get_webview_window("main");
+
+    match menu_id {
+        "extensions.manage" => {
+            if let Some(webview) = webview {
+                let _ = webview.eval("window.open('https://github.com/MarkEdit-app/extensions');");
+            }
+        }
+        "extensions.check_updates" => {
+            check_extension_updates(app, mgr, webview);
+        }
+        "extensions.install_url" => {
+            if let Some(webview) = webview {
+                let _ = webview.eval(
+                    r#"window.chromeUI?.showTextBox?.({ title: 'Install Extension from URL', placeholder: 'https://example.com/extension.js' }).then((url) => { if (url) window.__TAURI_INTERNALS__.invoke('install_extension_from_url', { url }); });"#,
+                );
+            }
+        }
+        "extensions.open_folder" => {
+            let dir = mgr.scripts_dir();
+            let _ = mgr.ensure_directories();
+            #[cfg(target_os = "macos")]
+            let _ = std::process::Command::new("open").arg(&dir).spawn();
+            #[cfg(target_os = "windows")]
+            let _ = std::process::Command::new("explorer").arg(&dir).spawn();
+            #[cfg(all(unix, not(target_os = "macos")))]
+            let _ = std::process::Command::new("xdg-open").arg(&dir).spawn();
+        }
+        "extensions.reload" => {
+            if let Some(webview) = webview {
+                let _ = webview.eval(&extensions_reload_script(&mgr));
+            }
+        }
+        _ => {}
+    }
+}
+
+fn check_extension_updates<R: Runtime>(
+    app: &AppHandle<R>,
+    mgr: crate::extensions::ExtensionManager,
+    webview: Option<tauri::WebviewWindow<R>>,
+) {
+    let config = mgr.config();
+    let registry = crate::extensions::ExtensionRegistry::new(
+        mgr.registry_cache_dir(),
+        config.read().registry_url().to_string(),
+        env!("CARGO_PKG_VERSION").to_string(),
+    );
+
+    let _ = registry.refresh(true, false);
+    let updates = registry.pending_updates(&config);
+
+    let Some(webview) = webview else {
+        return;
+    };
+
+    if updates.is_empty() {
+        let _ = rfd::MessageDialog::new()
+            .set_title("MarkEdit-Rust")
+            .set_description("No updates available.")
+            .set_buttons(rfd::MessageButtons::Ok)
+            .set_level(rfd::MessageLevel::Info)
+            .show();
+        return;
+    }
+
+    let prompt = format!(
+        "{} extension update(s) available. Install now?",
+        updates.len()
+    );
+    let result = rfd::MessageDialog::new()
+        .set_title("MarkEdit-Rust")
+        .set_description(&prompt)
+        .set_buttons(rfd::MessageButtons::OkCancel)
+        .set_level(rfd::MessageLevel::Info)
+        .show();
+
+    if result != rfd::MessageDialogResult::Ok {
+        registry.mark_prompted();
+        return;
+    }
+
+    for (record, entry) in &updates {
+        if let Err(err) = crate::extensions::downloader::download_update(
+            &mgr.scripts_dir(),
+            record,
+            entry,
+            &config,
+            env!("CARGO_PKG_VERSION"),
+        ) {
+            eprintln!(
+                "[MarkEdit-Rust] Failed to install extension update '{}': {}",
+                entry.id, err
+            );
+        }
+    }
+
+    let _ = app;
+    let reload = extensions_reload_script(&mgr);
+    let encoded = serde_json::to_string(&reload).unwrap_or_else(|_| "\"\"".to_string());
+    let _ = webview.eval(&format!("new Function({})();", encoded));
 }

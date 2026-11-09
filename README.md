@@ -17,6 +17,11 @@ macOS용 오픈소스 경량 마크다운 에디터인 **[MarkEdit](https://gith
 - **확장 생태계 호환 (`%APPDATA%/MarkEdit/`)**:
   - `%APPDATA%/MarkEdit/scripts/*.js` 및 `styles/*.css` 자동 주입 (`__prepareScriptContexts__` / `__runScriptWithContext__`)
   - `MarkEdit.secretStorage` 영속 저장소 및 시스템 클립보드(`arboard`) 연동
+- **확장 프로그램 시스템 (Extensions, 업스트림 호환)**:
+  - `Extensions` 메뉴: 확장 탐색(GitHub 레지스트리), 업데이트 확인, URL에서 설치, 확장 폴더 열기, 확장 다시 로드
+  - `extensions.json` 설정 (`$schema`, `registry.url`, `registry.updateBehavior`: quiet/notify/automatic/never)
+  - 레지스트리 인덱스 조건부 GET(`If-None-Match` ETag, 1시간 TTL), sha256 무결성 검증, `minAppVersion` 호환성 검사
+  - `Notify`: 하루 1회 업데이트 알림 대화상자 / `Automatic`: 자동 설치 후 에디터 재주입(reload)
 
 ---
 

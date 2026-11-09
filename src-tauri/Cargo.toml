@@ -25,6 +25,8 @@ chardetng = "0.1"
 notify = "6"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 arboard = "3"
+ureq = { version = "2", default-features = false, features = ["tls"] }
+sha2 = { version = "0.10" }
 
 [dev-dependencies]
 tempfile = "3"

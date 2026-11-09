@@ -92,6 +92,29 @@ async fn save_idle_backup(
     Ok(())
 }
 
+#[tauri::command]
+async fn install_extension_from_url(
+    window: WebviewWindow,
+    url: String,
+) -> Result<bool, String> {
+    let base = dirs::config_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("MarkEdit");
+    let mgr = crate::extensions::ExtensionManager::new(base);
+    let _ = mgr.ensure_directories();
+
+    let app_version = env!("CARGO_PKG_VERSION").to_string();
+    crate::extensions::downloader::install_url(
+        url.trim(),
+        &mgr.config(),
+        &mgr.scripts_dir(),
+        &app_version,
+    )?;
+
+    let _ = window.eval(&menu::extensions_reload_script(&mgr));
+    Ok(true)
+}
+
 pub fn build_bootstrap_script() -> String {
     let settings = SettingsManager::new().load_or_default();
     let config_json = serde_json::to_string(&settings).unwrap_or_else(|_| "{}".to_string());
@@ -194,6 +217,117 @@ pub fn run() {
                 }
             }
 
+            // Background extension update check (upstream ExtensionRegistry semantics).
+            // Quiet (default): refresh + cache only. Notify: prompt once/day.
+            // Automatic: install silently. Never: skip.
+            let app_handle_ext = app_handle.clone();
+            std::thread::spawn(move || {
+                let base = dirs::config_dir()
+                    .unwrap_or_else(|| std::path::PathBuf::from("."))
+                    .join("MarkEdit");
+                let mgr = crate::extensions::ExtensionManager::new(base);
+                let config = mgr.config();
+                let behavior = config.read().update_behavior();
+                if behavior == crate::extensions::UpdateBehavior::Never {
+                    return;
+                }
+
+                let registry = crate::extensions::ExtensionRegistry::new(
+                    mgr.registry_cache_dir(),
+                    config.read().registry_url().to_string(),
+                    env!("CARGO_PKG_VERSION").to_string(),
+                );
+                let _ = registry.refresh(false, false);
+                let updates = registry.pending_updates(&config);
+                if updates.is_empty() {
+                    return;
+                }
+
+                match behavior {
+                    crate::extensions::UpdateBehavior::Notify => {
+                        if !registry.should_prompt_updates(behavior, updates.len()) {
+                            return;
+                        }
+                        let thread_mgr = mgr.clone();
+                        let thread_config = config.clone();
+                        let thread_handle = app_handle_ext.clone();
+                        let _ = app_handle_ext.run_on_main_thread(move || {
+                            let prompt = format!(
+                                "{} extension update(s) available. Install now?",
+                                updates.len()
+                            );
+                            let result = MessageDialog::new()
+                                .set_title("MarkEdit-Rust")
+                                .set_description(&prompt)
+                                .set_level(MessageLevel::Info)
+                                .set_buttons(MessageButtons::OkCancel)
+                                .show();
+
+                            if result == MessageDialogResult::Ok {
+                                for (record, entry) in &updates {
+                                    if let Err(err) = crate::extensions::downloader::download_update(
+                                        &thread_mgr.scripts_dir(),
+                                        record,
+                                        entry,
+                                        &thread_config,
+                                        env!("CARGO_PKG_VERSION"),
+                                    ) {
+                                        eprintln!(
+                                            "[MarkEdit-Rust] Failed to install extension update '{}': {}",
+                                            entry.id, err
+                                        );
+                                    }
+                                }
+                                if let Some(webview) = thread_handle.get_webview_window("main") {
+                                    let _ =
+                                        webview.eval(&menu::extensions_reload_script(&thread_mgr));
+                                }
+                            }
+
+                            let update_registry = crate::extensions::ExtensionRegistry::new(
+                                thread_mgr.registry_cache_dir(),
+                                thread_config.read().registry_url().to_string(),
+                                env!("CARGO_PKG_VERSION").to_string(),
+                            );
+                            update_registry.mark_prompted();
+                        });
+                    }
+                    crate::extensions::UpdateBehavior::Automatic => {
+                        let thread_mgr = mgr.clone();
+                        let thread_config = config.clone();
+                        let thread_handle = app_handle_ext.clone();
+                        let _ = app_handle_ext.run_on_main_thread(move || {
+                            for (record, entry) in &updates {
+                                if let Err(err) = crate::extensions::downloader::download_update(
+                                    &thread_mgr.scripts_dir(),
+                                    record,
+                                    entry,
+                                    &thread_config,
+                                    env!("CARGO_PKG_VERSION"),
+                                ) {
+                                    eprintln!(
+                                        "[MarkEdit-Rust] Failed to install extension update '{}': {}",
+                                        entry.id, err
+                                    );
+                                }
+                            }
+
+                            if let Some(webview) = thread_handle.get_webview_window("main") {
+                                let _ = webview.eval(&menu::extensions_reload_script(&thread_mgr));
+                            }
+
+                            let update_registry = crate::extensions::ExtensionRegistry::new(
+                                thread_mgr.registry_cache_dir(),
+                                thread_config.read().registry_url().to_string(),
+                                env!("CARGO_PKG_VERSION").to_string(),
+                            );
+                            update_registry.mark_prompted();
+                        });
+                    }
+                    _ => {}
+                }
+            });
+
             if let Some(main_win) = app.get_webview_window("main") {
                 let _ = main_win.eval(&init_script);
             }
@@ -238,7 +372,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             handle_bridge_message,
             save_document_content,
-            save_idle_backup
+            save_idle_backup,
+            install_extension_from_url
         ])
         .run(tauri::generate_context!())
         .expect("error while running MarkEdit-Win Tauri application");

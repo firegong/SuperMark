@@ -72,14 +72,10 @@ window.nativeModules = {
   secretStorage: createNativeModule<NativeModuleSecretStorage>('secretStorage'),
 };
 
-let scriptContextsPrepared = false;
 Object.defineProperty(window, '__prepareScriptContexts__', {
   value: (scripts: Parameters<typeof createScriptRunner>[0]) => {
-    if (scriptContextsPrepared) {
-      throw new Error('Script contexts are already prepared.');
-    }
-
-    scriptContextsPrepared = true;
+    // Idempotent by design: the native host re-runs the extension bootstrap
+    // after installing, removing, or reloading extensions.
     Object.defineProperty(window, '__runScriptWithContext__', { value: createScriptRunner(scripts) });
   },
 });
