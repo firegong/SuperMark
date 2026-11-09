@@ -16,6 +16,44 @@ pub struct ScriptDescriptor {
     pub capability: String,
 }
 
+/// Mirror of upstream `EditorUserAsset.applyThemePatch` — dirty patch for the
+/// CodeMirror circular-reference issue in legacy themes (`markedit-theme-*.js`).
+/// Idempotent: skipped when the theme is already patched (`circularReferencePatched`).
+fn apply_theme_patch(contents: &str) -> String {
+    if contents.contains("circularReferencePatched") {
+        return contents.to_string();
+    }
+
+    // Matches `)":"extension"in (.+?)\?` and rewrites it to guard against self-reference.
+    let needle = "):\"extension\"in ";
+    let mut out = String::with_capacity(contents.len());
+    let mut rest = contents;
+
+    loop {
+        let Some(pos) = rest.find(needle) else { break };
+        let after = &rest[pos + needle.len()..];
+        let Some(q) = after.find('?') else { break };
+        if q == 0 {
+            // `.+` requires at least one character; keep scanning past this occurrence.
+            out.push_str(&rest[..pos + needle.len()]);
+            rest = after;
+            continue;
+        }
+
+        let theme = &after[..q];
+        out.push_str(&rest[..pos]); // text before the match
+        out.push_str(&format!("):(\"extension\"in {theme}&&{theme}.extension!=={theme})?"));
+        rest = &after[q + 1..];
+    }
+
+    out.push_str(rest);
+    out
+}
+
+fn is_theme_script(file_name: &str) -> bool {
+    file_name.to_lowercase().starts_with("markedit-theme-")
+}
+
 #[derive(Debug, Clone)]
 pub struct ExtensionManager {
     data_dir: PathBuf,
@@ -132,8 +170,13 @@ impl ExtensionManager {
             let Ok(js_source) = fs::read_to_string(&script_path) else {
                 continue;
             };
-            let path_str = script_path.to_string_lossy().into_owned();
             let capability = file_name.to_string();
+            let js_source = if is_theme_script(file_name) {
+                apply_theme_patch(&js_source)
+            } else {
+                js_source
+            };
+            let path_str = script_path.to_string_lossy().into_owned();
 
             descriptors.push(ScriptDescriptor {
                 path: path_str,
@@ -171,6 +214,30 @@ impl ExtensionManager {
 mod tests {
     use super::*;
     use crate::extensions::config::SCHEMA_URL;
+
+    #[test]
+    fn theme_patch_rewrites_circular_extension_references() {
+        let legacy = "):\"extension\"in e?e.output:[e]"; // minified legacy theme pattern
+        let patched = super::apply_theme_patch(legacy);
+        assert_eq!(patched, "):(\"extension\"in e&&e.extension!==e)?e.output:[e]");
+
+        // Idempotent when the theme already carries the fix.
+        let fixed = "circularReferencePatched=true;):\"extension\"in e?";
+        assert_eq!(super::apply_theme_patch(fixed), fixed);
+
+        // Untouched when the pattern is absent.
+        assert_eq!(super::apply_theme_patch("plain();"), "plain();");
+
+        // Multiple occurrences are all rewritten.
+        let twice = "):\"extension\"in e?1:):\"extension\"in t?2";
+        let patched_twice = super::apply_theme_patch(twice);
+        assert!(patched_twice.matches("e.extension!==e").count() == 1);
+        assert!(patched_twice.matches("t.extension!==t").count() == 1);
+
+        assert!(super::is_theme_script("markedit-theme-catppuccin.js"));
+        assert!(super::is_theme_script("MarkEdit-Theme-Gruvbox.js"));
+        assert!(!super::is_theme_script("hello-plugin.js"));
+    }
 
     #[test]
     fn generates_css_and_contextual_js_bootstrap() {
