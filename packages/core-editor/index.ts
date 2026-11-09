@@ -33,8 +33,11 @@ import { createScriptRunner } from './src/scriptContext';
 import { setUpQuickLook } from './src/@quicklook';
 import { initChromeUI } from './src/chrome';
 
-// In release mode, window.config = "{{EDITOR_CONFIG}}" will be replaced with a JSON literal
-const config = import.meta.env.PROD ? window.config : {
+// In release mode, window.config = "{{EDITOR_CONFIG}}" is replaced with a JSON literal
+// by the build (vite transformIndexHtml) and further extended by the native host bootstrap.
+// Merge robustly so that an unsubstituted placeholder (a string) or a partial
+// host-provided config still yields a mountable editor.
+const defaultConfig = {
   host: Host.mainApp,
   text: pseudoDocument,
   theme: 'github-light',
@@ -60,6 +63,13 @@ const config = import.meta.env.PROD ? window.config : {
     cmdClickToToggleTodo: '⌘-click to toggle todo',
   },
 } as Config;
+
+const hostCandidate: unknown = window.config;
+const hostProvidedConfig = import.meta.env.PROD && typeof hostCandidate === 'object' && hostCandidate !== null
+  ? (hostCandidate as Partial<Config>)
+  : {};
+
+const config = { ...defaultConfig, ...hostProvidedConfig } as Config;
 
 // Shared by both hosts, messages are no-ops when there's no native bridge
 window.nativeModules = {

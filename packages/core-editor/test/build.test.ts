@@ -8,14 +8,16 @@ const readHtml = () => {
 };
 
 describe('Build system', () => {
-  test('magic variables occur once, with config before settings', () => {
+  test('host placeholders are resolved at build time, with config before settings', () => {
     const html = readHtml();
-    const config = '"{{EDITOR_CONFIG}}"';
-    const settings = '"{{USER_SETTINGS}}"';
-
-    expect(html.split(config)).toHaveLength(2);
-    expect(html.split(settings)).toHaveLength(2);
-    expect(html.indexOf(config)).toBeLessThan(html.indexOf(settings));
+    // The Tauri host serves dist statically, so the vite build replaces the
+    // quoted upstream placeholders with empty JSON objects; index.ts merges
+    // its defaults and the native bootstrap overrides them at runtime.
+    expect(html).not.toContain('"{{EDITOR_CONFIG}}"');
+    expect(html).not.toContain('"{{USER_SETTINGS}}"');
+    expect(html).toContain('window.config = {};');
+    expect(html).toContain('userSettings: {}');
+    expect(html.indexOf('window.config = {};')).toBeLessThan(html.indexOf('userSettings: {}'));
   });
 
   test('test everything is inlined in a single file', () => {
