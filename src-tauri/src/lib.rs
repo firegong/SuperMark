@@ -121,7 +121,11 @@ pub fn build_bootstrap_script() -> String {
 
     format!(
         r#"
-        window.config = {config_json};
+        // Settings JSON merged over whatever the page provided; host is required
+        // by the editor entrypoint and defaults are merged there for any gaps.
+        window.config = Object.assign({{}}, window.config, (function() {{ try {{ return {config_json}; }} catch (_) {{ return {{}}; }} }})());
+        if (typeof window.config !== 'object' || window.config === null) {{ window.config = {{}}; }}
+        if (!window.config.host) {{ window.config.host = 'mainApp'; }}
         window.MarkEdit = window.MarkEdit || {{
             editorConfig: window.config,
             userSettings: {{}}
