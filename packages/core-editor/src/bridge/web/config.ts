@@ -19,6 +19,7 @@ import {
   setIndentUnit,
   setSuggestWhileTyping,
   setSmartQuotesEnabled,
+  setAutoCharacterPairs,
 } from '../../modules/config';
 
 /**
@@ -43,6 +44,7 @@ export interface WebModuleConfig extends WebModule {
   setIndentUnit({ unit }: { unit: string }): void;
   setSuggestWhileTyping({ enabled }: { enabled: boolean }): void;
   setSmartQuotesEnabled({ enabled }: { enabled: boolean }): void;
+  setAutoCharacterPairs({ enabled }: { enabled: boolean }): void;
 }
 
 export class WebModuleConfigImpl implements WebModuleConfig {
@@ -108,5 +110,9 @@ export class WebModuleConfigImpl implements WebModuleConfig {
 
   setSmartQuotesEnabled({ enabled }: { enabled: boolean }): void {
     setSmartQuotesEnabled(enabled);
+  }
+
+  setAutoCharacterPairs({ enabled }: { enabled: boolean }): void {
+    setAutoCharacterPairs(enabled);
   }
 }

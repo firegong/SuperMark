@@ -15,8 +15,8 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root,
-  .markedit-chrome-root {
+  :root:not([data-appearance="light"]),
+  :root:not([data-appearance="light"]) .markedit-chrome-root {
     --chrome-bg: rgba(40, 40, 40, 0.82);
     --chrome-bg-solid: #202020;
     --chrome-border: rgba(255, 255, 255, 0.10);
@@ -29,6 +29,28 @@
     --chrome-input-bg: rgba(255, 255, 255, 0.08);
     --chrome-shadow: 0 8px 32px rgba(0, 0, 0, 0.32);
   }
+}
+
+:root[data-appearance="dark"],
+:root[data-appearance="dark"] .markedit-chrome-root {
+  --chrome-bg: rgba(40, 40, 40, 0.82);
+  --chrome-bg-solid: #202020;
+  --chrome-border: rgba(255, 255, 255, 0.10);
+  --chrome-text: #f3f3f3;
+  --chrome-text-secondary: #b6b6b6;
+  --chrome-accent: #4cc2ff;
+  --chrome-accent-hover: #60c9ff;
+  --chrome-hover: rgba(255, 255, 255, 0.06);
+  --chrome-active: rgba(255, 255, 255, 0.10);
+  --chrome-input-bg: rgba(255, 255, 255, 0.08);
+  --chrome-shadow: 0 8px 32px rgba(0, 0, 0, 0.32);
+}
+
+:root[data-reduce-transparency="true"] .markedit-chrome-panel,
+body.markedit-reduce-transparency .markedit-chrome-panel {
+  background: var(--chrome-bg-solid);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .markedit-chrome-root {
@@ -1176,8 +1198,25 @@
   min-width: 160px;
 }
 
+.markedit-settings-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.markedit-settings-stepper-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: 15px;
+  font-weight: 600;
+  justify-content: center;
+}
+
 .markedit-settings-number {
-  width: 80px;
+  width: 72px;
+  min-width: 72px;
+  text-align: center;
 }
 
 .markedit-settings-toggle {

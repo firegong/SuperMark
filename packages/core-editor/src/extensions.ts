@@ -53,6 +53,7 @@ const lineWrapping = new Compartment;
 const lineEndings = new Compartment;
 const indentUnit = new Compartment;
 const selectionHighlight = new Compartment;
+const autoCharacterPairs = new Compartment;
 const extensionConfigurator = new Compartment;
 const markdownConfigurator = new Compartment;
 
@@ -67,6 +68,7 @@ window.dynamics = {
   lineEndings,
   indentUnit,
   selectionHighlight,
+  autoCharacterPairs,
   extensionConfigurator,
   markdownConfigurator,
 };
@@ -93,7 +95,7 @@ export function extensions(options: { lineBreak?: string }) {
     indentUnit.of(window.config.indentUnit !== undefined ? indentUnitFacet.of(window.config.indentUnit) : []),
     indentOnInput(),
     bracketMatching(),
-    window.config.autoCharacterPairs ? closeBrackets() : [],
+    autoCharacterPairs.of(window.config.autoCharacterPairs ? closeBrackets() : []),
     rectangularSelection(),
     crosshairCursor(),
     activeLine.of(window.config.showActiveLineIndicator && !editingState.hasSelection ? lineIndicatorLayer : []),

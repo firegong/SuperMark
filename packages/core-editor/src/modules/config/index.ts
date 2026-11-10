@@ -1,6 +1,7 @@
 import { EditorView } from '@codemirror/view';
 import { EditorState } from '@codemirror/state';
 import { indentUnit } from '@codemirror/language';
+import { closeBrackets } from '@codemirror/autocomplete';
 import { WebFontFace, InvisiblesBehavior } from '../../config';
 import { TabKeyBehavior } from '../indentation';
 import { adjustGutterPositions } from '../lines';
@@ -161,6 +162,13 @@ export function setSuggestWhileTyping(enabled: boolean) {
 export function setSmartQuotesEnabled(enabled: boolean) {
   window.config.smartQuotesEnabled = enabled;
   notifyEditorConfigChange('smartQuotesEnabled', enabled);
+}
+
+export function setAutoCharacterPairs(enabled: boolean) {
+  window.config.autoCharacterPairs = enabled;
+  tryGetEditor()?.dispatch({
+    effects: window.dynamics.autoCharacterPairs?.reconfigure(enabled ? closeBrackets() : []),
+  });
 }
 
 export function recalculateTextMetrics() {

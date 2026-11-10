@@ -51,14 +51,20 @@ async fn save_document_content(
 ) -> Result<bool, String> {
     let label = window.label().to_string();
     let existing_path = doc_mgr.with_session(&label, |s| s.file_path.clone());
+    let user_settings = SettingsManager::new().load_user_settings();
 
     let target_path = if save_as || existing_path.is_none() {
+        let ext = user_settings
+            .new_filename_extension
+            .trim()
+            .trim_start_matches('.');
+        let ext = if ext.is_empty() { "md" } else { ext };
         rfd::FileDialog::new()
             .add_filter(
                 "Markdown & TextPack",
                 &["md", "markdown", "mdown", "mkd", "txt", "textpack"],
             )
-            .set_file_name("Untitled.md")
+            .set_file_name(format!("Untitled.{ext}"))
             .save_file()
     } else {
         existing_path
@@ -68,12 +74,24 @@ async fn save_document_content(
         return Ok(false);
     };
 
+    let mut formatted_text = text;
+    if user_settings.trim_trailing_whitespace {
+        formatted_text = formatted_text
+            .split('\n')
+            .map(|line| line.trim_end_matches([' ', '\t', '\r']))
+            .collect::<Vec<_>>()
+            .join("\n");
+    }
+    if user_settings.insert_final_newline && !formatted_text.is_empty() && !formatted_text.ends_with('\n') {
+        formatted_text.push('\n');
+    }
+
     let new_title = doc_mgr.with_session(&label, |s| {
-        s.save_as(&path, &text)?;
+        s.save_as(&path, &formatted_text)?;
         Ok::<String, String>(s.display_title())
     })?;
 
-    let _ = doc_mgr.versions().record_version(&path, &text);
+    let _ = doc_mgr.versions().record_version(&path, &formatted_text);
     doc_mgr.push_recent(path);
     doc_mgr.clear_backup_snapshot(&label);
     menu::refresh_app_menu(window.app_handle());
@@ -240,33 +258,33 @@ async fn extensions_open_homepage(url: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn settings_get_state() -> Result<crate::settings::UserSettings, String> {
-    Ok(SettingsManager::new().load_user_settings())
+async fn settings_get_state() -> Result<Value, String> {
+    Ok(SettingsManager::new().load_user_settings().to_frontend_value())
 }
 
 #[tauri::command]
 async fn settings_update(
     app: AppHandle,
     patch: Value,
-) -> Result<crate::settings::UserSettings, String> {
+) -> Result<Value, String> {
     let mgr = SettingsManager::new();
     let updated = mgr.update_user_settings(&patch)?;
     let sync_js = mgr.build_live_sync_js(&updated);
     for (_, webview) in app.webview_windows() {
         let _ = webview.eval(&sync_js);
     }
-    Ok(updated)
+    Ok(updated.to_frontend_value())
 }
 
 #[tauri::command]
-async fn settings_reset(app: AppHandle) -> Result<crate::settings::UserSettings, String> {
+async fn settings_reset(app: AppHandle) -> Result<Value, String> {
     let mgr = SettingsManager::new();
     let defaults = mgr.reset_user_settings()?;
     let sync_js = mgr.build_live_sync_js(&defaults);
     for (_, webview) in app.webview_windows() {
         let _ = webview.eval(&sync_js);
     }
-    Ok(defaults)
+    Ok(defaults.to_frontend_value())
 }
 
 #[tauri::command]
@@ -359,7 +377,14 @@ pub fn build_bootstrap_script() -> String {
     let user_settings = mgr.load_user_settings();
     let config_json = serde_json::to_string(&settings).unwrap_or_else(|_| "{}".to_string());
     let user_settings_json =
-        serde_json::to_string(&user_settings).unwrap_or_else(|_| "{}".to_string());
+        serde_json::to_string(&user_settings.to_frontend_value()).unwrap_or_else(|_| "{}".to_string());
+    let appearance_json =
+        serde_json::to_string(&user_settings.appearance).unwrap_or_else(|_| "\"system\"".to_string());
+    let reduce_trans_str = if user_settings.reduce_transparency {
+        "true"
+    } else {
+        "false"
+    };
 
     format!(
         r#"
@@ -373,6 +398,10 @@ pub fn build_bootstrap_script() -> String {
             userSettings: {user_settings_json}
         }};
         window.MarkEdit.userSettings = {user_settings_json};
+        if (typeof document !== 'undefined' && document.documentElement) {{
+            document.documentElement.dataset.appearance = {appearance_json};
+            document.documentElement.dataset.reduceTransparency = "{reduce_trans_str}";
+        }}
         // Always route the bridge through Tauri IPC: on Windows WebView2 there is no
         // native window.webkit, and on macOS WKWebView Tauri does not register a
         // messageHandlers.bridge handler, so the polyfill must take over in both hosts.

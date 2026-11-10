@@ -645,6 +645,7 @@ describe('Settings Modal', () => {
       setIndentUnit: jest.fn(),
       setSuggestWhileTyping: jest.fn(),
       setSmartQuotesEnabled: jest.fn(),
+      setAutoCharacterPairs: jest.fn(),
       setDefaultLineBreak: jest.fn(),
     };
 
@@ -744,6 +745,64 @@ describe('Settings Modal', () => {
     moreButton.click();
 
     expect(document.querySelector('.markedit-chrome-extensions-backdrop')).not.toBeNull();
+  });
+
+  test('normalizes dotted settings keys from backend and updates font size via stepper buttons', async () => {
+    settingsInvokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+      if (cmd === 'settings_get_state') {
+        return {
+          'editor.lightTheme': 'dracula',
+          'editor.fontFamily': 'Consolas, monospace',
+          'editor.fontSize': 20,
+          'editor.showLineNumbers': false,
+          'assistant.autoCharacterPairs': true,
+        } as unknown as UserSettings;
+      }
+
+      if (cmd === 'settings_update') {
+        const patch = (args?.patch ?? {}) as Record<string, unknown>;
+        return {
+          'editor.lightTheme': 'dracula',
+          'editor.fontFamily': 'Consolas, monospace',
+          'editor.fontSize': patch.fontSize ?? 20,
+          'editor.showLineNumbers': patch.showLineNumbers ?? false,
+          'assistant.autoCharacterPairs': patch.autoCharacterPairs ?? true,
+        } as unknown as UserSettings;
+      }
+
+      return sampleSettings;
+    });
+
+    (window.chromeUI as ChromeUI).openSettings('editor');
+    await tick();
+
+    const numberInput = document.querySelector('.markedit-settings-number') as HTMLInputElement;
+    expect(numberInput).not.toBeNull();
+    expect(numberInput.value).toBe('20');
+
+    const plusBtn = Array.from(document.querySelectorAll('.markedit-settings-stepper-btn'))
+      .find(btn => btn.textContent === '+') as HTMLButtonElement;
+    expect(plusBtn).toBeDefined();
+    plusBtn.click();
+    await tick();
+
+    expect(settingsInvokeMock).toHaveBeenCalledWith('settings_update', { patch: { fontSize: 21 } });
+    expect(configSetters.setFontSize).toHaveBeenCalledWith({ fontSize: 21 });
+    expect((document.querySelector('.markedit-settings-number') as HTMLInputElement).value).toBe('21');
+  });
+
+  test('Assistant tab autoCharacterPairs toggle calls config.setAutoCharacterPairs', async () => {
+    (window.chromeUI as ChromeUI).openSettings('assistant');
+    await tick();
+
+    const toggles = document.querySelectorAll('.markedit-settings-toggle input');
+    // Order on Assistant tab: insertFinalNewline (0), trimTrailingWhitespace (1), suggestWhileTyping (2), autoCharacterPairs (3), smartQuotesEnabled (4)
+    expect(toggles.length).toBe(5);
+    (toggles[3] as HTMLInputElement).click();
+    await tick();
+
+    expect(settingsInvokeMock).toHaveBeenCalledWith('settings_update', { patch: { autoCharacterPairs: false } });
+    expect(configSetters.setAutoCharacterPairs).toHaveBeenCalledWith({ enabled: false });
   });
 });
 

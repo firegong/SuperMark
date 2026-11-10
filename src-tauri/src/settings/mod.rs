@@ -206,6 +206,132 @@ impl UserSettings {
             localizable: EditorLocalizable::default(),
         }
     }
+
+    pub fn to_frontend_value(&self) -> Value {
+        let mut val = serde_json::to_value(self).unwrap_or_else(|_| json!({}));
+        if let Some(obj) = val.as_object_mut() {
+            let active_theme = self.effective_theme();
+            obj.insert("theme".to_string(), json!(active_theme));
+            obj.insert("lightTheme".to_string(), json!(self.light_theme));
+            obj.insert("darkTheme".to_string(), json!(self.dark_theme));
+            obj.insert("fontFamily".to_string(), json!(self.font_family));
+            obj.insert("fontSize".to_string(), json!(self.font_size));
+            obj.insert("showLineNumbers".to_string(), json!(self.show_line_numbers));
+            obj.insert(
+                "showActiveLineIndicator".to_string(),
+                json!(self.show_active_line_indicator),
+            );
+            obj.insert(
+                "invisiblesBehavior".to_string(),
+                json!(self.invisibles_behavior),
+            );
+            obj.insert("typewriterMode".to_string(), json!(self.typewriter_mode));
+            obj.insert("focusMode".to_string(), json!(self.focus_mode));
+            obj.insert("lineWrapping".to_string(), json!(self.line_wrapping));
+            obj.insert("lineHeight".to_string(), json!(self.line_height));
+            obj.insert("tabKeyBehavior".to_string(), json!(self.tab_key_behavior));
+            obj.insert("indentUnit".to_string(), json!(self.indent_unit));
+            obj.insert(
+                "insertFinalNewline".to_string(),
+                json!(self.insert_final_newline),
+            );
+            obj.insert(
+                "trimTrailingWhitespace".to_string(),
+                json!(self.trim_trailing_whitespace),
+            );
+            obj.insert(
+                "suggestWhileTyping".to_string(),
+                json!(self.suggest_while_typing),
+            );
+            obj.insert(
+                "autoCharacterPairs".to_string(),
+                json!(self.auto_character_pairs),
+            );
+            obj.insert(
+                "smartQuotesEnabled".to_string(),
+                json!(self.smart_quotes_enabled),
+            );
+            obj.insert("appearance".to_string(), json!(self.appearance));
+            obj.insert(
+                "newFilenameExtension".to_string(),
+                json!(self.new_filename_extension),
+            );
+            obj.insert(
+                "defaultTextEncoding".to_string(),
+                json!(self.default_text_encoding),
+            );
+            obj.insert(
+                "defaultLineBreak".to_string(),
+                json!(self.default_line_break),
+            );
+            obj.insert(
+                "reduceTransparency".to_string(),
+                json!(self.reduce_transparency),
+            );
+        }
+        val
+    }
+}
+
+fn canonical_setting_key(key: &str) -> Option<&'static str> {
+    match key {
+        "editor.fontFamily" | "fontFamily" => Some("editor.fontFamily"),
+        "editor.fontSize" | "fontSize" => Some("editor.fontSize"),
+        "editor.lightTheme" | "lightTheme" => Some("editor.lightTheme"),
+        "editor.darkTheme" | "darkTheme" => Some("editor.darkTheme"),
+        "editor.showLineNumbers" | "showLineNumbers" => Some("editor.showLineNumbers"),
+        "editor.showActiveLineIndicator" | "showActiveLineIndicator" => {
+            Some("editor.showActiveLineIndicator")
+        }
+        "editor.invisiblesBehavior" | "invisiblesBehavior" => Some("editor.invisiblesBehavior"),
+        "editor.typewriterMode" | "typewriterMode" => Some("editor.typewriterMode"),
+        "editor.focusMode" | "focusMode" => Some("editor.focusMode"),
+        "editor.lineWrapping" | "lineWrapping" => Some("editor.lineWrapping"),
+        "editor.lineHeight" | "lineHeight" => Some("editor.lineHeight"),
+        "editor.tabKeyBehavior" | "tabKeyBehavior" => Some("editor.tabKeyBehavior"),
+        "editor.indentUnit" | "indentUnit" => Some("editor.indentUnit"),
+        "assistant.insertFinalNewline" | "insertFinalNewline" => {
+            Some("assistant.insertFinalNewline")
+        }
+        "assistant.trimTrailingWhitespace" | "trimTrailingWhitespace" => {
+            Some("assistant.trimTrailingWhitespace")
+        }
+        "assistant.wordsInDocument" | "wordsInDocument" | "suggestWhileTyping" => {
+            Some("assistant.wordsInDocument")
+        }
+        "assistant.autoCharacterPairs" | "autoCharacterPairs" => {
+            Some("assistant.autoCharacterPairs")
+        }
+        "assistant.smartQuotes" | "smartQuotes" | "smartQuotesEnabled" => {
+            Some("assistant.smartQuotes")
+        }
+        "general.appearance" | "appearance" => Some("general.appearance"),
+        "general.newFilenameExtension" | "newFilenameExtension" => {
+            Some("general.newFilenameExtension")
+        }
+        "general.defaultTextEncoding" | "defaultTextEncoding" => {
+            Some("general.defaultTextEncoding")
+        }
+        "general.defaultLineBreak" | "defaultLineBreak" => Some("general.defaultLineBreak"),
+        "window.reduceTransparency" | "reduceTransparency" => Some("window.reduceTransparency"),
+        _ => None,
+    }
+}
+
+fn apply_settings_patch_map(
+    target_map: &mut serde_json::Map<String, Value>,
+    patch_map: &serde_json::Map<String, Value>,
+) {
+    for (k, v) in patch_map {
+        if k == "theme" || k == "editor.theme" {
+            target_map.insert("editor.lightTheme".to_string(), v.clone());
+            target_map.insert("editor.darkTheme".to_string(), v.clone());
+        } else if let Some(canonical) = canonical_setting_key(k) {
+            target_map.insert(canonical.to_string(), v.clone());
+        } else {
+            target_map.insert(k.clone(), v.clone());
+        }
+    }
 }
 
 pub struct SettingsManager {
@@ -244,8 +370,15 @@ impl SettingsManager {
 
         if let Ok(val) = serde_json::from_str::<Value>(&raw) {
             if let Some(obj) = val.as_object() {
-                if obj.keys().any(|k| k.contains('.')) {
-                    if let Ok(settings) = serde_json::from_value::<UserSettings>(val) {
+                if obj.keys().any(|k| canonical_setting_key(k).is_some() || k == "theme")
+                    && !obj.contains_key("fontFace")
+                {
+                    let mut base_val = serde_json::to_value(UserSettings::default())
+                        .unwrap_or_else(|_| json!({}));
+                    if let Some(target_map) = base_val.as_object_mut() {
+                        apply_settings_patch_map(target_map, obj);
+                    }
+                    if let Ok(settings) = serde_json::from_value::<UserSettings>(base_val) {
                         return settings;
                     }
                 }
@@ -297,9 +430,7 @@ impl SettingsManager {
         if let (Some(target_map), Some(patch_map)) =
             (current_val.as_object_mut(), patch.as_object())
         {
-            for (k, v) in patch_map {
-                target_map.insert(k.clone(), v.clone());
-            }
+            apply_settings_patch_map(target_map, patch_map);
         }
         let updated: UserSettings =
             serde_json::from_value(current_val).map_err(|e| e.to_string())?;
@@ -347,7 +478,8 @@ impl SettingsManager {
     pub fn build_live_sync_js(&self, settings: &UserSettings) -> String {
         let editor_cfg = settings.to_editor_config();
         let cfg_json = serde_json::to_string(&editor_cfg).unwrap_or_else(|_| "{}".to_string());
-        let user_json = serde_json::to_string(settings).unwrap_or_else(|_| "{}".to_string());
+        let user_json =
+            serde_json::to_string(&settings.to_frontend_value()).unwrap_or_else(|_| "{}".to_string());
         let theme_arg = json!({ "name": editor_cfg.theme });
         let font_face_arg = json!({ "fontFace": editor_cfg.font_face });
         let font_size_arg = json!({ "fontSize": editor_cfg.font_size });
@@ -362,7 +494,15 @@ impl SettingsManager {
         let tab_arg = json!({ "behavior": settings.tab_key_behavior });
         let indent_arg = json!({ "unit": settings.indent_unit });
         let suggest_arg = json!({ "enabled": editor_cfg.suggest_while_typing });
+        let auto_pairs_arg = json!({ "enabled": editor_cfg.auto_character_pairs });
         let smart_quotes_arg = json!({ "enabled": editor_cfg.smart_quotes_enabled });
+        let appearance_json =
+            serde_json::to_string(&settings.appearance).unwrap_or_else(|_| "\"system\"".to_string());
+        let reduce_trans_str = if settings.reduce_transparency {
+            "true"
+        } else {
+            "false"
+        };
 
         format!(
             r#"(function() {{
@@ -372,6 +512,10 @@ impl SettingsManager {
   if (window.MarkEdit) {{
     window.MarkEdit.editorConfig = window.config;
     window.MarkEdit.userSettings = nextUser;
+  }}
+  if (document?.documentElement) {{
+    document.documentElement.dataset.appearance = {appearance_json};
+    document.documentElement.dataset.reduceTransparency = "{reduce_trans_str}";
   }}
   const c = window.webModules?.config;
   if (c) {{
@@ -389,6 +533,7 @@ impl SettingsManager {
     c.setTabKeyBehavior?.({tab_arg});
     c.setIndentUnit?.({indent_arg});
     c.setSuggestWhileTyping?.({suggest_arg});
+    c.setAutoCharacterPairs?.({auto_pairs_arg});
     c.setSmartQuotesEnabled?.({smart_quotes_arg});
   }}
 }})();"#
@@ -437,8 +582,37 @@ mod tests {
         assert_eq!(patched.font_size, 19.0);
         assert_eq!(patched.effective_theme(), "dracula");
 
-        let sync_js = mgr.build_live_sync_js(&patched);
+        // Flat camelCase keys from SettingsModal UI must also patch without duplicate-field errors
+        let patched_flat = mgr
+            .update_user_settings(&json!({
+                "theme": "synthwave84",
+                "fontFamily": "Consolas",
+                "fontSize": 20.0,
+                "showLineNumbers": false,
+                "suggestWhileTyping": true,
+                "autoCharacterPairs": false,
+                "smartQuotesEnabled": false,
+                "reduceTransparency": true
+            }))
+            .expect("update user settings with flat camelCase keys");
+        assert_eq!(patched_flat.effective_theme(), "synthwave84");
+        assert_eq!(patched_flat.font_family, "Consolas");
+        assert_eq!(patched_flat.font_size, 20.0);
+        assert!(!patched_flat.show_line_numbers);
+        assert!(patched_flat.suggest_while_typing);
+        assert!(!patched_flat.auto_character_pairs);
+        assert!(!patched_flat.smart_quotes_enabled);
+        assert!(patched_flat.reduce_transparency);
+
+        let frontend_val = patched_flat.to_frontend_value();
+        assert_eq!(frontend_val["theme"], "synthwave84");
+        assert_eq!(frontend_val["fontSize"], 20.0);
+        assert_eq!(frontend_val["editor.fontSize"], 20.0);
+        assert_eq!(frontend_val["showLineNumbers"], false);
+        assert_eq!(frontend_val["suggestWhileTyping"], true);
+
+        let sync_js = mgr.build_live_sync_js(&patched_flat);
         assert!(sync_js.contains("c.setTheme"));
-        assert!(sync_js.contains("dracula"));
+        assert!(sync_js.contains("synthwave84"));
     }
 }

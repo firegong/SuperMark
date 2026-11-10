@@ -34,33 +34,106 @@ interface SettingsModalController {
   focus(): void;
 }
 
-const defaultSettings = (config: typeof window.config): UserSettings => {
-  const overrides = config as unknown as Partial<UserSettings>;
-  return {
-    theme: overrides.theme ?? 'github-light',
-    fontFamily: overrides.fontFamily ?? 'ui-monospace',
-    fontSize: overrides.fontSize ?? 16,
-    showLineNumbers: overrides.showLineNumbers ?? true,
-    showActiveLineIndicator: overrides.showActiveLineIndicator ?? true,
-    invisiblesBehavior: overrides.invisiblesBehavior ?? 'selection',
-    typewriterMode: overrides.typewriterMode ?? false,
-    focusMode: overrides.focusMode ?? false,
-    lineWrapping: overrides.lineWrapping ?? true,
-    lineHeight: overrides.lineHeight ?? 1.5,
-    tabKeyBehavior: overrides.tabKeyBehavior ?? 2,
-    indentUnit: overrides.indentUnit ?? '    ',
-    suggestWhileTyping: overrides.suggestWhileTyping ?? true,
-    autoCharacterPairs: overrides.autoCharacterPairs ?? true,
-    smartQuotesEnabled: overrides.smartQuotesEnabled ?? true,
-    insertFinalNewline: overrides.insertFinalNewline ?? true,
-    trimTrailingWhitespace: overrides.trimTrailingWhitespace ?? false,
-    appearance: overrides.appearance ?? 'system',
-    newFilenameExtension: overrides.newFilenameExtension ?? 'md',
-    defaultTextEncoding: overrides.defaultTextEncoding ?? 'UTF-8',
-    defaultLineBreak: overrides.defaultLineBreak ?? '\n',
-    reduceTransparency: overrides.reduceTransparency ?? false,
+function pickValue<T>(raw: Record<string, unknown>, keys: string[], fallback: T): T {
+  for (const key of keys) {
+    const val = raw[key];
+    if (val !== undefined && val !== null) {
+      return val as T;
+    }
+  }
+  return fallback;
+}
+
+export function normalizeUserSettings(
+  source: unknown,
+  fallback?: UserSettings,
+): UserSettings {
+  const raw = (typeof source === 'object' && source !== null ? source : {}) as Record<string, unknown>;
+  const fontFace = (typeof raw.fontFace === 'object' && raw.fontFace !== null ? raw.fontFace : {}) as Record<string, unknown>;
+
+  const base: UserSettings = fallback ?? {
+    theme: 'github-light',
+    fontFamily: 'ui-monospace',
+    fontSize: 16,
+    showLineNumbers: true,
+    showActiveLineIndicator: true,
+    invisiblesBehavior: 'selection',
+    typewriterMode: false,
+    focusMode: false,
+    lineWrapping: true,
+    lineHeight: 1.5,
+    tabKeyBehavior: 2,
+    indentUnit: '    ',
+    suggestWhileTyping: true,
+    autoCharacterPairs: true,
+    smartQuotesEnabled: true,
+    insertFinalNewline: true,
+    trimTrailingWhitespace: false,
+    appearance: 'system',
+    newFilenameExtension: 'md',
+    defaultTextEncoding: 'UTF-8',
+    defaultLineBreak: '\n',
+    reduceTransparency: false,
   };
-};
+
+  const rawFontFamily = pickValue<string>(
+    raw,
+    ['fontFamily', 'editor.fontFamily'],
+    typeof fontFace.family === 'string' ? fontFace.family : base.fontFamily,
+  );
+  const normalizedFontFamily = rawFontFamily.startsWith('ui-monospace,')
+    ? 'ui-monospace'
+    : rawFontFamily;
+
+  return {
+    theme: String(pickValue(raw, ['theme', 'lightTheme', 'editor.lightTheme'], base.theme)),
+    fontFamily: normalizedFontFamily,
+    fontSize: Number(pickValue(raw, ['fontSize', 'editor.fontSize'], base.fontSize)),
+    showLineNumbers: Boolean(pickValue(raw, ['showLineNumbers', 'editor.showLineNumbers'], base.showLineNumbers)),
+    showActiveLineIndicator: Boolean(
+      pickValue(raw, ['showActiveLineIndicator', 'editor.showActiveLineIndicator'], base.showActiveLineIndicator),
+    ),
+    invisiblesBehavior: pickValue(
+      raw,
+      ['invisiblesBehavior', 'editor.invisiblesBehavior'],
+      base.invisiblesBehavior,
+    ),
+    typewriterMode: Boolean(pickValue(raw, ['typewriterMode', 'editor.typewriterMode'], base.typewriterMode)),
+    focusMode: Boolean(pickValue(raw, ['focusMode', 'editor.focusMode'], base.focusMode)),
+    lineWrapping: Boolean(pickValue(raw, ['lineWrapping', 'editor.lineWrapping'], base.lineWrapping)),
+    lineHeight: Number(pickValue(raw, ['lineHeight', 'editor.lineHeight'], base.lineHeight)),
+    tabKeyBehavior: Number(pickValue(raw, ['tabKeyBehavior', 'editor.tabKeyBehavior'], base.tabKeyBehavior)),
+    indentUnit: String(pickValue(raw, ['indentUnit', 'editor.indentUnit'], base.indentUnit)),
+    suggestWhileTyping: Boolean(
+      pickValue(raw, ['suggestWhileTyping', 'assistant.wordsInDocument'], base.suggestWhileTyping),
+    ),
+    autoCharacterPairs: Boolean(
+      pickValue(raw, ['autoCharacterPairs', 'assistant.autoCharacterPairs'], base.autoCharacterPairs),
+    ),
+    smartQuotesEnabled: Boolean(
+      pickValue(raw, ['smartQuotesEnabled', 'assistant.smartQuotes'], base.smartQuotesEnabled),
+    ),
+    insertFinalNewline: Boolean(
+      pickValue(raw, ['insertFinalNewline', 'assistant.insertFinalNewline'], base.insertFinalNewline),
+    ),
+    trimTrailingWhitespace: Boolean(
+      pickValue(raw, ['trimTrailingWhitespace', 'assistant.trimTrailingWhitespace'], base.trimTrailingWhitespace),
+    ),
+    appearance: pickValue(raw, ['appearance', 'general.appearance'], base.appearance),
+    newFilenameExtension: String(
+      pickValue(raw, ['newFilenameExtension', 'general.newFilenameExtension'], base.newFilenameExtension),
+    ),
+    defaultTextEncoding: String(
+      pickValue(raw, ['defaultTextEncoding', 'general.defaultTextEncoding'], base.defaultTextEncoding),
+    ),
+    defaultLineBreak: String(
+      pickValue(raw, ['defaultLineBreak', 'general.defaultLineBreak'], base.defaultLineBreak),
+    ),
+    reduceTransparency: Boolean(
+      pickValue(raw, ['reduceTransparency', 'window.reduceTransparency'], base.reduceTransparency),
+    ),
+  };
+}
 
 const builtInThemes: { id: string; label: string; colors: string }[] = [
   { id: 'github-light', label: 'GitHub (Light)', colors: '#ffffff,#24292e,#f2f8fa,#d73a49,#005cc5,#6f42c1' },
@@ -199,7 +272,13 @@ function createSelect<T extends string | number>(
   const wrapper = createElement('div', 'markedit-settings-field');
   createElement('label', 'markedit-settings-field-label', wrapper, label);
   const select = createElement('select', 'markedit-chrome-input markedit-settings-select') as HTMLSelectElement;
-  for (const option of options) {
+
+  const hasCurrent = options.some(opt => String(opt.value) === String(value));
+  const effectiveOptions = hasCurrent
+    ? options
+    : [{ value, label: String(value) }, ...options];
+
+  for (const option of effectiveOptions) {
     const opt = createElement('option', '', select, option.label);
     opt.value = String(option.value);
   }
@@ -222,6 +301,19 @@ function createNumberStepper(
 ): HTMLElement {
   const wrapper = createElement('div', 'markedit-settings-field');
   createElement('label', 'markedit-settings-field-label', wrapper, label);
+
+  const controls = createElement('div', 'markedit-settings-stepper', wrapper);
+  const decBtn = createButton('−', () => {
+    const current = parseInt(input.value, 10) || value;
+    const next = Math.max(min, Math.min(current - 1, max));
+    if (next !== current) {
+      input.value = String(next);
+      onChange(next);
+    }
+  }, 'markedit-chrome-button markedit-settings-stepper-btn');
+  decBtn.title = `Decrease ${label}`;
+  controls.appendChild(decBtn);
+
   const input = createElement('input', 'markedit-chrome-input markedit-settings-number') as HTMLInputElement;
   input.type = 'number';
   input.min = String(min);
@@ -235,7 +327,19 @@ function createNumberStepper(
       onChange(clamped);
     }
   });
-  wrapper.appendChild(input);
+  controls.appendChild(input);
+
+  const incBtn = createButton('+', () => {
+    const current = parseInt(input.value, 10) || value;
+    const next = Math.max(min, Math.min(current + 1, max));
+    if (next !== current) {
+      input.value = String(next);
+      onChange(next);
+    }
+  }, 'markedit-chrome-button markedit-settings-stepper-btn');
+  incBtn.title = `Increase ${label}`;
+  controls.appendChild(incBtn);
+
   return wrapper;
 }
 
@@ -243,9 +347,9 @@ export function createSettingsModal(
   initialTab: SettingsTab = 'editor',
   onClose: () => void,
 ): SettingsModalController {
-  let settings = defaultSettings(window.config);
+  let settings = normalizeUserSettings(window.config);
   let activeTab: SettingsTab = initialTab;
-  let inFlight = false;
+  let mutationVersion = 0;
 
   const core = window.webModules.core as unknown as { restoreFocus: () => void } | undefined;
   const configModule = window.webModules.config as unknown as {
@@ -262,6 +366,7 @@ export function createSettingsModal(
     setTabKeyBehavior?: (args: { behavior: TabKeyBehavior }) => void;
     setIndentUnit?: (args: { unit: string }) => void;
     setSuggestWhileTyping?: (args: { enabled: boolean }) => void;
+    setAutoCharacterPairs?: (args: { enabled: boolean }) => void;
     setSmartQuotesEnabled?: (args: { enabled: boolean }) => void;
     setDefaultLineBreak?: (args: { lineBreak?: string }) => void;
   } | undefined;
@@ -303,39 +408,50 @@ export function createSettingsModal(
   const body = createElement('div', 'markedit-chrome-settings-body', dialog);
 
   async function refreshState(): Promise<void> {
-    const result = await invokeTauri<UserSettings | undefined>('settings_get_state');
-    if (result !== undefined) {
-      settings = result;
+    const versionAtStart = mutationVersion;
+    try {
+      const result = await invokeTauri<unknown>('settings_get_state');
+      if (result !== undefined && mutationVersion === versionAtStart) {
+        settings = normalizeUserSettings(result, settings);
+        applyAllLocal(settings);
+      }
+    } catch (error) {
+      console.error('Failed to load settings state:', error);
     }
-    render();
+    if (mutationVersion === versionAtStart) {
+      render();
+    }
   }
 
   async function updateSetting<K extends keyof UserSettings>(key: K, value: UserSettings[K]): Promise<void> {
-    if (inFlight) {
-      return;
-    }
-
-    inFlight = true;
+    const currentVersion = ++mutationVersion;
     settings = { ...settings, [key]: value };
     applyLocalChange(key, value);
     render();
 
     try {
-      const result = await invokeTauri<UserSettings | undefined>('settings_update', { patch: { [key]: value } });
-      if (result !== undefined) {
-        settings = result;
+      const result = await invokeTauri<unknown>('settings_update', { patch: { [key]: value } });
+      if (result !== undefined && mutationVersion === currentVersion) {
+        settings = normalizeUserSettings(result, settings);
+        render();
       }
-    } finally {
-      inFlight = false;
-      render();
+    } catch (error) {
+      console.error(`Failed to update setting ${String(key)}:`, error);
     }
   }
 
   async function resetSettings(): Promise<void> {
-    const result = await invokeTauri<UserSettings | undefined>('settings_reset');
-    if (result !== undefined) {
-      settings = result;
+    const currentVersion = ++mutationVersion;
+    try {
+      const result = await invokeTauri<unknown>('settings_reset');
+      if (result !== undefined && mutationVersion === currentVersion) {
+        settings = normalizeUserSettings(result);
+      } else if (result === undefined) {
+        settings = normalizeUserSettings({});
+      }
       applyAllLocal(settings);
+    } catch (error) {
+      console.error('Failed to reset settings:', error);
     }
     render();
   }
@@ -352,54 +468,76 @@ export function createSettingsModal(
         configModule?.setTheme?.({ name: value as string });
         break;
       case 'fontSize':
-        configModule?.setFontSize?.({ fontSize: value as number });
+        configModule?.setFontSize?.({ fontSize: Number(value) });
         break;
       case 'showLineNumbers':
-        configModule?.setShowLineNumbers?.({ enabled: value as boolean });
+        configModule?.setShowLineNumbers?.({ enabled: Boolean(value) });
         break;
       case 'showActiveLineIndicator':
-        configModule?.setShowActiveLineIndicator?.({ enabled: value as boolean });
+        configModule?.setShowActiveLineIndicator?.({ enabled: Boolean(value) });
         break;
       case 'invisiblesBehavior':
         configModule?.setInvisiblesBehavior?.({ behavior: value as InvisiblesBehavior });
         break;
       case 'typewriterMode':
-        configModule?.setTypewriterMode?.({ enabled: value as boolean });
+        configModule?.setTypewriterMode?.({ enabled: Boolean(value) });
         break;
       case 'focusMode':
-        configModule?.setFocusMode?.({ enabled: value as boolean });
+        configModule?.setFocusMode?.({ enabled: Boolean(value) });
         break;
       case 'lineWrapping':
-        configModule?.setLineWrapping?.({ enabled: value as boolean });
+        configModule?.setLineWrapping?.({ enabled: Boolean(value) });
         break;
       case 'lineHeight':
-        configModule?.setLineHeight?.({ lineHeight: value as number });
+        configModule?.setLineHeight?.({ lineHeight: Number(value) });
         break;
       case 'tabKeyBehavior':
-        configModule?.setTabKeyBehavior?.({ behavior: value as TabKeyBehavior });
+        configModule?.setTabKeyBehavior?.({ behavior: Number(value) as TabKeyBehavior });
         break;
       case 'indentUnit':
-        configModule?.setIndentUnit?.({ unit: value as string });
+        configModule?.setIndentUnit?.({ unit: String(value) });
         break;
       case 'suggestWhileTyping':
-        configModule?.setSuggestWhileTyping?.({ enabled: value as boolean });
+        configModule?.setSuggestWhileTyping?.({ enabled: Boolean(value) });
+        break;
+      case 'autoCharacterPairs':
+        configModule?.setAutoCharacterPairs?.({ enabled: Boolean(value) });
         break;
       case 'smartQuotesEnabled':
-        configModule?.setSmartQuotesEnabled?.({ enabled: value as boolean });
+        configModule?.setSmartQuotesEnabled?.({ enabled: Boolean(value) });
         break;
       case 'defaultLineBreak':
-        configModule?.setDefaultLineBreak?.({ lineBreak: value as string });
+        configModule?.setDefaultLineBreak?.({ lineBreak: String(value) });
         break;
       case 'fontFamily':
         window.config.fontFace = { ...window.config.fontFace, family: value as string };
         configModule?.setFontFace?.({ fontFace: { family: value as string } });
         break;
-      case 'appearance':
-      case 'autoCharacterPairs':
+      case 'appearance': {
+        const appearance = value as UserSettings['appearance'];
+        document.documentElement.dataset.appearance = appearance;
+        if (appearance === 'dark' && settings.theme.endsWith('-light')) {
+          const darkCounterpart = settings.theme.replace(/-light$/, '-dark');
+          settings = { ...settings, theme: darkCounterpart };
+          window.config.theme = darkCounterpart;
+          configModule?.setTheme?.({ name: darkCounterpart });
+        } else if (appearance === 'light' && settings.theme.endsWith('-dark')) {
+          const lightCounterpart = settings.theme.replace(/-dark$/, '-light');
+          settings = { ...settings, theme: lightCounterpart };
+          window.config.theme = lightCounterpart;
+          configModule?.setTheme?.({ name: lightCounterpart });
+        }
+        break;
+      }
+      case 'reduceTransparency': {
+        const reduced = Boolean(value);
+        document.documentElement.dataset.reduceTransparency = String(reduced);
+        document.body.classList.toggle('markedit-reduce-transparency', reduced);
+        break;
+      }
       case 'defaultTextEncoding':
       case 'insertFinalNewline':
       case 'newFilenameExtension':
-      case 'reduceTransparency':
       case 'trimTrailingWhitespace':
         break;
     }
@@ -419,8 +557,11 @@ export function createSettingsModal(
     applyLocalChange('tabKeyBehavior', next.tabKeyBehavior);
     applyLocalChange('indentUnit', next.indentUnit);
     applyLocalChange('suggestWhileTyping', next.suggestWhileTyping);
+    applyLocalChange('autoCharacterPairs', next.autoCharacterPairs);
     applyLocalChange('smartQuotesEnabled', next.smartQuotesEnabled);
     applyLocalChange('defaultLineBreak', next.defaultLineBreak);
+    applyLocalChange('reduceTransparency', next.reduceTransparency);
+    document.documentElement.dataset.appearance = next.appearance;
   }
 
   function close(): void {
@@ -584,6 +725,7 @@ export function createSettingsModal(
     tabButtons.get(activeTab)?.focus();
   };
 
+  render();
   void refreshState();
 
   return { element: backdrop, focus };
