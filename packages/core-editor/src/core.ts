@@ -199,6 +199,9 @@ export async function resetEditor(
   // For user scripts, notify the editor is ready
   notifyEditorReady(editor);
 
+  // Notify chrome UI so live preview panels can refresh immediately
+  window.dispatchEvent(new CustomEvent('markedit-editor-reset', { detail: { text: initialDoc } }));
+
   // Wait for the first paint: rAF when foregrounded, setTimeout as a fallback when throttled
   await new Promise<void>(resolve => {
     let settled = false;

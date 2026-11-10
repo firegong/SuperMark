@@ -526,6 +526,24 @@ pub fn build_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> 
         .item(&MenuItemBuilder::with_id("view.le_cr", "Classic Mac (CR)").build(app)?)
         .build()?;
 
+    let md_standard_submenu = SubmenuBuilder::new(app, "Markdown Syntax Standard")
+        .item(
+            &MenuItemBuilder::with_id(
+                "view.md_standard.extended",
+                "Extended (GFM + Math + Mermaid)",
+            )
+            .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::with_id("view.md_standard.gfm", "GitHub Flavored Markdown (GFM)")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::with_id("view.md_standard.commonmark", "CommonMark (Strict)")
+                .build(app)?,
+        )
+        .build()?;
+
     let preview_submenu = SubmenuBuilder::new(app, "Markdown Preview")
         .item(
             &MenuItemBuilder::with_id("view.preview_split", "Toggle Split Preview")
@@ -539,6 +557,8 @@ pub fn build_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> 
         )
         .separator()
         .item(&MenuItemBuilder::with_id("view.preview_off", "Editor Only Mode").build(app)?)
+        .separator()
+        .item(&md_standard_submenu)
         .build()?;
 
     let view_menu = SubmenuBuilder::new(app, "View")
@@ -889,6 +909,18 @@ pub fn menu_id_to_web_script(menu_id: &str) -> Option<String> {
         "view.preview_off" => Some(WebBridge::format_chrome_call(
             "setMarkdownPreviewMode",
             Some(json!("editor")),
+        )),
+        "view.md_standard.extended" => Some(WebBridge::format_chrome_call(
+            "setMarkdownStandard",
+            Some(json!("extended")),
+        )),
+        "view.md_standard.gfm" => Some(WebBridge::format_chrome_call(
+            "setMarkdownStandard",
+            Some(json!("gfm")),
+        )),
+        "view.md_standard.commonmark" => Some(WebBridge::format_chrome_call(
+            "setMarkdownStandard",
+            Some(json!("commonmark")),
         )),
         "view.toc" | "go.header" => Some(WebBridge::format_chrome_call("toggleToc", None)),
         "view.stats" => Some(WebBridge::format_chrome_call("toggleStatistics", None)),
@@ -1561,6 +1593,11 @@ mod tests {
         let preview_full =
             menu_id_to_web_script("view.preview_full").expect("view.preview_full");
         assert!(preview_full.contains("toggleMarkdownPreview"));
+
+        let md_gfm =
+            menu_id_to_web_script("view.md_standard.gfm").expect("view.md_standard.gfm");
+        assert!(md_gfm.contains("setMarkdownStandard"));
+        assert!(md_gfm.contains("\"gfm\""));
 
         let user_ext =
             menu_id_to_web_script("user_ext_action.custom_1").expect("user_ext_action");

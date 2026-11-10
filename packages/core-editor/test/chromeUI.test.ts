@@ -1,7 +1,19 @@
-import { describe, expect, test, beforeEach, jest } from '@jest/globals';
+import { describe, expect, test, beforeEach, afterEach, jest } from '@jest/globals';
+import { EditorView } from '@codemirror/view';
 import type { ExtensionUpdateBehavior, ExtensionsManagerState } from '../src/chrome/extensionsModal';
 import type { UserSettings } from '../src/chrome/settingsModal';
-import { renderMarkdownToHtml } from '../src/chrome/markdownPreview';
+import { getMarkdownPreviewMode, setMarkdownPreviewMode } from '../src/chrome/markdownPreview';
+import { createLivePreviewExtension } from '../src/chrome/liveEditorPreview';
+import {
+  renderMarkdownToHtml,
+  setMarkdownSyntaxStandard,
+  getMarkdownSyntaxStandard,
+  registerMarkdownRenderer,
+  setActiveMarkdownRenderer,
+  getActiveMarkdownRenderer,
+  renderMarkdown,
+  type MarkdownRendererEngine,
+} from '../src/modules/markdown-renderer';
 import * as editor from './utils/editor';
 import { initChromeUI } from '../src/chrome';
 
@@ -944,5 +956,197 @@ describe('Markdown Preview', () => {
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'P', ctrlKey: true, shiftKey: true, bubbles: true }));
 
     expect((window.chromeUI as ChromeUI).getMarkdownPreviewMode()).toBe('split');
+  });
+});
+
+describe('Markdown Preview Rendering', () => {
+  test('renderMarkdownToHtml renders inline math as MathML', () => {
+    const html = renderMarkdownToHtml('The equation $E = mc^2$ is famous.');
+    expect(html).toContain('<math xmlns="http://www.w3.org/1998/Math/MathML"');
+    expect(html).toContain('<span class="markedit-math-inline">');
+    expect(html).toContain('<mi>E</mi>');
+    expect(html).toContain('<mn>2</mn>');
+  });
+
+  test('renderMarkdownToHtml renders display math as MathML', () => {
+    const html = renderMarkdownToHtml('$$\\frac{a}{b}$$');
+    expect(html).toContain('<math xmlns="http://www.w3.org/1998/Math/MathML"');
+    expect(html).toContain(' display="block"');
+    expect(html).toContain('<mfrac>');
+    expect(html).toContain('<mi>a</mi>');
+    expect(html).toContain('<mi>b</mi>');
+  });
+
+  test('renderMarkdownToHtml renders mermaid code block as SVG', () => {
+    const html = renderMarkdownToHtml('```mermaid\ngraph TD\nA[Start] --> B[End]\n```');
+    expect(html).toContain('<svg class="markedit-mermaid-svg"');
+    expect(html).toContain('Start');
+    expect(html).toContain('End');
+    expect(html).toContain('markedit-preview-mermaid');
+  });
+
+  test('renderMarkdownToHtml renders task list inline without paragraph wrapping', () => {
+    const html = renderMarkdownToHtml('- [ ] task a\n- [x] task b');
+    expect(html).toContain('<ul class="markedit-preview-list markedit-preview-task-list">');
+    expect(html).toContain('markedit-preview-task-item');
+    expect(html).toContain('<input type="checkbox" class="markedit-preview-task-checkbox"');
+    expect(html).not.toContain('<p ');
+  });
+});
+
+describe('Markdown Syntax Standard Switching', () => {
+  afterEach(() => {
+    setMarkdownSyntaxStandard('extended');
+  });
+
+  test('commonmark only renders CommonMark elements', () => {
+    setMarkdownSyntaxStandard('commonmark');
+    const html = renderMarkdown('# Heading\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n- [ ] task\n\n~~strike~~\n\n$E=mc^2$\n\n```mermaid\ngraph TD\nA --> B\n```\n\n> [!NOTE]\n> note');
+
+    expect(html).toContain('<h1');
+    expect(html).not.toContain('<table');
+    expect(html).not.toContain('markedit-preview-task-checkbox');
+    expect(html).not.toContain('<del>');
+    expect(html).not.toContain('<math');
+    expect(html).not.toContain('markedit-mermaid-svg');
+    expect(html).not.toContain('markedit-preview-alert');
+  });
+
+  test('gfm renders tables, task lists, and strikethrough', () => {
+    setMarkdownSyntaxStandard('gfm');
+    const html = renderMarkdown('| a | b |\n|---|---|\n| 1 | 2 |\n\n- [ ] task\n\n~~strike~~\n\n$E=mc^2$');
+
+    expect(html).toContain('<table');
+    expect(html).toContain('markedit-preview-task-checkbox');
+    expect(html).toContain('<del>');
+    expect(html).not.toContain('<math');
+  });
+
+  test('extended renders math, mermaid, callouts, and frontmatter', () => {
+    setMarkdownSyntaxStandard('extended');
+    const html = renderMarkdown('---\ntitle: doc\n---\n\n$E=mc^2$\n\n```mermaid\ngraph TD\nA[Start] --> B[End]\n```\n\n> [!NOTE]\n> note');
+
+    expect(html).toContain('markedit-preview-frontmatter');
+    expect(html).toContain('<math');
+    expect(html).toContain('markedit-mermaid-svg');
+    expect(html).toContain('markedit-preview-alert');
+  });
+
+  test('registering and activating a custom renderer swaps output', () => {
+    setMarkdownSyntaxStandard('extended');
+
+    const customEngine: MarkdownRendererEngine = {
+      id: 'custom-test',
+      name: 'Custom Test Renderer',
+      standard: 'custom',
+      render: () => '<div class="custom-renderer-output">CUSTOM</div>',
+    };
+
+    registerMarkdownRenderer(customEngine);
+    setActiveMarkdownRenderer('custom-test');
+
+    expect(getActiveMarkdownRenderer().id).toBe('custom-test');
+    expect(renderMarkdown('# Hello')).toBe('<div class="custom-renderer-output">CUSTOM</div>');
+    expect(getMarkdownSyntaxStandard()).toBe('custom');
+
+    setActiveMarkdownRenderer('extended');
+    expect(renderMarkdown('# Hello')).toContain('<h1');
+  });
+});
+
+describe('Floating Mode Switcher', () => {
+  const tick = () => new Promise(resolve => { setTimeout(resolve, 0); });
+
+  beforeEach(() => {
+    document.body.innerHTML = '';
+    editor.setUp('# Hello\n\nWorld.');
+
+    window.webModules = {
+      core: { restoreFocus: jest.fn(), getEditorText: jest.fn(() => window.editor.state.doc.toString()) },
+      search: { setState: jest.fn(), updateQuery: jest.fn(), findNext: jest.fn(), findPrevious: jest.fn(), replaceNext: jest.fn(), replaceAll: jest.fn(), getCounterInfo: jest.fn(() => ({ currentIndex: 0, numberOfItems: 0 })) },
+      toc: { getTableOfContents: jest.fn(() => []), gotoHeader: jest.fn() },
+      selection: { getText: jest.fn(() => ''), gotoLine: jest.fn() },
+      api: { getMenuItemState: jest.fn(() => ({})), handleContextMenuAction: jest.fn() },
+    } as unknown as typeof window.webModules;
+
+    initChromeUI();
+    setMarkdownPreviewMode('editor');
+  });
+
+  afterEach(() => {
+    setMarkdownPreviewMode('editor');
+  });
+
+  test('mode switcher pill is visible in editor mode', () => {
+    const pill = document.getElementById('markedit-mode-switcher');
+    expect(pill).not.toBeNull();
+
+    const buttons = pill?.querySelectorAll('button');
+    expect(buttons?.length).toBe(3);
+    expect(buttons?.[0].textContent).toBe('Editor');
+    expect(buttons?.[0].classList.contains('is-active')).toBe(true);
+  });
+
+  test('mode switcher pill highlights active mode in split and preview', async () => {
+    setMarkdownPreviewMode('split');
+    await tick();
+
+    let active = document.querySelector('#markedit-mode-switcher .is-active');
+    expect(active?.textContent).toBe('Split');
+    expect(getMarkdownPreviewMode()).toBe('split');
+
+    setMarkdownPreviewMode('preview');
+    await tick();
+
+    active = document.querySelector('#markedit-mode-switcher .is-active');
+    expect(active?.textContent).toBe('Preview');
+    expect(getMarkdownPreviewMode()).toBe('preview');
+  });
+
+  test('clicking mode switcher pill buttons changes mode', async () => {
+    const previewButton = document.querySelector('#markedit-mode-switcher [data-mode="preview"]') as HTMLButtonElement;
+    previewButton.click();
+    await tick();
+
+    expect(getMarkdownPreviewMode()).toBe('preview');
+    expect(document.querySelector('#markedit-mode-switcher .is-active')?.textContent).toBe('Preview');
+  });
+});
+
+describe('Live Editor Preview Extension', () => {
+  test('renders checkboxes, math, mermaid, and tables in editor mode', () => {
+    const doc = [
+      '- [ ] task a',
+      '',
+      '$E=mc^2$',
+      '',
+      '```mermaid',
+      'graph TD',
+      'A[Start] --> B[End]',
+      '```',
+      '',
+      '| a | b |',
+      '|---|---|',
+      '| 1 | 2 |',
+    ].join('\n');
+
+    const view = new EditorView({
+      doc,
+      parent: document.body,
+      extensions: [
+        EditorView.editable.of(true),
+        createLivePreviewExtension(),
+      ],
+    });
+
+    view.dispatch({ selection: { anchor: doc.length } });
+    view.requestMeasure();
+
+    expect(view.dom.querySelector('.cm-live-checkbox')).not.toBeNull();
+    expect(view.dom.querySelector('.cm-live-math')).not.toBeNull();
+    expect(view.dom.querySelector('.cm-live-mermaid')).not.toBeNull();
+    expect(view.dom.querySelector('.cm-live-table')).not.toBeNull();
+
+    view.destroy();
   });
 });

@@ -12,7 +12,18 @@ import { showContextMenu } from './contextMenu';
 import { createExtensionsModal, ExtensionsManagerTab } from './extensionsModal';
 import { createSettingsModal, SettingsTab } from './settingsModal';
 import { createVersionHistoryModal } from './versionHistoryModal';
-import { getMarkdownPreviewMode, setMarkdownPreviewMode, toggleMarkdownPreview, MarkdownPreviewMode } from './markdownPreview';
+import {
+  getMarkdownPreviewMode,
+  setMarkdownPreviewMode,
+  toggleMarkdownPreview,
+  setMarkdownStandard,
+  getMarkdownStandard,
+  registerMarkdownRenderer,
+  setMarkdownRenderer,
+  ensureChromeUIModeSwitcher,
+  MarkdownPreviewMode,
+} from './markdownPreview';
+import type { MarkdownRendererEngine } from '../modules/markdown-renderer';
 
 const rootId = 'markedit-chrome-root';
 
@@ -32,6 +43,7 @@ export function initChromeUI(): void {
   root.id = rootId;
   root.className = 'markedit-chrome-root';
   document.body.appendChild(root);
+  ensureChromeUIModeSwitcher();
 
   let activePanel: HTMLElement | null = null;
   let activeFindBar: FindBarApi | null = null;
@@ -173,9 +185,27 @@ export function initChromeUI(): void {
         setMarkdownPreviewMode('editor');
       }
     },
+    setMarkdownStandard(standard) {
+      setMarkdownStandard(standard);
+    },
+    getMarkdownStandard() {
+      return getMarkdownStandard();
+    },
+    registerMarkdownRenderer(engine) {
+      registerMarkdownRenderer(engine);
+    },
+    setMarkdownRenderer(id) {
+      setMarkdownRenderer(id);
+    },
   };
 
   window.chromeUI = chromeUI;
+
+  const markEdit = MarkEdit as unknown as Record<string, unknown>;
+  markEdit.setMarkdownStandard = (standard: string) => chromeUI.setMarkdownStandard(standard);
+  markEdit.getMarkdownStandard = () => chromeUI.getMarkdownStandard();
+  markEdit.registerMarkdownRenderer = (engine: MarkdownRendererEngine) => chromeUI.registerMarkdownRenderer(engine);
+  markEdit.setMarkdownRenderer = (id: string) => chromeUI.setMarkdownRenderer(id);
 
   window.addEventListener('keydown', event => {
     if (event.key === 'Escape') {

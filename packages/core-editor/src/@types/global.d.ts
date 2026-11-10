@@ -13,6 +13,7 @@ import { WebPoint } from './WebPoint';
 import type { EditorView } from '@codemirror/view';
 import type { Extension } from '@codemirror/state';
 import type { TagStyle } from '@codemirror/language';
+import type { MarkdownRendererEngine } from '../modules/markdown-renderer/types';
 import type { MarkEdit } from 'markedit-api';
 
 declare global {
@@ -79,6 +80,10 @@ declare global {
     toggleMarkdownPreview(preferredMode?: 'split' | 'preview'): void;
     setMarkdownPreviewMode(mode: 'editor' | 'split' | 'preview'): void;
     getMarkdownPreviewMode(): 'editor' | 'split' | 'preview';
+    setMarkdownStandard(standard: string): void;
+    getMarkdownStandard(): string;
+    registerMarkdownRenderer(engine: MarkdownRendererEngine): void;
+    setMarkdownRenderer(id: string): void;
     closeAll(): void;
   }
 }
