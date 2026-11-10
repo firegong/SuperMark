@@ -1,4 +1,4 @@
-import { createButton, createElement } from './utils';
+import { createButton, createElement, setupModalTitleBar } from './utils';
 
 interface VersionListResult {
   filePath: string | null;
@@ -39,9 +39,8 @@ export function createVersionHistoryModal(onClose: () => void): VersionHistoryCo
 
   const header = createElement('div', 'markedit-chrome-versions-header', dialog);
   const titleRow = createElement('div', 'markedit-chrome-versions-title-row', header);
-  createElement('div', 'markedit-chrome-versions-title', titleRow, 'Version History');
-  const closeButton = createButton('×', close, 'markedit-chrome-button markedit-chrome-icon-button markedit-chrome-close-button');
-  titleRow.appendChild(closeButton);
+  const titleEl = createElement('div', 'markedit-chrome-versions-title', titleRow, 'Version History');
+  setupModalTitleBar(titleRow, titleEl, close, { centeredTitle: true });
 
   const body = createElement('div', 'markedit-chrome-versions-body', dialog);
   const sidebar = createElement('div', 'markedit-chrome-versions-sidebar', body);

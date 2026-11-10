@@ -196,19 +196,121 @@ async function copyToClipboard(text: string, button: HTMLButtonElement, feedback
   setTimeout(() => { button.textContent = original; }, 1200);
 }
 
-function syncScroll(): void {
+function getVisibleEditorLines(scroller: HTMLElement, editor: typeof window.editor): { first: number; last: number } {
+  const totalLines = editor.state.doc.lines;
+
+  if (scroller.scrollTop <= 2) {
+    return { first: 1, last: Math.min(1, totalLines) };
+  }
+
+  const topBlock = editor.lineBlockAtHeight(scroller.scrollTop);
+  const bottomBlock = editor.lineBlockAtHeight(scroller.scrollTop + (scroller.clientHeight || 400));
+
+  const hasRealLayout = !(topBlock.from === 0 && bottomBlock.to === 0);
+  if (hasRealLayout) {
+    return {
+      first: editor.state.doc.lineAt(topBlock.from).number,
+      last: editor.state.doc.lineAt(bottomBlock.to).number,
+    };
+  }
+
+  const topFraction = scroller.scrollTop / Math.max(1, scroller.scrollHeight);
+  const visibleFraction = (scroller.clientHeight || 200) / Math.max(1, scroller.scrollHeight);
+  const first = Math.max(1, Math.floor(topFraction * totalLines) + 1);
+  const last = Math.min(totalLines, Math.max(first, Math.ceil((topFraction + visibleFraction) * totalLines)));
+  return { first, last };
+}
+
+function getEditorViewportOffset(scroller: HTMLElement, editor: typeof window.editor): number {
+  if (scroller.scrollTop <= 2) {
+    return 0;
+  }
+
+  const topBlock = editor.lineBlockAtHeight(scroller.scrollTop);
+  if (topBlock.from === 0 && topBlock.to === 0) {
+    return 0;
+  }
+
+  return Math.max(0, topBlock.top - scroller.scrollTop);
+}
+
+function getRelativeOffset(child: HTMLElement, parent: HTMLElement): number {
+  const childRect = child.getBoundingClientRect();
+  const parentRect = parent.getBoundingClientRect();
+
+  if (childRect.height > 0 && parentRect.height > 0) {
+    return childRect.top - parentRect.top + parent.scrollTop;
+  }
+
+  return child.offsetTop - parent.offsetTop;
+}
+
+function findAnchorElement(firstLine: number, lastLine: number): HTMLElement | null {
+  const body = previewState.body;
+  if (body === null) {
+    return null;
+  }
+
+  const candidates = Array.from(body.querySelectorAll<HTMLElement>('[data-line]'))
+    .map(element => ({ element, line: parseInt(element.dataset.line ?? '-1', 10) }))
+    .filter(({ line }) => line >= firstLine && line <= lastLine)
+    .sort((a, b) => a.line - b.line);
+
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  const heading = candidates.find(({ element }) => (
+    element.matches('h1, h2, h3, h4, h5, h6, .markedit-preview-heading') ||
+    element.querySelector('h1, h2, h3, h4, h5, h6, .markedit-preview-heading') !== null
+  ));
+  if (heading !== undefined) {
+    return heading.element;
+  }
+
+  const listItem = candidates.find(({ element }) => (
+    element.tagName === 'LI' ||
+    element.classList.contains('markedit-preview-task-item') ||
+    element.classList.contains('markedit-preview-list')
+  ));
+  if (listItem !== undefined) {
+    return listItem.element;
+  }
+
+  return candidates[0].element;
+}
+
+export function syncScroll(): void {
   if (!previewState.syncScroll || previewState.mode !== 'split' || previewState.body === null) {
     return;
   }
 
-  const scroller = getEditorView()?.scrollDOM;
-  if (scroller === undefined) {
+  const editor = getEditorView();
+  const scroller = editor?.scrollDOM;
+  if (editor === undefined || scroller === undefined) {
     return;
   }
 
-  const ratio = scroller.scrollTop / (scroller.scrollHeight - scroller.clientHeight || 1);
   const body = previewState.body;
-  body.scrollTop = ratio * (body.scrollHeight - body.clientHeight || 1);
+
+  if (scroller.scrollTop <= 2) {
+    body.scrollTop = 0;
+    return;
+  }
+
+  const { first, last } = getVisibleEditorLines(scroller, editor);
+  const anchor = findAnchorElement(first, last);
+
+  if (anchor === null) {
+    const ratio = scroller.scrollTop / (scroller.scrollHeight - scroller.clientHeight || 1);
+    body.scrollTop = ratio * (body.scrollHeight - body.clientHeight || 1);
+    return;
+  }
+
+  const anchorTop = getRelativeOffset(anchor, body);
+  const editorOffset = getEditorViewportOffset(scroller, editor);
+  const maxOffset = Math.max(0, scroller.clientHeight * 0.35);
+  body.scrollTop = Math.max(0, anchorTop - Math.min(editorOffset, maxOffset));
 }
 
 function createPreviewPane(): HTMLElement {
@@ -253,6 +355,9 @@ function createPreviewPane(): HTMLElement {
   const syncButton = createButton('Sync Scroll', () => {
     previewState.syncScroll = !previewState.syncScroll;
     syncButton.classList.toggle('is-active', previewState.syncScroll);
+    if (previewState.syncScroll) {
+      syncScroll();
+    }
   }, 'markedit-preview-toolbar-button');
   syncButton.classList.add('is-active');
   syncButton.title = 'Sync editor scroll to preview';
@@ -371,7 +476,7 @@ function applyLayout(): void {
   createPreviewPane();
   if (previewState.pane !== null) {
     previewState.pane.style.display = '';
-    previewState.pane.style.width = previewState.mode === 'preview' ? '100%' : '';
+    previewState.pane.style.width = previewState.mode === 'preview' ? '100%' : `${(1 - previewState.splitRatio) * 100}%`;
   }
 
   body.classList.add(previewState.mode === 'split' ? 'markedit-mode-split' : 'markedit-mode-preview');
@@ -496,6 +601,8 @@ function updateModeSwitcher(): void {
   if (pill === null) {
     return;
   }
+
+  pill.style.display = previewState.mode === 'editor' ? '' : 'none';
 
   pill.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach(button => {
     button.classList.toggle('is-active', button.dataset.mode === previewState.mode);

@@ -1,4 +1,4 @@
-import { createButton, createElement } from './utils';
+import { createButton, createElement, setupModalTitleBar } from './utils';
 
 export type ExtensionsManagerTab = 'discover' | 'installed' | 'updates';
 export type ExtensionUpdateBehavior = 'never' | 'quiet' | 'notify' | 'automatic';
@@ -264,8 +264,8 @@ export function createExtensionsModal(
 
   const header = createElement('div', 'markedit-chrome-extensions-header', dialog);
   const titleRow = createElement('div', 'markedit-chrome-extensions-title-row', header);
-  createElement('div', 'markedit-chrome-extensions-title', titleRow, 'Extensions');
-  const headerActions = createElement('div', 'markedit-chrome-extensions-header-actions', titleRow);
+  const titleEl = createElement('div', 'markedit-chrome-extensions-title', titleRow, 'Extensions');
+  const headerActions = createElement('div', 'markedit-chrome-extensions-header-actions');
 
   const refreshButton = createButton('↻', () => { void refreshState(true); }, 'markedit-chrome-button markedit-chrome-icon-button');
   refreshButton.title = 'Refresh';
@@ -285,8 +285,7 @@ export function createExtensionsModal(
   }, 'markedit-chrome-button');
   headerActions.appendChild(openFolderButton);
 
-  const closeButton = createButton('×', close, 'markedit-chrome-button markedit-chrome-icon-button markedit-chrome-close-button');
-  headerActions.appendChild(closeButton);
+  setupModalTitleBar(titleRow, titleEl, close, { rightActions: headerActions, centeredTitle: false });
 
   const tabsRow = createElement('div', 'markedit-chrome-extensions-tabs', header);
   const tabs: Record<ExtensionsManagerTab, { label: string; icon: () => SVGSVGElement; count: () => number }> = {

@@ -2,7 +2,7 @@ import { describe, expect, test, beforeEach, afterEach, jest } from '@jest/globa
 import { EditorView } from '@codemirror/view';
 import type { ExtensionUpdateBehavior, ExtensionsManagerState } from '../src/chrome/extensionsModal';
 import type { UserSettings } from '../src/chrome/settingsModal';
-import { getMarkdownPreviewMode, setMarkdownPreviewMode } from '../src/chrome/markdownPreview';
+import { getMarkdownPreviewMode, setMarkdownPreviewMode, syncScroll } from '../src/chrome/markdownPreview';
 import { createLivePreviewExtension } from '../src/chrome/liveEditorPreview';
 import {
   renderMarkdownToHtml,
@@ -1087,19 +1087,21 @@ describe('Floating Mode Switcher', () => {
     expect(buttons?.[0].classList.contains('is-active')).toBe(true);
   });
 
-  test('mode switcher pill highlights active mode in split and preview', async () => {
+  test('mode switcher pill is hidden in split and preview modes', async () => {
     setMarkdownPreviewMode('split');
     await tick();
 
-    let active = document.querySelector('#markedit-mode-switcher .is-active');
-    expect(active?.textContent).toBe('Split');
+    const pillSplit = document.getElementById('markedit-mode-switcher') as HTMLElement | null;
+    expect(pillSplit).not.toBeNull();
+    expect(window.getComputedStyle(pillSplit as HTMLElement).display).toBe('none');
     expect(getMarkdownPreviewMode()).toBe('split');
 
     setMarkdownPreviewMode('preview');
     await tick();
 
-    active = document.querySelector('#markedit-mode-switcher .is-active');
-    expect(active?.textContent).toBe('Preview');
+    const pillPreview = document.getElementById('markedit-mode-switcher') as HTMLElement | null;
+    expect(pillPreview).not.toBeNull();
+    expect(window.getComputedStyle(pillPreview as HTMLElement).display).toBe('none');
     expect(getMarkdownPreviewMode()).toBe('preview');
   });
 
@@ -1110,6 +1112,161 @@ describe('Floating Mode Switcher', () => {
 
     expect(getMarkdownPreviewMode()).toBe('preview');
     expect(document.querySelector('#markedit-mode-switcher .is-active')?.textContent).toBe('Preview');
+  });
+});
+
+describe('Split View Sync Scroll', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '';
+    editor.setUp('# Heading\n\n- item 1\n- item 2\n\nMore text.');
+
+    window.webModules = {
+      core: { restoreFocus: jest.fn(), getEditorText: jest.fn(() => window.editor.state.doc.toString()) },
+    } as unknown as typeof window.webModules;
+
+    initChromeUI();
+    setMarkdownPreviewMode('split');
+  });
+
+  afterEach(() => {
+    setMarkdownPreviewMode('editor');
+  });
+
+  function setupPreviewBody(): HTMLElement {
+    const body = document.querySelector('.markedit-preview-body') as HTMLElement;
+    body.innerHTML = `
+      <div class="markedit-preview-block" data-line="1"><h1 class="markedit-preview-heading">Heading</h1></div>
+      <div class="markedit-preview-block" data-line="2"><p>Spacer</p></div>
+      <ul class="markedit-preview-list">
+        <li class="markedit-preview-block" data-line="4">item 1</li>
+        <li class="markedit-preview-block" data-line="5">item 2</li>
+      </ul>
+      <div class="markedit-preview-block" data-line="7"><p>More text.</p></div>
+    `;
+
+    const heading = body.querySelector('[data-line="1"]') as HTMLElement;
+    const listItem = body.querySelector('[data-line="4"]') as HTMLElement;
+
+    Object.defineProperty(heading, 'offsetTop', { value: 50, configurable: true });
+    Object.defineProperty(listItem, 'offsetTop', { value: 200, configurable: true });
+    Object.defineProperty(body, 'offsetTop', { value: 0, configurable: true });
+
+    return body;
+  }
+
+  function setEditorScroll(scrollTop: number, scrollHeight: number, clientHeight: number): void {
+    const scroller = window.editor.scrollDOM;
+    Object.defineProperty(scroller, 'scrollTop', { value: scrollTop, configurable: true });
+    Object.defineProperty(scroller, 'scrollHeight', { value: scrollHeight, configurable: true });
+    Object.defineProperty(scroller, 'clientHeight', { value: clientHeight, configurable: true });
+  }
+
+  test('aligns preview to the topmost visible heading when a heading is in viewport', () => {
+    const body = setupPreviewBody();
+    // Make lines 1-2 visible so the heading (line 1) is in range
+    setEditorScroll(5, 100, 30);
+
+    syncScroll();
+
+    expect(body.scrollTop).toBe(50);
+  });
+
+  test('aligns preview to the topmost visible list item when no heading is in viewport', () => {
+    const body = setupPreviewBody();
+    // Make lines 4-5 visible so list items are in range but the heading (line 1) is not
+    setEditorScroll(40, 100, 30);
+
+    syncScroll();
+
+    expect(body.scrollTop).toBe(200);
+  });
+});
+
+describe('Settings Modal Window Controls', () => {
+  const tick = () => new Promise(resolve => { setTimeout(resolve, 0); });
+
+  const minimalSettings: UserSettings = {
+    theme: 'github-light',
+    fontFamily: 'ui-monospace',
+    fontSize: 16,
+    showLineNumbers: true,
+    showActiveLineIndicator: true,
+    invisiblesBehavior: 'selection',
+    typewriterMode: false,
+    focusMode: false,
+    lineWrapping: true,
+    lineHeight: 1.5,
+    tabKeyBehavior: 2,
+    indentUnit: '    ',
+    suggestWhileTyping: true,
+    autoCharacterPairs: true,
+    smartQuotesEnabled: true,
+    insertFinalNewline: true,
+    trimTrailingWhitespace: false,
+    appearance: 'system',
+    newFilenameExtension: 'md',
+    defaultTextEncoding: 'UTF-8',
+    defaultLineBreak: '\n',
+    reduceTransparency: false,
+  };
+
+  beforeEach(() => {
+    document.body.innerHTML = '';
+    editor.setUp('# Hello\n\nWorld.');
+
+    window.__TAURI_INTERNALS__ = {
+      invoke: jest.fn(async () => minimalSettings),
+    } as unknown as typeof window.__TAURI_INTERNALS__;
+
+    window.webModules = {
+      core: { restoreFocus: jest.fn() },
+    } as unknown as typeof window.webModules;
+
+    initChromeUI();
+  });
+
+  afterEach(() => {
+    delete document.documentElement.dataset.windowControls;
+  });
+
+  test('macOS traffic lights render on the left and close the modal', async () => {
+    document.documentElement.dataset.windowControls = 'macos';
+
+    (window.chromeUI as ChromeUI).openSettings('editor');
+    await tick();
+
+    const controls = document.querySelector('.markedit-window-controls.is-macos');
+    expect(controls).not.toBeNull();
+
+    const closeButton = controls?.querySelector('.markedit-traffic-light.is-close.markedit-chrome-close-button');
+    expect(closeButton).not.toBeNull();
+    expect(controls?.firstChild === closeButton).toBe(true);
+
+    (closeButton as HTMLButtonElement).click();
+    await tick();
+
+    expect(document.querySelector('.markedit-chrome-settings-backdrop')).toBeNull();
+  });
+
+  test('Windows caption close button renders on the right and closes the modal', async () => {
+    document.documentElement.dataset.windowControls = 'windows';
+
+    (window.chromeUI as ChromeUI).openSettings('editor');
+    await tick();
+
+    const controls = document.querySelector('.markedit-window-controls.is-windows');
+    expect(controls).not.toBeNull();
+
+    const closeButton = controls?.querySelector('.markedit-win-caption-close.markedit-chrome-close-button');
+    expect(closeButton).not.toBeNull();
+
+    const titleRow = document.querySelector('.markedit-chrome-settings-title-row');
+    expect(titleRow?.lastChild === controls).toBe(true);
+
+    (closeButton as HTMLButtonElement).click();
+    await tick();
+
+    expect(document.querySelector('.markedit-chrome-settings-backdrop')).toBeNull();
   });
 });
 

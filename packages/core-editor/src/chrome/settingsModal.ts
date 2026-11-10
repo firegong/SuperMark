@@ -1,4 +1,4 @@
-import { createButton, createElement } from './utils';
+import { createButton, createElement, setupModalTitleBar } from './utils';
 import { InvisiblesBehavior } from '../config';
 import { TabKeyBehavior } from '../modules/indentation';
 
@@ -277,9 +277,8 @@ export function createSettingsModal(
 
   const header = createElement('div', 'markedit-chrome-settings-header', dialog);
   const titleRow = createElement('div', 'markedit-chrome-settings-title-row', header);
-  createElement('div', 'markedit-chrome-settings-title', titleRow, 'Settings');
-  const closeButton = createButton('×', close, 'markedit-chrome-button markedit-chrome-icon-button markedit-chrome-close-button');
-  titleRow.appendChild(closeButton);
+  const titleEl = createElement('div', 'markedit-chrome-settings-title', titleRow, 'Settings');
+  setupModalTitleBar(titleRow, titleEl, close, { centeredTitle: true });
 
   const tabsRow = createElement('div', 'markedit-chrome-settings-tabs', header);
   const tabs: Record<SettingsTab, string> = {

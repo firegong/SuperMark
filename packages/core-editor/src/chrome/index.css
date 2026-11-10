@@ -203,6 +203,152 @@
   padding: 4px 8px;
 }
 
+/* Platform window controls */
+
+.markedit-window-controls {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.markedit-window-controls.is-macos {
+  gap: 8px;
+  width: 52px;
+}
+
+.markedit-traffic-light {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.markedit-traffic-light.is-close {
+  background: #ff5f57;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  color: #4d0000;
+  cursor: pointer;
+  appearance: none;
+  padding: 0;
+}
+
+.markedit-traffic-light.is-close svg {
+  display: none;
+  width: 8px;
+  height: 8px;
+}
+
+.markedit-window-controls.is-macos:hover .markedit-traffic-light.is-close svg {
+  display: block;
+}
+
+.markedit-traffic-light.is-minimize {
+  background: #febc2e;
+  opacity: 0.7;
+}
+
+.markedit-traffic-light.is-zoom {
+  background: #28c840;
+  opacity: 0.7;
+}
+
+.markedit-win-caption-close {
+  appearance: none;
+  width: 40px;
+  height: 30px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--chrome-text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.markedit-win-caption-close:hover {
+  background: #c42b1c;
+  color: #ffffff;
+}
+
+.markedit-win-caption-close:active {
+  background: #b32719;
+}
+
+.markedit-win-caption-close svg {
+  width: 10px;
+  height: 10px;
+}
+
+.markedit-window-controls-spacer {
+  width: 52px;
+  flex-shrink: 0;
+}
+
+.markedit-chrome-settings-title-row.is-macos,
+.markedit-chrome-versions-title-row.is-macos,
+.markedit-chrome-extensions-title-row.is-macos {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.markedit-chrome-settings-title-row.is-macos .markedit-window-controls,
+.markedit-chrome-versions-title-row.is-macos .markedit-window-controls {
+  flex: 0 0 auto;
+}
+
+.markedit-chrome-settings-title-row.is-macos .markedit-chrome-settings-title,
+.markedit-chrome-versions-title-row.is-macos .markedit-chrome-versions-title {
+  flex: 1 1 auto;
+  text-align: center;
+}
+
+.markedit-chrome-settings-title-row.is-windows,
+.markedit-chrome-versions-title-row.is-windows {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.markedit-chrome-settings-title-row.is-windows .markedit-chrome-settings-title,
+.markedit-chrome-versions-title-row.is-windows .markedit-chrome-versions-title {
+  text-align: left;
+}
+
+.markedit-chrome-extensions-title-row.is-macos .markedit-chrome-extensions-title {
+  flex: 1 1 auto;
+  text-align: left;
+}
+
+.markedit-chrome-extensions-title-row.is-macos .markedit-chrome-extensions-header-actions {
+  flex: 0 0 auto;
+}
+
+.markedit-chrome-extensions-title-row.is-windows {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.markedit-chrome-extensions-title-row.is-windows .markedit-chrome-extensions-title {
+  text-align: left;
+}
+
+.markedit-chrome-extensions-title-row.is-windows .markedit-chrome-extensions-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 /* TOC list */
 
 .markedit-chrome-filter {
@@ -1357,6 +1503,9 @@ body.markedit-mode-preview #editor {
   background: var(--chrome-bg);
   backdrop-filter: blur(12px) saturate(140%);
   -webkit-backdrop-filter: blur(12px) saturate(140%);
+  flex-wrap: wrap;
+  min-height: 40px;
+  box-sizing: border-box;
 }
 
 .markedit-preview-toolbar-left,
@@ -1364,6 +1513,17 @@ body.markedit-mode-preview #editor {
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
+}
+
+.markedit-preview-toolbar-right {
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+body.markedit-mode-split #markedit-mode-switcher,
+body.markedit-mode-preview #markedit-mode-switcher {
+  display: none !important;
 }
 
 .markedit-preview-mode-group {
