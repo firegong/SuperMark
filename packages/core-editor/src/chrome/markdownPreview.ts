@@ -345,11 +345,122 @@ const ECHO_MS = 300;
 const PREVIEW_DRIVE_MS = 1000;
 
 function now(): number {
-  return typeof performance !== 'undefined' ? performance.now() : Date.now();
+  return Date.now();
 }
 
 function isScrollSyncActive(): boolean {
-  return previewState.syncScroll && previewState.mode === 'split' && previewState.body !== null;
+  return previewState.syncScroll && previewState.mode === 'split' && previewState.body !== null && !isSyncPaused();
+}
+
+// ---------------------------------------------------------------------------------------------
+// Sync pauses while the user edits or has a selection (in either pane), so the panes do not
+// jump under the cursor or a drag selection. It resumes once there has been no edit and no
+// selection for SYNC_RESUME_MS, and then re-aligns the panes.
+// ---------------------------------------------------------------------------------------------
+
+const SYNC_RESUME_MS = 1000;
+/** While a selection exists, how often to check whether it was cleared. */
+const SELECTION_POLL_MS = 250;
+
+const syncPause: {
+  until: number;
+  selection: boolean;
+  doc: unknown;
+  timer: ReturnType<typeof setTimeout> | null;
+} = {
+  until: 0,
+  selection: false,
+  doc: null,
+  timer: null,
+};
+
+/** Starts tracking edits from the current document without pausing (new document, mode change). */
+function resetSyncPause(): void {
+  syncPause.until = 0;
+  syncPause.selection = false;
+  syncPause.doc = getEditorView()?.state.doc ?? null;
+  if (syncPause.timer !== null) {
+    clearTimeout(syncPause.timer);
+    syncPause.timer = null;
+  }
+}
+
+function hasActiveSelection(): boolean {
+  if (getEditorView()?.state.selection.ranges.some(range => !range.empty) === true) {
+    return true;
+  }
+
+  const pane = previewState.pane;
+  const selection = document.getSelection();
+  if (pane !== null && selection !== null && !selection.isCollapsed && selection.anchorNode !== null && pane.contains(selection.anchorNode)) {
+    return true;
+  }
+
+  const body = previewState.body;
+  const frameSelection = body === null ? null : previewFrame(body)?.contentWindow?.getSelection() ?? null;
+  return frameSelection !== null && !frameSelection.isCollapsed;
+}
+
+/** Notices edits: every change to the editor gives it a new document. */
+function noteEditorEdits(): void {
+  const doc = getEditorView()?.state.doc;
+  if (doc === undefined || doc === syncPause.doc) {
+    return;
+  }
+  const edited = syncPause.doc !== null;
+  syncPause.doc = doc;
+  if (edited) {
+    pauseSync();
+  }
+}
+
+function pauseSync(): void {
+  syncPause.until = now() + SYNC_RESUME_MS;
+  scheduleSyncResume();
+}
+
+function isSyncPaused(): boolean {
+  noteEditorEdits();
+  if (hasActiveSelection()) {
+    if (!syncPause.selection) {
+      syncPause.selection = true;
+      scheduleSyncResume();
+    }
+    return true;
+  }
+  if (syncPause.selection) {
+    // The selection was just cleared: wait the full quiet period from now.
+    syncPause.selection = false;
+    pauseSync();
+    return true;
+  }
+  return now() < syncPause.until;
+}
+
+function scheduleSyncResume(): void {
+  if (syncPause.timer !== null) {
+    clearTimeout(syncPause.timer);
+  }
+  const delay = syncPause.selection ? SELECTION_POLL_MS : Math.max(0, syncPause.until - now()) + 20;
+  syncPause.timer = setTimeout(() => {
+    syncPause.timer = null;
+    if (previewState.mode !== 'split') {
+      return;
+    }
+    if (isSyncPaused()) {
+      // Still selecting, or edited again: keep checking (replaces any check scheduled meanwhile).
+      scheduleSyncResume();
+      return;
+    }
+    realignAfterRender();
+  }, delay);
+}
+
+/** Selection changes in the page or the preview frame update the pause right away. */
+function handleSelectionChange(): void {
+  if (previewState.mode === 'split') {
+    isSyncPaused();
+  }
 }
 
 function previewSurface(): PreviewSurface | null {
@@ -597,6 +708,7 @@ const inputEvents = ['wheel', 'mousedown', 'touchstart', 'keydown'] as const;
 /** Tracks input in the frame of a self-styled document (its events do not reach the page). */
 function attachFrameScrollSync(frameDocument: Document): void {
   frameDocument.addEventListener('scroll', handlePreviewScroll, { passive: true });
+  frameDocument.addEventListener('selectionchange', handleSelectionChange);
   for (const name of inputEvents) {
     frameDocument.addEventListener(name, notePreviewInput, { capture: true, passive: true });
   }
@@ -728,11 +840,13 @@ function startLiveSync(): void {
   }
 
   editor.scrollDOM.addEventListener('scroll', handleEditorScroll, { passive: true });
+  resetSyncPause();
 
   const target = editor.dom;
   if (mutationObserver === null) {
     mutationObserver = new MutationObserver(() => {
       if (previewState.mode !== 'editor') {
+        noteEditorEdits();
         updateContent();
       }
     });
@@ -781,7 +895,10 @@ function setupGlobalListeners(): void {
     publishViewState();
   });
 
+  document.addEventListener('selectionchange', handleSelectionChange);
+
   window.addEventListener('markedit-editor-reset', () => {
+    resetSyncPause();
     clearIncludeCache(true);
     previewState.lastContent = '';
     updateContent(true);

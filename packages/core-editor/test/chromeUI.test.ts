@@ -1276,14 +1276,14 @@ describe('Split View Sync Scroll', () => {
     const view = window.editor;
     const scroller = view.scrollDOM;
     mockScroller(scroller, 600, 100);
-    const doc = view.state.doc;
     const blockOf = (index: number) => {
+      const doc = view.state.doc;
       const line = doc.line(Math.max(0, Math.min(index, doc.lines - 1)) + 1);
       return { from: line.from, to: line.to, top: (line.number - 1) * 100, height: 100 };
     };
     Object.defineProperty(view, 'documentTop', { configurable: true, get: () => -scroller.scrollTop });
     view.lineBlockAtHeight = ((height: number) => blockOf(Math.floor(height / 100))) as unknown as typeof view.lineBlockAtHeight;
-    view.lineBlockAt = ((pos: number) => blockOf(doc.lineAt(pos).number - 1)) as unknown as typeof view.lineBlockAt;
+    view.lineBlockAt = ((pos: number) => blockOf(view.state.doc.lineAt(pos).number - 1)) as unknown as typeof view.lineBlockAt;
     return scroller;
   }
 
@@ -1322,6 +1322,63 @@ describe('Split View Sync Scroll', () => {
     // The editor's own scroll event (caused by the sync) does not move the preview back.
     scroller.dispatchEvent(new Event('scroll'));
     expect(body.scrollTop).toBe(240);
+  });
+
+  // CodeMirror measures in animation frames and would reset the mocked editor scroll position.
+  const useFakeTimers = () => jest.useFakeTimers({ doNotFake: ['requestAnimationFrame', 'cancelAnimationFrame'] });
+
+  test('editing pauses sync until there has been no edit for a second', () => {
+    useFakeTimers();
+    try {
+      const body = setupPreviewBody();
+      const scroller = setupEditorScroller();
+      // The user works in the editor, so the editor leads when sync resumes.
+      window.editor.contentDOM.dispatchEvent(new Event('keydown', { bubbles: true }));
+
+      window.editor.dispatch({ changes: { from: 0, insert: 'x' } });
+      scroller.scrollTop = 250;
+      scroller.dispatchEvent(new Event('scroll'));
+      expect(body.scrollTop).toBe(0);
+
+      // Another edit 600 ms later restarts the quiet period.
+      jest.advanceTimersByTime(600);
+      window.editor.dispatch({ changes: { from: 0, insert: 'y' } });
+      scroller.dispatchEvent(new Event('scroll'));
+      jest.advanceTimersByTime(600);
+      expect(body.scrollTop).toBe(0);
+
+      // A second without edits: sync resumes and re-aligns the preview.
+      jest.advanceTimersByTime(500);
+      expect(body.scrollTop).toBeCloseTo(240);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test('a selection pauses sync until it has been cleared for a second', () => {
+    useFakeTimers();
+    try {
+      const body = setupPreviewBody();
+      const scroller = setupEditorScroller();
+      // The user works in the editor, so the editor leads when sync resumes.
+      window.editor.contentDOM.dispatchEvent(new Event('keydown', { bubbles: true }));
+
+      window.editor.dispatch({ selection: { anchor: 0, head: 5 } });
+      scroller.scrollTop = 250;
+      scroller.dispatchEvent(new Event('scroll'));
+      jest.advanceTimersByTime(3000);
+      expect(body.scrollTop).toBe(0);
+
+      window.editor.dispatch({ selection: { anchor: 0 } });
+      document.dispatchEvent(new Event('selectionchange'));
+      jest.advanceTimersByTime(800);
+      expect(body.scrollTop).toBe(0);
+
+      jest.advanceTimersByTime(400);
+      expect(body.scrollTop).toBeCloseTo(240);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   test('preview scroll caused by the sync or by re-rendering does not move the editor', () => {
