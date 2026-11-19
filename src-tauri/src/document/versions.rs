@@ -73,14 +73,6 @@ impl VersionManager {
         fs::read_to_string(snap_path).ok()
     }
 
-    pub fn restore_version(&self, file_path: &Path, version_id: &str) -> Result<String, String> {
-        let content = self
-            .get_version_content(file_path, version_id)
-            .ok_or_else(|| format!("Version '{version_id}' not found"))?;
-        fs::write(file_path, content.as_bytes()).map_err(|e| e.to_string())?;
-        Ok(content)
-    }
-
     pub fn delete_local_versions(&self, file_path: &Path) -> Result<bool, String> {
         let dir = self.bucket_dir_for(file_path);
         if dir.exists() {
@@ -113,10 +105,6 @@ mod tests {
             mgr.get_version_content(&doc_path, &v1).as_deref(),
             Some("# v1")
         );
-
-        let restored = mgr.restore_version(&doc_path, &v1).expect("restore v1");
-        assert_eq!(restored, "# v1");
-        assert_eq!(fs::read_to_string(&doc_path).expect("read doc"), "# v1");
 
         assert!(mgr.delete_local_versions(&doc_path).expect("delete versions"));
         assert!(mgr.list_versions(&doc_path).is_empty());

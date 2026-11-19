@@ -1,4 +1,5 @@
 pub mod bridge;
+pub mod diagrams;
 pub mod document;
 pub mod extensions;
 pub mod menu;
@@ -39,6 +40,13 @@ async fn handle_bridge_message(
         let _ = window.eval(&script);
     }
 
+    // `window.close()` in the editor is bridged to `core.notifyWindowClose` (index.ts). Close
+    // the window for real; CloseRequested still prompts if the document has unsaved changes.
+    // This is also what closes the window after "Yes" (save) in the close prompt.
+    if message.module_name == "core" && message.method_name == "notifyWindowClose" {
+        let _ = window.close();
+    }
+
     Ok(response)
 }
 
@@ -59,7 +67,9 @@ async fn save_document_content(
             .trim()
             .trim_start_matches('.');
         let ext = if ext.is_empty() { "md" } else { ext };
+        // Parent the dialog to the window so it is modal and the editor cannot change underneath it.
         rfd::FileDialog::new()
+            .set_parent(&window)
             .add_filter(
                 "Markdown & TextPack",
                 &["md", "markdown", "mdown", "mkd", "txt", "textpack"],
@@ -74,6 +84,7 @@ async fn save_document_content(
         return Ok(false);
     };
 
+    let saved_editor_text = text.clone();
     let mut formatted_text = text;
     if user_settings.trim_trailing_whitespace {
         formatted_text = formatted_text
@@ -96,8 +107,46 @@ async fn save_document_content(
     doc_mgr.clear_backup_snapshot(&label);
     menu::refresh_app_menu(window.app_handle());
     let _ = window.set_title(&new_title);
-    let _ = window.eval(&WebBridge::mark_content_clean());
+    persist_last_session(window.app_handle(), None);
+    // Only mark the buffer clean if it still holds exactly what was saved; edits made while the
+    // save was in progress must keep the document dirty so closing still prompts.
+    let saved_json = serde_json::to_string(&saved_editor_text).unwrap_or_else(|_| "null".to_string());
+    let _ = window.eval(&format!(
+        "(function() {{ const saved = {saved_json}; const current = window.webModules?.core?.getEditorText?.(); if (current === undefined || current === saved) {{ {} }} }})();",
+        WebBridge::mark_content_clean()
+    ));
     Ok(true)
+}
+
+/// Renders a PlantUML / D2 diagram with the locally installed tool (see `diagrams`).
+/// Errors start with `not-installed:` (try another renderer) or `failed:` (diagram error).
+#[tauri::command]
+async fn diagram_render_local(lang: String, source: String) -> Result<String, String> {
+    let settings = SettingsManager::new().load_user_settings();
+    tauri::async_runtime::spawn_blocking(move || {
+        diagrams::render_local(&lang, &source, |tool| match tool {
+            "plantuml" => settings.plantuml_command.clone(),
+            "d2" => settings.d2_command.clone(),
+            other => other.to_string(),
+        })
+        .map_err(|err| err.to_bridge_string())
+    })
+    .await
+    .map_err(|err| format!("failed: {err}"))?
+}
+
+/// Reports which local diagram tools are installed (Settings → Check Local Tools).
+#[tauri::command]
+async fn diagram_tools_status() -> Result<Vec<diagrams::ToolStatus>, String> {
+    let settings = SettingsManager::new().load_user_settings();
+    tauri::async_runtime::spawn_blocking(move || {
+        vec![
+            diagrams::tool_status("plantuml", &settings.plantuml_command),
+            diagrams::tool_status("d2", &settings.d2_command),
+        ]
+    })
+    .await
+    .map_err(|err| err.to_string())
 }
 
 #[tauri::command]
@@ -113,6 +162,7 @@ async fn save_idle_backup(
     });
     if is_dirty {
         doc_mgr.save_backup_snapshot(&label, &text)?;
+        persist_last_session(window.app_handle(), None);
     }
     Ok(())
 }
@@ -348,12 +398,8 @@ async fn versions_restore(
     let Some(path) = doc_mgr.with_session(&label, |s| s.file_path.clone()) else {
         return Ok(false);
     };
-    let restored = doc_mgr.versions().restore_version(&path, &version)?;
-    let new_title = doc_mgr.with_session(&label, |s| {
-        s.content_cache = restored.clone();
-        s.is_dirty = false;
-        s.display_title()
-    });
+    let restored = doc_mgr.restore_version(&label, &path, &version)?;
+    let new_title = doc_mgr.with_session(&label, |s| s.display_title());
     let _ = window.set_title(&new_title);
     let _ = window.eval(&WebBridge::reset_editor(&restored));
     Ok(true)
@@ -418,6 +464,55 @@ pub fn build_bootstrap_script() -> String {
     )
 }
 
+/// Saves which documents are open (`last-session.json`) for the `lastSession` startup behavior.
+///
+/// `closing` is a window that is going away. When it is the last window the snapshot is kept
+/// as it was, so quitting the app by closing its final window still reopens that window.
+pub fn persist_last_session<R: Runtime>(app: &AppHandle<R>, closing: Option<&str>) {
+    let mut labels: Vec<String> = app
+        .webview_windows()
+        .keys()
+        .filter(|label| Some(label.as_str()) != closing)
+        .cloned()
+        .collect();
+    if labels.is_empty() {
+        return;
+    }
+
+    labels.sort_by_key(|label| {
+        if label == "main" {
+            (0, 0)
+        } else {
+            (1, label.trim_start_matches("doc-").parse::<u32>().unwrap_or(u32::MAX))
+        }
+    });
+    let _ = app.state::<DocumentManager>().write_last_session(&labels);
+}
+
+/// Reopens the documents of the previous session. The first one goes into the main window.
+fn restore_last_session<R: Runtime>(app: &AppHandle<R>) {
+    let doc_mgr = app.state::<DocumentManager>();
+    let plan = doc_mgr.plan_session_restore();
+
+    for (index, item) in plan.iter().enumerate() {
+        if index == 0 {
+            let title = doc_mgr.apply_restore_item("main", item);
+            if let Some(main_win) = app.get_webview_window("main") {
+                let _ = main_win.set_title(&title);
+            }
+            continue;
+        }
+
+        match create_editor_window(app, None) {
+            Ok(window) => {
+                let title = doc_mgr.apply_restore_item(window.label(), item);
+                let _ = window.set_title(&title);
+            }
+            Err(err) => eprintln!("[MarkEdit-Rust] Failed to reopen window: {err}"),
+        }
+    }
+}
+
 /// Spawns a new document window with its own `DocumentSession` and bootstrap script.
 pub fn create_editor_window<R: Runtime>(
     app: &AppHandle<R>,
@@ -438,12 +533,14 @@ pub fn create_editor_window<R: Runtime>(
         doc_mgr.push_recent(p);
     }
 
-    WebviewWindowBuilder::new(app, &label, WebviewUrl::App("index.html".into()))
+    let window = WebviewWindowBuilder::new(app, &label, WebviewUrl::App("index.html".into()))
         .title(&title)
         .inner_size(960.0, 680.0)
         .min_inner_size(420.0, 300.0)
         .initialization_script(&init_script)
-        .build()
+        .build()?;
+    persist_last_session(app, None);
+    Ok(window)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -480,18 +577,12 @@ pub fn run() {
                 for extra_path in cli_paths.iter().skip(1) {
                     let _ = create_editor_window(app_handle, Some(extra_path.clone()));
                 }
-            } else if let Some((meta, text)) = doc_mgr.load_backup_snapshot("main") {
-                // Hot-Exit backup restoration when launched without explicit file args
-                let title = doc_mgr.with_session("main", |s| {
-                    s.file_path = meta.original_path;
-                    s.content_cache = text;
-                    s.is_dirty = true;
-                    s.display_title()
-                });
-                if let Some(main_win) = app.get_webview_window("main") {
-                    let _ = main_win.set_title(&title);
-                }
+            } else if SettingsManager::new().load_user_settings().startup_behavior == "lastSession" {
+                // Reopen the previous windows, including unsaved changes kept as backups.
+                restore_last_session(app_handle);
             }
+            // Otherwise (`newDocument`, the default) the main window starts with an empty document.
+            persist_last_session(app_handle, None);
 
             // Background extension update check (upstream ExtensionRegistry semantics).
             // Quiet (default): refresh + cache only. Notify: prompt once/day.
@@ -540,6 +631,11 @@ pub fn run() {
                                 .show();
 
                             if result == MessageDialogResult::Ok {
+                                // Downloads are network calls: run them off the UI thread.
+                                let thread_mgr = thread_mgr.clone();
+                                let thread_config = thread_config.clone();
+                                let thread_handle = thread_handle.clone();
+                                std::thread::spawn(move || {
                                 for (record, entry) in &updates {
                                     if let Err(err) = crate::extensions::downloader::download_update(
                                         &thread_mgr.scripts_dir(),
@@ -558,6 +654,7 @@ pub fn run() {
                                     let _ =
                                         webview.eval(&menu::extensions_reload_script(&thread_mgr));
                                 }
+                                });
                             }
 
                             let update_registry = crate::extensions::ExtensionRegistry::new(
@@ -569,10 +666,11 @@ pub fn run() {
                         });
                     }
                     crate::extensions::UpdateBehavior::Automatic => {
+                        // Already on a background thread: install without blocking the UI.
                         let thread_mgr = mgr.clone();
                         let thread_config = config.clone();
                         let thread_handle = app_handle_ext.clone();
-                        let _ = app_handle_ext.run_on_main_thread(move || {
+                        (move || {
                             for (record, entry) in &updates {
                                 if let Err(err) = crate::extensions::downloader::download_update(
                                     &thread_mgr.scripts_dir(),
@@ -598,7 +696,7 @@ pub fn run() {
                                 env!("CARGO_PKG_VERSION").to_string(),
                             );
                             update_registry.mark_prompted();
-                        });
+                        })();
                     }
                     _ => {}
                 }
@@ -613,6 +711,9 @@ pub fn run() {
             menu::handle_menu_event(app, event.id().as_ref());
         })
         .on_window_event(|window, event| {
+            if let WindowEvent::Destroyed = event {
+                persist_last_session(window.app_handle(), Some(window.label()));
+            }
             if let WindowEvent::CloseRequested { api, .. } = event {
                 let doc_mgr = window.state::<DocumentManager>();
                 let label = window.label().to_string();
@@ -649,6 +750,8 @@ pub fn run() {
             handle_bridge_message,
             save_document_content,
             save_idle_backup,
+            diagram_render_local,
+            diagram_tools_status,
             install_extension_from_url,
             extensions_get_state,
             extensions_install,

@@ -3,6 +3,7 @@ import { EditorSelection, EditorState, Text } from '@codemirror/state';
 import { syntaxTree } from '@codemirror/language';
 import { TextEditable, TextRange } from 'markedit-api';
 import { redo, undo } from '../@vendor/commands/history';
+import { documentLength, toDocumentLineBreaks } from '../common/utils';
 
 /**
  * TextEditable implementation to provide convenient text editing interfaces.
@@ -24,13 +25,14 @@ export class TextEditor implements TextEditable {
   setText(text: string, range?: TextRange): void {
     const from = range === undefined ? 0 : range.from;
     const to = range === undefined ? this.doc.length : range.to;
+    const insert = toDocumentLineBreaks(this.state, text);
     this.view.dispatch({
-      changes: { from, to, insert: text },
+      changes: { from, to, insert },
     });
 
     if (from === to) {
       this.view.dispatch({
-        selection: EditorSelection.cursor(from + text.length),
+        selection: EditorSelection.cursor(from + documentLength(this.state, insert)),
       });
     }
   }

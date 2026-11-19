@@ -1,6 +1,7 @@
 import { createButton, createElement, setupModalTitleBar } from './utils';
 import { InvisiblesBehavior } from '../config';
 import { TabKeyBehavior } from '../modules/indentation';
+import { listMarkdownRenderers, setDiagramServer, setDiagramRendering, clearDiagramCache } from '../modules/markdown-renderer';
 
 export type SettingsTab = 'editor' | 'assistant' | 'general' | 'window';
 
@@ -26,7 +27,13 @@ export interface UserSettings {
   newFilenameExtension: string;
   defaultTextEncoding: string;
   defaultLineBreak: string;
+  startupBehavior: 'newDocument' | 'lastSession';
   reduceTransparency: boolean;
+  markdownRenderer: string;
+  diagramServer: string;
+  diagramRendering: 'auto' | 'local' | 'server';
+  plantumlCommand: string;
+  d2Command: string;
 }
 
 interface SettingsModalController {
@@ -42,6 +49,10 @@ function pickValue<T>(raw: Record<string, unknown>, keys: string[], fallback: T)
     }
   }
   return fallback;
+}
+
+function normalizeDiagramRendering(value: unknown): UserSettings['diagramRendering'] {
+  return value === 'local' || value === 'server' ? value : 'auto';
 }
 
 export function normalizeUserSettings(
@@ -73,7 +84,13 @@ export function normalizeUserSettings(
     newFilenameExtension: 'md',
     defaultTextEncoding: 'UTF-8',
     defaultLineBreak: '\n',
+    startupBehavior: 'newDocument',
     reduceTransparency: false,
+    markdownRenderer: 'extended',
+    diagramServer: 'https://kroki.io',
+    diagramRendering: 'auto',
+    plantumlCommand: 'plantuml',
+    d2Command: 'd2',
   };
 
   const rawFontFamily = pickValue<string>(
@@ -129,9 +146,21 @@ export function normalizeUserSettings(
     defaultLineBreak: String(
       pickValue(raw, ['defaultLineBreak', 'general.defaultLineBreak'], base.defaultLineBreak),
     ),
+    startupBehavior: pickValue(raw, ['startupBehavior', 'general.startupBehavior'], base.startupBehavior) === 'lastSession'
+      ? 'lastSession'
+      : 'newDocument',
     reduceTransparency: Boolean(
       pickValue(raw, ['reduceTransparency', 'window.reduceTransparency'], base.reduceTransparency),
     ),
+    markdownRenderer: String(
+      pickValue(raw, ['markdownRenderer', 'preview.markdownRenderer'], base.markdownRenderer),
+    ),
+    diagramServer: String(
+      pickValue(raw, ['diagramServer', 'preview.diagramServer'], base.diagramServer),
+    ),
+    diagramRendering: normalizeDiagramRendering(pickValue(raw, ['diagramRendering', 'preview.diagramRendering'], base.diagramRendering)),
+    plantumlCommand: String(pickValue(raw, ['plantumlCommand', 'preview.plantumlCommand'], base.plantumlCommand)),
+    d2Command: String(pickValue(raw, ['d2Command', 'preview.d2Command'], base.d2Command)),
   };
 }
 
@@ -182,6 +211,22 @@ const indentUnitOptions: { value: string; label: string }[] = [
   { value: '    ', label: '4 Spaces' },
   { value: '\t', label: '1 Tab' },
   { value: '\t\t', label: '2 Tabs' },
+];
+
+const diagramRenderingOptions: { value: UserSettings['diagramRendering']; label: string }[] = [
+  { value: 'auto', label: 'Local tools, then server' },
+  { value: 'local', label: 'Local tools only' },
+  { value: 'server', label: 'Diagram server only' },
+];
+
+const diagramServerOptions: { value: string; label: string }[] = [
+  { value: 'https://kroki.io', label: 'kroki.io (online)' },
+  { value: '', label: 'Off (offline diagrams only)' },
+];
+
+const startupOptions: { value: UserSettings['startupBehavior']; label: string }[] = [
+  { value: 'newDocument', label: 'Open a new document' },
+  { value: 'lastSession', label: 'Reopen last session' },
 ];
 
 const appearanceOptions: { value: UserSettings['appearance']; label: string }[] = [
@@ -260,6 +305,25 @@ function createToggle(
   wrapper.appendChild(input);
   createElement('span', 'markedit-settings-toggle-slider', wrapper);
   createElement('span', 'markedit-settings-toggle-label', wrapper, label);
+  return wrapper;
+}
+
+function createTextField(label: string, value: string, placeholder: string, onCommit: (value: string) => void): HTMLElement {
+  const wrapper = createElement('div', 'markedit-settings-field');
+  createElement('label', 'markedit-settings-field-label', wrapper, label);
+  const input = createElement('input', 'markedit-chrome-input markedit-settings-text') as HTMLInputElement;
+  input.type = 'text';
+  input.value = value;
+  input.placeholder = placeholder;
+  input.spellcheck = false;
+  // Commit on blur / Enter rather than on every keystroke.
+  input.addEventListener('change', () => {
+    const next = input.value.trim();
+    if (next !== value) {
+      onCommit(next);
+    }
+  });
+  wrapper.appendChild(input);
   return wrapper;
 }
 
@@ -535,6 +599,30 @@ export function createSettingsModal(
         document.body.classList.toggle('markedit-reduce-transparency', reduced);
         break;
       }
+      case 'markdownRenderer':
+        window.chromeUI?.setMarkdownRenderer(String(value));
+        break;
+      case 'diagramServer':
+        if (window.chromeUI === undefined) {
+          setDiagramServer(String(value));
+        } else {
+          window.chromeUI.setDiagramServer(String(value));
+        }
+        break;
+      case 'diagramRendering':
+        if (window.chromeUI === undefined) {
+          setDiagramRendering(String(value));
+        } else {
+          window.chromeUI.setDiagramRendering(String(value));
+        }
+        break;
+      case 'plantumlCommand':
+      case 'd2Command':
+        // Rendered results are cached by source; re-render with the new tool.
+        clearDiagramCache();
+        window.chromeUI?.setDiagramRendering(settings.diagramRendering);
+        break;
+      case 'startupBehavior':
       case 'defaultTextEncoding':
       case 'insertFinalNewline':
       case 'newFilenameExtension':
@@ -561,6 +649,9 @@ export function createSettingsModal(
     applyLocalChange('smartQuotesEnabled', next.smartQuotesEnabled);
     applyLocalChange('defaultLineBreak', next.defaultLineBreak);
     applyLocalChange('reduceTransparency', next.reduceTransparency);
+    applyLocalChange('markdownRenderer', next.markdownRenderer);
+    applyLocalChange('diagramServer', next.diagramServer);
+    applyLocalChange('diagramRendering', next.diagramRendering);
     document.documentElement.dataset.appearance = next.appearance;
   }
 
@@ -667,6 +758,9 @@ export function createSettingsModal(
 
   function renderGeneralTab(): void {
     const section = createSection('General');
+    section.appendChild(createSelect('On Startup', startupOptions, settings.startupBehavior, value => {
+      void updateSetting('startupBehavior', value);
+    }));
     section.appendChild(createSelect('Appearance', appearanceOptions, settings.appearance, value => {
       void updateSetting('appearance', value);
     }));
@@ -679,10 +773,61 @@ export function createSettingsModal(
     section.appendChild(createSelect('Default Line Endings', lineBreakOptions, settings.defaultLineBreak, value => {
       void updateSetting('defaultLineBreak', value);
     }));
+    const rendererOptions = listMarkdownRenderers().map(engine => ({ value: engine.id, label: engine.name }));
+    section.appendChild(createSelect('Markdown Parser', rendererOptions, settings.markdownRenderer, value => {
+      void updateSetting('markdownRenderer', value);
+    }));
+    // PlantUML, D2 and advanced Mermaid diagrams are rendered by a Kroki server; their source
+    // text is sent there. A self-hosted server can be set in settings.json.
+    renderDiagramSection();
 
     const actions = createElement('div', 'markedit-settings-actions', section);
     actions.appendChild(createButton('Open settings.json', () => { void openSettingsFile(); }, 'markedit-chrome-button'));
     actions.appendChild(createButton('Reset to Defaults', () => { void resetSettings(); }, 'markedit-chrome-button markedit-chrome-action-button'));
+  }
+
+  function renderDiagramSection(): void {
+    // PlantUML, D2 and Mermaid render locally (installed tools, bundled mermaid.js) and/or on a
+    // Kroki server. With the server in use, diagram sources are sent there.
+    const section = createSection('Diagrams');
+    section.appendChild(createSelect('Diagram Rendering', diagramRenderingOptions, settings.diagramRendering, value => {
+      void updateSetting('diagramRendering', value);
+    }));
+    section.appendChild(createSelect('Diagram Server', diagramServerOptions, settings.diagramServer, value => {
+      void updateSetting('diagramServer', value);
+    }));
+    section.appendChild(createTextField('PlantUML Command', settings.plantumlCommand, 'plantuml or C:\\tools\\plantuml.jar', value => {
+      void updateSetting('plantumlCommand', value);
+    }));
+    section.appendChild(createTextField('D2 Command', settings.d2Command, 'd2', value => {
+      void updateSetting('d2Command', value);
+    }));
+
+    const status = createElement('div', 'markedit-settings-tool-status');
+    const actions = createElement('div', 'markedit-settings-actions', section);
+    actions.appendChild(createButton('Check Local Tools', () => { void checkLocalTools(status); }, 'markedit-chrome-button'));
+    section.appendChild(status);
+  }
+
+  async function checkLocalTools(status: HTMLElement): Promise<void> {
+    status.textContent = 'Checking…';
+    try {
+      const result = await invokeTauri<{ tool: string; available: boolean; version?: string | null; error?: string | null }[] | undefined>('diagram_tools_status');
+      status.replaceChildren();
+      for (const tool of result ?? []) {
+        const row = createElement('div', tool.available ? 'is-available' : 'is-missing', status);
+        const name = tool.tool === 'plantuml' ? 'PlantUML' : tool.tool === 'd2' ? 'D2' : tool.tool;
+        row.textContent = tool.available
+          ? `✓ ${name}: ${tool.version ?? 'installed'}`
+          : `✗ ${name}: ${(tool.error ?? 'not found').replace(/^(not-installed|failed):\s*/, '')}`;
+      }
+      createElement('div', 'is-available', status, '✓ Mermaid: bundled mermaid.js');
+      if ((result ?? []).length === 0) {
+        status.textContent = 'Local tools can only be checked in the desktop app.';
+      }
+    } catch (error) {
+      status.textContent = `Could not check local tools: ${String(error)}`;
+    }
   }
 
   function renderWindowTab(): void {

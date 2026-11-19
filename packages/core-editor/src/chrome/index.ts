@@ -20,10 +20,22 @@ import {
   getMarkdownStandard,
   registerMarkdownRenderer,
   setMarkdownRenderer,
+  refreshMarkdownPreview,
   ensureChromeUIModeSwitcher,
   MarkdownPreviewMode,
 } from './markdownPreview';
-import type { MarkdownRendererEngine } from '../modules/markdown-renderer';
+import type { MarkdownRendererEngine, DiagramPlugin, MathPlugin } from '../modules/markdown-renderer';
+import {
+  registerDiagramPlugin,
+  registerMathPlugin,
+  listDiagramPlugins,
+  setDiagramServer,
+  setDiagramRendering,
+  clearDiagramCache,
+  diagramPlaceholder,
+  markDiagramRendered,
+  markDiagramFailed,
+} from '../modules/markdown-renderer';
 
 const rootId = 'markedit-chrome-root';
 
@@ -197,14 +209,54 @@ export function initChromeUI(): void {
     setMarkdownRenderer(id) {
       setMarkdownRenderer(id);
     },
+    setDiagramServer(url) {
+      setDiagramServer(url);
+      refreshMarkdownPreview();
+    },
+    setDiagramRendering(mode) {
+      setDiagramRendering(mode);
+      refreshMarkdownPreview();
+    },
   };
 
   window.chromeUI = chromeUI;
+
+  // Restore the saved parser choice (`preview.markdownRenderer`) injected with the user settings.
+  const savedSettings = (MarkEdit as unknown as { userSettings?: Record<string, unknown> } | undefined)?.userSettings;
+  const savedRenderer = savedSettings?.markdownRenderer ?? savedSettings?.['preview.markdownRenderer'];
+  const savedDiagramServer = savedSettings?.diagramServer ?? savedSettings?.['preview.diagramServer'];
+  if (typeof savedDiagramServer === 'string') {
+    setDiagramServer(savedDiagramServer);
+  }
+  const savedDiagramRendering = savedSettings?.diagramRendering ?? savedSettings?.['preview.diagramRendering'];
+  if (typeof savedDiagramRendering === 'string') {
+    setDiagramRendering(savedDiagramRendering);
+  }
+  if (typeof savedRenderer === 'string' && savedRenderer.length > 0) {
+    setMarkdownRenderer(savedRenderer);
+  }
 
   const markEdit = MarkEdit as unknown as Record<string, unknown>;
   markEdit.setMarkdownStandard = (standard: string) => chromeUI.setMarkdownStandard(standard);
   markEdit.getMarkdownStandard = () => chromeUI.getMarkdownStandard();
   markEdit.registerMarkdownRenderer = (engine: MarkdownRendererEngine) => chromeUI.registerMarkdownRenderer(engine);
+  // Renderer plugins for diagrams (```lang blocks) and LaTeX math, see modules/markdown-renderer/plugins.
+  markEdit.registerDiagramPlugin = (plugin: DiagramPlugin) => {
+    registerDiagramPlugin(plugin);
+    refreshMarkdownPreview();
+  };
+  markEdit.registerMathPlugin = (plugin: MathPlugin, activate = true) => {
+    registerMathPlugin(plugin, activate);
+    refreshMarkdownPreview();
+  };
+  markEdit.listDiagramPlugins = () => listDiagramPlugins().map(plugin => ({ id: plugin.id, name: plugin.name, languages: [...plugin.languages] }));
+  markEdit.diagramPlaceholder = diagramPlaceholder;
+  markEdit.clearDiagramCache = () => {
+    clearDiagramCache();
+    refreshMarkdownPreview();
+  };
+  markEdit.markDiagramRendered = markDiagramRendered;
+  markEdit.markDiagramFailed = markDiagramFailed;
   markEdit.setMarkdownRenderer = (id: string) => chromeUI.setMarkdownRenderer(id);
 
   window.addEventListener('keydown', event => {
@@ -235,13 +287,11 @@ export function initChromeUI(): void {
     } else if (event.shiftKey && !event.altKey && event.key === 'I') {
       chromeUI.toggleStatistics();
       event.preventDefault();
-    } else if (event.shiftKey && !event.altKey && event.key === 'X') {
-      chromeUI.openExtensionsManager('discover');
-      event.preventDefault();
     } else if (event.shiftKey && !event.altKey && (event.key === 'P' || event.key === 'p')) {
       chromeUI.toggleMarkdownPreview('split');
       event.preventDefault();
-    } else if (event.altKey && (event.key === 'p' || event.key === 'P')) {
+    } else if (event.shiftKey && !event.altKey && (event.key === 'V' || event.key === 'v')) {
+      // Ctrl+Shift+V (as in VS Code). Ctrl+Alt+P was avoided: Ctrl+Alt is AltGr on many layouts.
       chromeUI.toggleMarkdownPreview('preview');
       event.preventDefault();
     }

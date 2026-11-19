@@ -82,11 +82,21 @@ window.nativeModules = {
   secretStorage: createNativeModule<NativeModuleSecretStorage>('secretStorage'),
 };
 
+// The native host re-runs the extension bootstrap after installing, removing, or reloading
+// extensions. Both globals are defined once (non-writable, non-configurable) and delegate to the
+// runner of the latest bootstrap; redefining them would throw "Cannot redefine property".
+let currentScriptRunner: ReturnType<typeof createScriptRunner> | undefined;
 Object.defineProperty(window, '__prepareScriptContexts__', {
   value: (scripts: Parameters<typeof createScriptRunner>[0]) => {
-    // Idempotent by design: the native host re-runs the extension bootstrap
-    // after installing, removing, or reloading extensions.
-    Object.defineProperty(window, '__runScriptWithContext__', { value: createScriptRunner(scripts) });
+    currentScriptRunner = createScriptRunner(scripts);
+  },
+});
+Object.defineProperty(window, '__runScriptWithContext__', {
+  value: (...args: Parameters<ReturnType<typeof createScriptRunner>>) => {
+    if (currentScriptRunner === undefined) {
+      throw new Error('Script contexts have not been prepared.');
+    }
+    currentScriptRunner(...args);
   },
 });
 

@@ -1,10 +1,11 @@
-import { commonmarkEngine, gfmEngine, extendedEngine } from './presets';
+import { commonmarkEngine, gfmEngine, extendedEngine, superMarkdownEngine } from './presets';
 import type { MarkdownRendererEngine, MarkdownRenderOptions, MarkdownSyntaxStandard, MarkdownBlockPlugin, MarkdownInlinePlugin } from './types';
 
 const engines = new Map<string, MarkdownRendererEngine>([
   [commonmarkEngine.id, commonmarkEngine],
   [gfmEngine.id, gfmEngine],
   [extendedEngine.id, extendedEngine],
+  [superMarkdownEngine.id, superMarkdownEngine],
 ]);
 
 let activeEngine: MarkdownRendererEngine = extendedEngine;
@@ -37,7 +38,7 @@ export function setMarkdownSyntaxStandard(standard: MarkdownSyntaxStandard): voi
   }
 
   // Fallback: switch the active default engine to the requested standard
-  if (activeEngine.id === commonmarkEngine.id || activeEngine.id === gfmEngine.id || activeEngine.id === extendedEngine.id) {
+  if ([commonmarkEngine.id, gfmEngine.id, extendedEngine.id, superMarkdownEngine.id].includes(activeEngine.id)) {
     activeEngine = engines.get(standard) ?? extendedEngine;
   }
 }
@@ -79,7 +80,28 @@ export function renderMermaid(code: string): string {
   return activeEngine.renderMermaid?.(code) ?? '';
 }
 
-export { commonmarkEngine, gfmEngine, extendedEngine };
+export { commonmarkEngine, gfmEngine, extendedEngine, superMarkdownEngine };
+export { SuperMarkdownEngine } from './super/engine';
+export {
+  registerDiagramPlugin,
+  unregisterDiagramPlugin,
+  listDiagramPlugins,
+  registerMathPlugin,
+  setActiveMathPlugin,
+  listMathPlugins,
+  setDiagramServer,
+  getDiagramServer,
+  setDiagramRendering,
+  getDiagramRendering,
+  hydrateDiagrams,
+  diagramPlaceholder,
+  markDiagramRendered,
+  markDiagramFailed,
+} from './plugins/registry';
+export type { DiagramPlugin, MathPlugin, DiagramRenderContext, DiagramRendering } from './plugins/registry';
+export { clearDiagramCache, renderDiagramSources, RendererUnavailableError } from './plugins/strategy';
+export { registerBuiltinRendererPlugins } from './plugins/builtin';
+export type { SuperMarkdownOptions } from './super/context';
 export type { MarkdownRendererEngine, MarkdownRenderOptions, MarkdownSyntaxStandard };
 
 // Convenience alias for backward compatibility

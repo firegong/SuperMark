@@ -2178,3 +2178,412 @@ li.markedit-preview-task-item > p {
   font-size: 0.85em;
   font-weight: 600;
 }
+
+/* SuperMarkdown renderer */
+
+.markedit-preview-body .msm-error {
+  color: #cf222e;
+  background: rgba(207, 34, 46, 0.08);
+  border-radius: 3px;
+  padding: 0 3px;
+}
+
+.markedit-preview-body .msm-notice {
+  margin: 8px 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--chrome-border);
+  background: var(--chrome-hover);
+  color: var(--chrome-text-secondary);
+  font-size: 13px;
+}
+
+.markedit-preview-body .msm-caption {
+  color: var(--chrome-text-secondary);
+  font-size: 13px;
+  margin: 6px 0;
+}
+
+.markedit-preview-body .msm-caption-label {
+  font-weight: 600;
+}
+
+.markedit-preview-body table caption.msm-caption {
+  caption-side: top;
+  text-align: left;
+}
+
+.markedit-preview-body .msm-figure {
+  margin: 16px 0;
+}
+
+.markedit-preview-body .msm-figure figcaption {
+  text-align: center;
+}
+
+.markedit-preview-body .msm-output {
+  margin: 6px 0 12px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: var(--chrome-hover);
+}
+
+.markedit-preview-body .msm-equation {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.markedit-preview-body .msm-equation > :first-child {
+  flex: 1;
+}
+
+.markedit-preview-body .msm-equation-number {
+  color: var(--chrome-text-secondary);
+}
+
+.markedit-preview-body .msm-kbd,
+.markedit-preview-body kbd {
+  display: inline-block;
+  min-width: 1.4em;
+  padding: 1px 6px;
+  border: 1px solid var(--chrome-border);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--chrome-input-bg);
+  font: 0.85em ui-monospace, Consolas, monospace;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.markedit-preview-body .msm-tag {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: rgba(9, 105, 218, 0.1);
+  color: var(--chrome-accent);
+  font-size: 0.9em;
+}
+
+.markedit-preview-body .msm-wikilink {
+  text-decoration-style: dashed;
+}
+
+.markedit-preview-body .msm-cite {
+  font-style: normal;
+  color: var(--chrome-accent);
+}
+
+.markedit-preview-body .msm-definition-list dt {
+  font-weight: 600;
+  margin-top: 10px;
+}
+
+.markedit-preview-body .msm-definition-list dd {
+  margin: 4px 0 8px 24px;
+}
+
+.markedit-preview-body .msm-div {
+  margin: 12px 0;
+  padding: 10px 14px;
+  border: 1px solid var(--chrome-border);
+  border-radius: 6px;
+}
+
+.markedit-preview-body .msm-div.only-html {
+  border: none;
+  padding: 0;
+}
+
+.markedit-preview-body .msm-div-title {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.markedit-preview-body .msm-div.warning,
+.markedit-preview-body .msm-div.caution {
+  border-color: rgba(157, 106, 0, 0.35);
+  background: rgba(157, 106, 0, 0.06);
+}
+
+.markedit-preview-body .msm-toc-nav ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.markedit-preview-body .msm-toc {
+  margin: 12px 0;
+  padding: 10px 14px;
+  border-radius: 6px;
+  background: var(--chrome-hover);
+}
+
+.markedit-preview-body details.msm-callout > summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.markedit-preview-body details.msm-callout > summary::after {
+  content: "›";
+  margin-left: auto;
+  transition: transform 120ms ease;
+}
+
+.markedit-preview-body details.msm-callout[open] > summary::after {
+  transform: rotate(90deg);
+}
+
+.markedit-preview-body details.msm-callout:not([open]) > summary {
+  margin-bottom: 0;
+}
+
+.markedit-preview-body .msm-tabset {
+  margin: 12px 0;
+  border: 1px solid var(--chrome-border);
+  border-radius: 6px;
+}
+
+.markedit-preview-body .msm-tab-list {
+  display: flex;
+  gap: 2px;
+  padding: 4px 4px 0;
+  border-bottom: 1px solid var(--chrome-border);
+}
+
+.markedit-preview-body .msm-tab-button {
+  appearance: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--chrome-text-secondary);
+  cursor: pointer;
+  font: inherit;
+  padding: 6px 12px;
+}
+
+.markedit-preview-body .msm-tab-button.is-active {
+  border-bottom-color: var(--chrome-accent);
+  color: var(--chrome-text);
+}
+
+.markedit-preview-body .msm-tab-panel {
+  display: none;
+  padding: 10px 14px;
+}
+
+.markedit-preview-body .msm-tab-panel.is-active {
+  display: block;
+}
+
+.markedit-preview-body .msm-tab-print-title {
+  display: none;
+  font-weight: 600;
+}
+
+.markedit-preview-body .msm-pagebreak {
+  display: none;
+}
+
+/* Extended task states: [/] in progress, [-] cancelled (§30) */
+
+.markedit-preview-body .msm-checkbox,
+.markedit-preview-body input.msm-task-checkbox.is-doing,
+.markedit-preview-body input.msm-task-checkbox.is-cancelled {
+  appearance: none;
+  display: inline-block;
+  position: relative;
+  width: 13px;
+  height: 13px;
+  border: 1px solid var(--chrome-text-secondary);
+  border-radius: 3px;
+  vertical-align: middle;
+}
+
+.markedit-preview-body .msm-checkbox.is-done {
+  background: var(--chrome-accent);
+  border-color: var(--chrome-accent);
+}
+
+.markedit-preview-body .msm-checkbox.is-done::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 0;
+  width: 4px;
+  height: 8px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.markedit-preview-body .msm-checkbox.is-doing,
+.markedit-preview-body input.msm-task-checkbox.is-doing {
+  background: linear-gradient(to right, var(--chrome-accent) 50%, transparent 50%);
+  border-color: var(--chrome-accent);
+}
+
+.markedit-preview-body .msm-checkbox.is-cancelled::after,
+.markedit-preview-body input.msm-task-checkbox.is-cancelled::after {
+  content: "";
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  top: 5px;
+  height: 2px;
+  background: var(--chrome-text-secondary);
+}
+
+.markedit-preview-body li.msm-task-cancelled {
+  color: var(--chrome-text-secondary);
+  text-decoration: line-through;
+}
+
+@media print {
+  .markedit-preview-body .msm-pagebreak {
+    display: block;
+    break-after: page;
+  }
+
+  .markedit-preview-body .msm-tab-list {
+    display: none;
+  }
+
+  .markedit-preview-body .msm-tab-panel,
+  .markedit-preview-body .msm-tab-print-title {
+    display: block;
+  }
+}
+
+/* Diagram plugins (mermaid, plantuml, d2, drawio) */
+
+.markedit-preview-body .markedit-diagram {
+  margin: 4px 0;
+  /* The diagram container is a centred flex box; keep placeholders to the block width. */
+  width: 100%;
+  min-width: 0;
+}
+
+.markedit-preview-body .markedit-diagram.is-rendered {
+  width: auto;
+}
+
+.markedit-preview-body .markedit-diagram-status {
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: var(--chrome-hover);
+  color: var(--chrome-text-secondary);
+  font-size: 13px;
+}
+
+.markedit-preview-body .markedit-diagram.is-error .markedit-diagram-status {
+  color: #cf222e;
+  background: rgba(207, 34, 46, 0.08);
+}
+
+.markedit-preview-body .markedit-diagram-source {
+  margin-top: 6px;
+  max-height: 240px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* Once rendered, the source is reached through the block's "Source" toggle. */
+.markedit-preview-body .markedit-diagram.is-rendered > .markedit-diagram-source {
+  display: none;
+}
+
+.markedit-preview-body .markedit-diagram.is-pending > .markedit-diagram-source {
+  opacity: 0.6;
+}
+
+.markedit-preview-body .markedit-diagram-output {
+  overflow-x: auto;
+}
+
+.markedit-preview-body .markedit-diagram-image,
+.markedit-preview-body .markedit-diagram-output > svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+
+/* Kroki SVGs have transparent backgrounds drawn for light themes. */
+.markedit-preview-body .markedit-diagram-image {
+  background: #ffffff;
+  border-radius: 4px;
+}
+
+.markedit-preview-body svg.markedit-drawio {
+  --drawio-label-bg: #ffffff;
+  background: #ffffff;
+  border-radius: 4px;
+}
+
+/* LaTeX math plugin */
+
+/* Stretchy fences, braces and large operators need a font with an OpenType MATH table:
+   Cambria Math ships with Windows, STIX Two Math with macOS. */
+.markedit-preview-body math {
+  font-family: "Cambria Math", "STIX Two Math", "Latin Modern Math", "Noto Sans Math", math;
+}
+
+.markedit-preview-body math[display="block"] {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 4px 0;
+}
+
+.markedit-preview-body mrow.markedit-math-boxed {
+  border: 1px solid currentColor;
+  padding: 0.15em 0.3em;
+}
+
+.markedit-preview-body mrow.markedit-math-cancel {
+  background: linear-gradient(to top right, transparent calc(50% - 0.6px), currentColor calc(50% - 0.6px), currentColor calc(50% + 0.6px), transparent calc(50% + 0.6px));
+}
+
+.markedit-preview-body mrow.markedit-math-bcancel {
+  background: linear-gradient(to bottom right, transparent calc(50% - 0.6px), currentColor calc(50% - 0.6px), currentColor calc(50% + 0.6px), transparent calc(50% + 0.6px));
+}
+
+.markedit-preview-body mrow.markedit-math-cancel.markedit-math-bcancel {
+  background:
+    linear-gradient(to top right, transparent calc(50% - 0.6px), currentColor calc(50% - 0.6px), currentColor calc(50% + 0.6px), transparent calc(50% + 0.6px)),
+    linear-gradient(to bottom right, transparent calc(50% - 0.6px), currentColor calc(50% - 0.6px), currentColor calc(50% + 0.6px), transparent calc(50% + 0.6px));
+}
+
+.markedit-preview-body mtd.markedit-math-align-left {
+  padding-left: 0;
+}
+
+.markedit-preview-body merror {
+  color: #cf222e;
+  background: rgba(207, 34, 46, 0.08);
+}
+
+/* Settings: diagram tools */
+
+.markedit-settings-text {
+  min-width: 220px;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 12px;
+}
+
+.markedit-settings-tool-status {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--chrome-text-secondary);
+}
+
+.markedit-settings-tool-status .is-available {
+  color: #1a7f37;
+}
+
+.markedit-settings-tool-status .is-missing {
+  color: #cf222e;
+}
+
+/* Quick offline drawing shown while the full diagram renders. */
+.markedit-preview-body .markedit-diagram-output.is-preliminary {
+  opacity: 0.85;
+}

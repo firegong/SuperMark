@@ -1,4 +1,5 @@
 import { EditorSelection } from '@codemirror/state';
+import { documentLength } from '../../common/utils';
 
 /**
  * Generally used to insert blocks like fenced code.
@@ -15,8 +16,10 @@ export default function insertBlockWithMarks(marks: string) {
 
     // Replace with the updated content and keep the original selection
     const insert = `${prefix}${marks}${lineBreak}${selected}${lineBreak}${marks}${suffix}`;
-    const anchor = from + prefix.length + marks.length + lineBreak.length;
-    const head = anchor + selected.length;
+    // Measure in document positions: a CRLF line break is one position, not two.
+    const state = editor.state;
+    const anchor = from + documentLength(state, `${prefix}${marks}${lineBreak}`);
+    const head = anchor + documentLength(state, selected);
 
     return {
       range: EditorSelection.range(anchor, head),

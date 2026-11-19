@@ -192,8 +192,8 @@ function buildDecorations(state: EditorState): DecorationSet {
       continue;
     }
 
-    const fenceMatch = /^```|~~~/.exec(line.text);
-    if (fenceMatch !== null) {
+    // Fences start a line (up to 3 spaces of indent); `~~~` elsewhere in prose is not a fence.
+    if (/^ {0,3}(```|~~~)/.test(line.text)) {
       inCodeBlock = !inCodeBlock;
       continue;
     }
@@ -308,7 +308,8 @@ function buildDecorations(state: EditorState): DecorationSet {
       const prefix = calloutMatch[1];
       const badgeStart = prefix.length;
       const from = line.from + badgeStart;
-      const to = from + calloutMatch[2].length + 4; // [!TYPE]
+      // `[!TYPE]` is the type plus 3 characters; clamp so a last line without "\n" stays in range.
+      const to = Math.min(from + calloutMatch[2].length + 3, line.to);
       decorations.push(Decoration.line({ class: `cm-live-callout is-${type}` }).range(line.from, line.from));
       decorations.push(Decoration.replace({ widget: new CalloutBadgeWidget(type) }).range(from, to));
     }

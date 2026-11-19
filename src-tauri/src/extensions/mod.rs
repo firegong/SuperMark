@@ -203,11 +203,14 @@ impl ExtensionManager {
             });
 
             let cap_json = serde_json::to_string(&capability).unwrap_or_else(|_| "\"script.js\"".to_string());
+            // The source is embedded as a JSON string and compiled with `new Function`, so a
+            // syntax error in one extension throws inside this `try` instead of aborting the
+            // whole bootstrap (and with it, loading the document into the editor).
+            let source_json = serde_json::to_string(&format!("{js_source}\n//# sourceURL={capability}"))
+                .unwrap_or_else(|_| "\"\"".to_string());
             runner_calls.push(format!(
                 r#"try {{
-  window.__runScriptWithContext__?.({cap_json}, function(MarkEdit, require) {{
-{js_source}
-  }});
+  window.__runScriptWithContext__?.({cap_json}, new Function('MarkEdit', 'require', {source_json}));
 }} catch (err) {{
   console.error('[MarkEdit-Rust] Failed to execute extension script ' + {cap_json} + ':', err);
 }}"#
@@ -452,6 +455,21 @@ mod tests {
         assert!(bootstrap.contains("__runScriptWithContext__"));
         assert!(bootstrap.contains("hello-plugin.js"));
         assert!(bootstrap.contains("MarkEdit.onAppReady"));
+    }
+
+    #[test]
+    fn broken_extension_source_is_embedded_as_a_string() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let mgr = ExtensionManager::new(tmp.path());
+        mgr.ensure_directories().expect("ensure dirs");
+        // ESM syntax is a parse error inside a function body; it must not break the bootstrap.
+        fs::write(mgr.scripts_dir().join("broken.js"), "import x from 'y';\n}}}")
+            .expect("write js");
+        mgr.config().reconcile_installed(&mgr.scripts_dir()).expect("reconcile");
+
+        let bootstrap = mgr.build_extension_bootstrap_js();
+        assert!(bootstrap.contains("new Function('MarkEdit', 'require', \"import x from 'y';\\n}}}"));
+        assert!(!bootstrap.contains("\nimport x from 'y';"));
     }
 
     #[test]

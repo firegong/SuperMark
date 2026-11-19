@@ -65,6 +65,14 @@ impl WebBridge {
         )
     }
 
+    pub fn reset_editor_then_restore(text: &str, restored: &str) -> String {
+        let restored_json = serde_json::to_string(restored).unwrap_or_else(|_| "\"\"".to_string());
+        format!(
+            "Promise.resolve({reset}).then(() => {{ if (window.webModules?.core?.getEditorText?.() !== {restored_json}) {{ window.webModules?.core?.replaceText?.({{ text: {restored_json}, granularity: 'wholeDocument' }}); }} }});",
+            reset = Self::reset_editor(text).trim_end_matches(';'),
+        )
+    }
+
     pub fn notify_app_ready() -> String {
         Self::format_call("api", "notifyAppReady", None)
     }
@@ -106,22 +114,27 @@ fn handle_core_module(
 ) -> Result<(Value, Option<String>), String> {
     match method {
         "notifyWindowDidLoad" => {
-            let initial_text = doc_mgr.with_session(window_label, |s| s.content_cache.clone());
+            let (initial_text, pending_restore) = doc_mgr.with_session(window_label, |s| {
+                (s.content_cache.clone(), s.pending_restore_text.take())
+            });
             let ext_bootstrap = doc_mgr.extensions().build_extension_bootstrap_js();
-            let script = if ext_bootstrap.is_empty() {
-                format!(
-                    "{}\n{}",
-                    WebBridge::reset_editor(&initial_text),
-                    WebBridge::notify_app_ready()
-                )
-            } else {
-                format!(
-                    "{}\n{}\n{}",
-                    ext_bootstrap,
-                    WebBridge::reset_editor(&initial_text),
-                    WebBridge::notify_app_ready()
-                )
+            // Each part runs in its own try block: a failing extension must never keep the
+            // document text from reaching the editor (a later save would overwrite the file).
+            let guard = |code: String| {
+                format!("try {{\n{code}\n}} catch (err) {{ console.error('[MarkEdit-Rust] bootstrap step failed:', err); }}")
             };
+            let mut parts = Vec::new();
+            if !ext_bootstrap.is_empty() {
+                parts.push(guard(ext_bootstrap));
+            }
+            match pending_restore {
+                // Load the file first, then apply the recovered text as an undoable edit so the
+                // document shows as modified (resetEditor alone would report it clean).
+                Some(text) => parts.push(guard(WebBridge::reset_editor_then_restore(&initial_text, &text))),
+                None => parts.push(guard(WebBridge::reset_editor(&initial_text))),
+            }
+            parts.push(guard(WebBridge::notify_app_ready()));
+            let script = parts.join("\n");
             Ok((Value::Null, Some(script)))
         }
         "notifyViewDidUpdate" => {
@@ -223,14 +236,11 @@ fn handle_api_module(
             let Some(path) = target else {
                 return Ok((json!(false), None));
             };
-            match doc_mgr.versions().restore_version(&path, version) {
-                Ok(restored) => {
-                    doc_mgr.with_session(window_label, |s| {
-                        s.content_cache = restored.clone();
-                        s.is_dirty = false;
-                    });
-                    Ok((json!(true), Some(WebBridge::reset_editor(&restored))))
-                }
+            let is_current = doc_mgr.with_session(window_label, |s| s.file_path.as_deref() == Some(path.as_path()));
+            match doc_mgr.restore_version(window_label, &path, version) {
+                // Only reload the editor when the restored file is the one it shows.
+                Ok(restored) if is_current => Ok((json!(true), Some(WebBridge::reset_editor(&restored)))),
+                Ok(_) => Ok((json!(true), None)),
                 Err(_) => Ok((json!(false), None)),
             }
         }
@@ -435,32 +445,67 @@ fn handle_api_module(
     }
 }
 
+/// Converts a UTF-16 code unit index (what JavaScript strings use) to a UTF-8 byte index.
+fn utf16_to_byte_index(text: &str, utf16_index: usize) -> usize {
+    let mut units = 0usize;
+    for (byte_index, ch) in text.char_indices() {
+        if units >= utf16_index {
+            return byte_index;
+        }
+        units += ch.len_utf16();
+    }
+    text.len()
+}
+
+/// Converts a UTF-8 byte index back to a UTF-16 code unit index.
+fn byte_to_utf16_index(text: &str, byte_index: usize) -> usize {
+    text[..byte_index.min(text.len())].encode_utf16().count()
+}
+
+/// Word tokenizer used for double-click selection and Alt+Arrow / Alt+Backspace.
+///
+/// The web side sends `{ anchor: { text, pos, offset } }` where `text` is the current line,
+/// `pos` the caret's UTF-16 index inside that line and `offset` the line's document position.
+/// `tokenize` returns a line-relative `{ from, to }`; the move methods return an absolute
+/// document position (see `modules/tokenizer/index.ts`).
 fn handle_tokenizer_module(
     method: &str,
     params: &Value,
 ) -> Result<(Value, Option<String>), String> {
-    let line = params
-        .get("line")
+    let anchor = params.get("anchor").unwrap_or(params);
+    let line = anchor
+        .get("text")
+        .or_else(|| anchor.get("line"))
         .and_then(|v| v.as_str())
         .unwrap_or_default();
-    let pos = params
-        .get("pos")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(0) as usize;
+    let pos_utf16 = anchor.get("pos").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+    let offset = anchor.get("offset").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+    let pos = utf16_to_byte_index(line, pos_utf16);
 
     match method {
         "tokenize" => {
-            let mut from = 0usize;
-            let mut to = line.len();
+            let mut from = pos;
+            let mut to = pos;
             for (idx, word) in line.split_word_bound_indices() {
                 let end = idx + word.len();
-                if pos >= idx && pos <= end {
+                if pos >= idx && pos < end {
                     from = idx;
                     to = end;
                     break;
                 }
+                // Caret at the very end of the line selects the last word.
+                if pos == end && end == line.len() {
+                    from = idx;
+                    to = end;
+                }
             }
-            Ok((json!({ "from": from, "to": to }), None))
+            Ok((
+                json!({
+                    "from": byte_to_utf16_index(line, from),
+                    "to": byte_to_utf16_index(line, to),
+                }),
+                None,
+            ))
         }
         "moveWordBackward" => {
             let mut prev = 0usize;
@@ -469,7 +514,7 @@ fn handle_tokenizer_module(
                     prev = idx;
                 }
             }
-            Ok((json!(prev), None))
+            Ok((json!(offset + byte_to_utf16_index(line, prev)), None))
         }
         "moveWordForward" => {
             let mut next = line.len();
@@ -480,7 +525,7 @@ fn handle_tokenizer_module(
                     break;
                 }
             }
-            Ok((json!(next), None))
+            Ok((json!(offset + byte_to_utf16_index(line, next)), None))
         }
         other => Err(format!("Unknown tokenizer method: {other}")),
     }
@@ -552,6 +597,31 @@ fn handle_foundation_models_module(method: &str) -> Result<(Value, Option<String
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn tokenizer_reads_anchor_and_returns_utf16_positions() {
+        let anchor = |text: &str, pos: u64, offset: u64| {
+            json!({ "anchor": { "text": text, "pos": pos, "offset": offset } })
+        };
+
+        // "hello world": caret after "wor" (pos 9) on a line starting at document offset 100.
+        let (back, _) =
+            handle_tokenizer_module("moveWordBackward", &anchor("hello world", 9, 100)).unwrap();
+        assert_eq!(back, json!(106));
+        let (fwd, _) =
+            handle_tokenizer_module("moveWordForward", &anchor("hello world", 2, 100)).unwrap();
+        assert_eq!(fwd, json!(105));
+        let (range, _) =
+            handle_tokenizer_module("tokenize", &anchor("hello world", 7, 100)).unwrap();
+        assert_eq!(range, json!({ "from": 6, "to": 11 }));
+
+        // Multi-byte text: positions stay in UTF-16 units, not bytes.
+        let (range, _) = handle_tokenizer_module("tokenize", &anchor("안녕 세계", 4, 0)).unwrap();
+        assert_eq!(range, json!({ "from": 3, "to": 5 }));
+        let (back, _) =
+            handle_tokenizer_module("moveWordBackward", &anchor("안녕 세계", 5, 10)).unwrap();
+        assert_eq!(back, json!(13));
+    }
+
     use super::*;
 
     #[test]

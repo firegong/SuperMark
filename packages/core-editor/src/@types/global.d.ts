@@ -84,6 +84,8 @@ declare global {
     getMarkdownStandard(): string;
     registerMarkdownRenderer(engine: MarkdownRendererEngine): void;
     setMarkdownRenderer(id: string): void;
+    setDiagramServer(url: string): void;
+    setDiagramRendering(mode: string): void;
     closeAll(): void;
   }
 }

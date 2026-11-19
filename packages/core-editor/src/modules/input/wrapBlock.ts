@@ -1,6 +1,7 @@
 import { EditorSelection } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import hasSelection from '../selection/hasSelection';
+import { documentLength } from '../../common/utils';
 
 /**
  * Wrap selected blocks with a pair of mark.
@@ -19,7 +20,7 @@ export default function wrapBlock(mark: string, editor: EditorView) {
     const replacement = from === to ? mark : `${mark}${selection}${mark}`;
     const newPos = from + mark.length;
     return {
-      range: EditorSelection.range(newPos, newPos + selection.length),
+      range: EditorSelection.range(newPos, newPos + documentLength(state, selection)),
       changes: {
         from, to, insert: replacement,
       },

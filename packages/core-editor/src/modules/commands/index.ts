@@ -99,7 +99,7 @@ export function insertCodeBlock() {
   const selected = state.sliceDoc(main.from, main.to);
 
   // Snippets only handle a single, single-line selection, otherwise keep the plain wrapping behavior.
-  // Note: sliceDoc always uses LF regardless of state.lineBreak, so detect line breaks with '\n'.
+  // Note: sliceDoc joins lines with state.lineBreak; both LF and CRLF contain '\n'.
   if (ranges.length > 1 || selected.includes('\n')) {
     insertBlockWithMarks('```');
     return;

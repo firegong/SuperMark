@@ -38,6 +38,10 @@ pub fn build_pandoc_command(path: &Path, format: &str) -> String {
     let input_path = path.to_string_lossy();
     let out_path = path.with_extension(format);
     let output_str = out_path.to_string_lossy();
+    if format == "pdf" {
+        // Pandoc rejects `-t pdf`; PDF output is selected by the `.pdf` extension of `-o`.
+        return format!("pandoc \"{input_path}\" -o \"{output_str}\"");
+    }
     format!("pandoc \"{input_path}\" -t {format} -o \"{output_str}\"")
 }
 
@@ -116,7 +120,11 @@ pub fn build_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> 
                 .build(app)?,
         )
         .separator()
-        .quit()
+        .item(
+            &MenuItemBuilder::with_id("app.quit", "Quit MarkEdit")
+                .accelerator("CmdOrCtrl+Q")
+                .build(app)?,
+        )
         .build()?;
 
     let mut recent_builder = SubmenuBuilder::new(app, "Open Recent");
@@ -193,7 +201,7 @@ pub fn build_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> 
         )
         .item(
             &MenuItemBuilder::with_id("file.new_from_clipboard", "New File from Clipboard")
-                .accelerator("CmdOrCtrl+Alt+N")
+                .accelerator("CmdOrCtrl+Shift+N")
                 .build(app)?,
         )
         .item(
@@ -221,7 +229,6 @@ pub fn build_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> 
         )
         .item(
             &MenuItemBuilder::with_id("file.save_all", "Save All")
-                .accelerator("CmdOrCtrl+Alt+S")
                 .build(app)?,
         )
         .item(&MenuItemBuilder::with_id("file.revert", "Revert to Saved").build(app)?)
@@ -240,18 +247,16 @@ pub fn build_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> 
                 .build(app)?,
         )
         .separator()
-        .quit()
+        .item(&MenuItemBuilder::with_id("file.exit", "Exit").build(app)?)
         .build()?;
 
     let find_submenu = SubmenuBuilder::new(app, "Find")
         .item(
-            &MenuItemBuilder::with_id("edit.find", "Find...")
-                .accelerator("CmdOrCtrl+F")
+            &MenuItemBuilder::with_id("edit.find", shortcut_hint("Find...", "Ctrl+F"))
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::with_id("edit.replace", "Find and Replace...")
-                .accelerator("CmdOrCtrl+H")
+            &MenuItemBuilder::with_id("edit.replace", shortcut_hint("Find and Replace...", "Ctrl+H"))
                 .build(app)?,
         )
         .item(
@@ -301,45 +306,37 @@ pub fn build_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> 
         .item(&MenuItemBuilder::with_id("edit.select_line", "Select Line").build(app)?)
         .separator()
         .item(
-            &MenuItemBuilder::with_id("edit.move_line_up", "Move Line Up")
-                .accelerator("Alt+Up")
+            &MenuItemBuilder::with_id("edit.move_line_up", shortcut_hint("Move Line Up", "Alt+Up"))
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::with_id("edit.move_line_down", "Move Line Down")
-                .accelerator("Alt+Down")
+            &MenuItemBuilder::with_id("edit.move_line_down", shortcut_hint("Move Line Down", "Alt+Down"))
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::with_id("edit.copy_line_up", "Copy Line Up")
-                .accelerator("Shift+Alt+Up")
+            &MenuItemBuilder::with_id("edit.copy_line_up", shortcut_hint("Copy Line Up", "Shift+Alt+Up"))
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::with_id("edit.copy_line_down", "Copy Line Down")
-                .accelerator("Shift+Alt+Down")
+            &MenuItemBuilder::with_id("edit.copy_line_down", shortcut_hint("Copy Line Down", "Shift+Alt+Down"))
                 .build(app)?,
         )
         .separator()
         .item(
-            &MenuItemBuilder::with_id("edit.indent_more", "Indent More")
-                .accelerator("CmdOrCtrl+]")
+            &MenuItemBuilder::with_id("edit.indent_more", shortcut_hint("Indent More", "Ctrl+]"))
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::with_id("edit.indent_less", "Indent Less")
-                .accelerator("CmdOrCtrl+[")
+            &MenuItemBuilder::with_id("edit.indent_less", shortcut_hint("Indent Less", "Ctrl+["))
                 .build(app)?,
         )
         .separator()
         .item(
-            &MenuItemBuilder::with_id("edit.toggle_comment", "Toggle Line Comment")
-                .accelerator("CmdOrCtrl+/")
+            &MenuItemBuilder::with_id("edit.toggle_comment", shortcut_hint("Toggle Line Comment", "Ctrl+/"))
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::with_id("edit.toggle_block_comment", "Toggle Block Comment")
-                .accelerator("Shift+Alt+A")
+            &MenuItemBuilder::with_id("edit.toggle_block_comment", shortcut_hint("Toggle Block Comment", "Shift+Alt+A"))
                 .build(app)?,
         )
         .separator()
@@ -360,7 +357,7 @@ pub fn build_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> 
         )
         .item(
             &MenuItemBuilder::with_id("edit.font.smaller", "Smaller")
-                .accelerator("CmdOrCtrl+Alt+-")
+                .accelerator("CmdOrCtrl+Shift+-")
                 .build(app)?,
         )
         .item(&MenuItemBuilder::with_id("edit.font.reset", "Reset Font Size").build(app)?)
@@ -368,32 +365,27 @@ pub fn build_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> 
 
     let toc_submenu = SubmenuBuilder::new(app, "Table of Contents")
         .item(
-            &MenuItemBuilder::with_id("view.toc", "Show Table of Contents")
-                .accelerator("CmdOrCtrl+Shift+O")
+            &MenuItemBuilder::with_id("view.toc", shortcut_hint("Show Table of Contents", "Ctrl+Shift+O"))
                 .build(app)?,
         )
         .separator()
         .item(
-            &MenuItemBuilder::with_id("go.prev_section", "Select Previous Section")
-                .accelerator("Ctrl+Alt+Up")
+            &MenuItemBuilder::with_id("go.prev_section", shortcut_hint("Select Previous Section", "Ctrl+Up"))
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::with_id("go.next_section", "Select Next Section")
-                .accelerator("Ctrl+Alt+Down")
+            &MenuItemBuilder::with_id("go.next_section", shortcut_hint("Select Next Section", "Ctrl+Down"))
                 .build(app)?,
         )
         .build()?;
 
     let edit_menu = SubmenuBuilder::new(app, "Edit")
         .item(
-            &MenuItemBuilder::with_id("edit.undo", "Undo")
-                .accelerator("CmdOrCtrl+Z")
+            &MenuItemBuilder::with_id("edit.undo", shortcut_hint("Undo", "Ctrl+Z"))
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::with_id("edit.redo", "Redo")
-                .accelerator("CmdOrCtrl+Y")
+            &MenuItemBuilder::with_id("edit.redo", shortcut_hint("Redo", "Ctrl+Y"))
                 .build(app)?,
         )
         .separator()
@@ -410,8 +402,7 @@ pub fn build_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> 
         .item(&MenuItemBuilder::with_id("edit.read_only", "Toggle Read Only Mode").build(app)?)
         .separator()
         .item(
-            &MenuItemBuilder::with_id("view.stats", "Statistics...")
-                .accelerator("CmdOrCtrl+Shift+I")
+            &MenuItemBuilder::with_id("view.stats", shortcut_hint("Statistics...", "Ctrl+Shift+I"))
                 .build(app)?,
         )
         .build()?;
@@ -513,7 +504,7 @@ pub fn build_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> 
         )
         .item(
             &MenuItemBuilder::with_id("format.image", "Insert Image")
-                .accelerator("CmdOrCtrl+Shift+K")
+                .accelerator("CmdOrCtrl+Shift+G")
                 .build(app)?,
         )
         .item(&MenuItemBuilder::with_id("format.table", "Insert Table").build(app)?)
@@ -546,13 +537,11 @@ pub fn build_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> 
 
     let preview_submenu = SubmenuBuilder::new(app, "Markdown Preview")
         .item(
-            &MenuItemBuilder::with_id("view.preview_split", "Toggle Split Preview")
-                .accelerator("CmdOrCtrl+Shift+P")
+            &MenuItemBuilder::with_id("view.preview_split", shortcut_hint("Toggle Split Preview", "Ctrl+Shift+P"))
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::with_id("view.preview_full", "Toggle Markdown View Mode")
-                .accelerator("CmdOrCtrl+Alt+P")
+            &MenuItemBuilder::with_id("view.preview_full", shortcut_hint("Toggle Markdown View Mode", "Ctrl+Shift+V"))
                 .build(app)?,
         )
         .separator()
@@ -607,8 +596,7 @@ pub fn build_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> 
     let go_menu = SubmenuBuilder::new(app, "Go")
         .item(&MenuItemBuilder::with_id("go.back", "Go Back").build(app)?)
         .item(
-            &MenuItemBuilder::with_id("edit.goto_line", "Go to Line...")
-                .accelerator("CmdOrCtrl+G")
+            &MenuItemBuilder::with_id("edit.goto_line", shortcut_hint("Go to Line...", "Ctrl+G"))
                 .build(app)?,
         )
         .item(
@@ -623,9 +611,7 @@ pub fn build_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> 
 
     let mut extensions_builder = SubmenuBuilder::new(app, "Extensions")
         .item(
-            &MenuItemBuilder::with_id("extensions.manage", "Manage Extensions...")
-                .accelerator("CmdOrCtrl+Shift+X")
-                .build(app)?,
+            &MenuItemBuilder::with_id("extensions.manage", "Manage Extensions...").build(app)?,
         )
         .item(&MenuItemBuilder::with_id("extensions.check_updates", "Check for Updates...").build(app)?)
         .item(
@@ -672,7 +658,6 @@ pub fn build_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> 
     let window_menu = SubmenuBuilder::new(app, "Window")
         .item(
             &MenuItemBuilder::with_id("window.minimize", "Minimize")
-                .accelerator("CmdOrCtrl+M")
                 .build(app)?,
         )
         .item(&MenuItemBuilder::with_id("window.zoom", "Zoom").build(app)?)
@@ -735,19 +720,18 @@ pub fn menu_id_to_web_script(menu_id: &str) -> Option<String> {
                 .to_string(),
         ),
         "file.versions.browse" => Some(WebBridge::format_chrome_call("openVersionHistory", None)),
-        "file.print" => Some("window.print();".to_string()),
         "edit.undo" => Some(WebBridge::format_call("history", "undo", None)),
         "edit.redo" => Some(WebBridge::format_call("history", "redo", None)),
         "edit.find" => Some(WebBridge::format_chrome_call("openFindBar", Some(json!(false)))),
         "edit.replace" => Some(WebBridge::format_chrome_call("openFindBar", Some(json!(true)))),
         "edit.find_next" => Some(
-            "(function(){ const q = document.querySelector('.markedit-find-input')?.value || window.webModules?.search?.selectedText?.() || ''; if (q) { window.webModules?.search?.findNext?.({ search: q }); } else { window.chromeUI?.openFindBar?.(false); } })();".to_string(),
+            "(function(){ const input = document.querySelector('.markedit-chrome-findbar-input'); const q = (input && input.value) || window.webModules?.selection?.getText?.() || ''; if (q) { window.webModules?.search?.findNext?.({ search: q }); } else { window.chromeUI?.openFindBar?.(false); } })();".to_string(),
         ),
         "edit.find_previous" => Some(
-            "(function(){ const q = document.querySelector('.markedit-find-input')?.value || window.webModules?.search?.selectedText?.() || ''; if (q) { window.webModules?.search?.findPrevious?.({ search: q }); } else { window.chromeUI?.openFindBar?.(false); } })();".to_string(),
+            "(function(){ const input = document.querySelector('.markedit-chrome-findbar-input'); const q = (input && input.value) || window.webModules?.selection?.getText?.() || ''; if (q) { window.webModules?.search?.findPrevious?.({ search: q }); } else { window.chromeUI?.openFindBar?.(false); } })();".to_string(),
         ),
         "edit.find_selection" => Some(
-            "(function(){ const sel = window.webModules?.search?.selectedText?.() || ''; window.chromeUI?.openFindBar?.(false); const input = document.querySelector('.markedit-find-input'); if (input && sel) { input.value = sel; input.dispatchEvent(new Event('input', { bubbles: true })); } })();".to_string(),
+            "(function(){ const sel = window.webModules?.selection?.getText?.() || ''; window.chromeUI?.openFindBar?.(false); const input = document.querySelector('.markedit-chrome-findbar-input'); if (input && sel) { input.value = sel; input.dispatchEvent(new Event('input', { bubbles: true })); } })();".to_string(),
         ),
         "edit.select_next_occurrence" => {
             Some(WebBridge::format_call("search", "selectNextOccurrence", None))
@@ -925,31 +909,31 @@ pub fn menu_id_to_web_script(menu_id: &str) -> Option<String> {
         "view.toc" | "go.header" => Some(WebBridge::format_chrome_call("toggleToc", None)),
         "view.stats" => Some(WebBridge::format_chrome_call("toggleStatistics", None)),
         "view.line_numbers" => Some(
-            "window.config.showLineNumbers = !window.config.showLineNumbers; window.webModules?.config?.setShowLineNumbers?.({ enabled: window.config.showLineNumbers });"
+            "window.config.showLineNumbers = !window.config.showLineNumbers; window.webModules?.config?.setShowLineNumbers?.({ enabled: window.config.showLineNumbers }); window.__TAURI_INTERNALS__?.invoke('settings_update', { patch: { showLineNumbers: window.config.showLineNumbers } });"
                 .to_string(),
         ),
         "view.active_line" => Some(
-            "window.config.showActiveLineIndicator = !window.config.showActiveLineIndicator; window.webModules?.config?.setShowActiveLineIndicator?.({ enabled: window.config.showActiveLineIndicator });"
+            "window.config.showActiveLineIndicator = !window.config.showActiveLineIndicator; window.webModules?.config?.setShowActiveLineIndicator?.({ enabled: window.config.showActiveLineIndicator }); window.__TAURI_INTERNALS__?.invoke('settings_update', { patch: { showActiveLineIndicator: window.config.showActiveLineIndicator } });"
                 .to_string(),
         ),
         "view.line_wrapping" => Some(
-            "window.config.lineWrapping = !window.config.lineWrapping; window.webModules?.config?.setLineWrapping?.({ enabled: window.config.lineWrapping });"
+            "window.config.lineWrapping = !window.config.lineWrapping; window.webModules?.config?.setLineWrapping?.({ enabled: window.config.lineWrapping }); window.__TAURI_INTERNALS__?.invoke('settings_update', { patch: { lineWrapping: window.config.lineWrapping } });"
                 .to_string(),
         ),
         "view.invisibles" => Some(
-            "window.config.invisiblesBehavior = window.config.invisiblesBehavior === 'never' ? 'always' : 'never'; window.webModules?.config?.setInvisiblesBehavior?.({ behavior: window.config.invisiblesBehavior });"
+            "window.config.invisiblesBehavior = window.config.invisiblesBehavior === 'never' ? 'always' : 'never'; window.webModules?.config?.setInvisiblesBehavior?.({ behavior: window.config.invisiblesBehavior }); window.__TAURI_INTERNALS__?.invoke('settings_update', { patch: { invisiblesBehavior: window.config.invisiblesBehavior } });"
                 .to_string(),
         ),
         "view.typewriter" => Some(
-            "window.config.typewriterMode = !window.config.typewriterMode; window.webModules?.config?.setTypewriterMode?.({ enabled: window.config.typewriterMode });"
+            "window.config.typewriterMode = !window.config.typewriterMode; window.webModules?.config?.setTypewriterMode?.({ enabled: window.config.typewriterMode }); window.__TAURI_INTERNALS__?.invoke('settings_update', { patch: { typewriterMode: window.config.typewriterMode } });"
                 .to_string(),
         ),
         "view.focus" => Some(
-            "window.config.focusMode = !window.config.focusMode; window.webModules?.config?.setFocusMode?.({ enabled: window.config.focusMode });"
+            "window.config.focusMode = !window.config.focusMode; window.webModules?.config?.setFocusMode?.({ enabled: window.config.focusMode }); window.__TAURI_INTERNALS__?.invoke('settings_update', { patch: { focusMode: window.config.focusMode } });"
                 .to_string(),
         ),
         "view.theme" => Some(
-            "window.config.theme = window.config.theme === 'github-dark' ? 'github-light' : 'github-dark'; window.webModules?.config?.setTheme?.({ name: window.config.theme });"
+            "window.config.theme = /-dark$/.test(window.config.theme) ? window.config.theme.replace(/-dark$/, '-light') : (/-light$/.test(window.config.theme) ? window.config.theme.replace(/-light$/, '-dark') : 'github-dark'); window.webModules?.config?.setTheme?.({ name: window.config.theme }); window.__TAURI_INTERNALS__?.invoke('settings_update', { patch: { theme: window.config.theme } });"
                 .to_string(),
         ),
         "view.le_crlf" => Some(WebBridge::format_call(
@@ -978,6 +962,22 @@ pub fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, menu_id: &str) {
     let active_label = focused_webview(app)
         .map(|w| w.label().to_string())
         .unwrap_or_else(|| "main".to_string());
+
+    if menu_id == "app.quit" || menu_id == "file.exit" {
+        // Close windows one by one so each unsaved document gets its save prompt;
+        // the app exits once the last window is gone.
+        for (_, window) in app.webview_windows() {
+            let _ = window.close();
+        }
+        return;
+    }
+
+    if menu_id == "file.print" {
+        if let Some(webview) = focused_webview(app) {
+            let _ = webview.print();
+        }
+        return;
+    }
 
     if menu_id == "file.open" {
         if let Some(path) = rfd::FileDialog::new()
@@ -1059,6 +1059,9 @@ pub fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, menu_id: &str) {
     if let Some(enc_label) = menu_id.strip_prefix("file.reopen_encoding.") {
         let doc_mgr = app.state::<DocumentManager>();
         let current_path = doc_mgr.with_session(&active_label, |s| s.file_path.clone());
+        if current_path.is_some() && !confirm_discard_changes(app, &active_label) {
+            return;
+        }
         let Some(path) = current_path else {
             let _ = MessageDialog::new()
                 .set_title("MarkEdit-Rust")
@@ -1082,15 +1085,29 @@ pub fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, menu_id: &str) {
     }
 
     if menu_id == "file.save_all" {
+        // Only documents with unsaved changes; clean or empty untitled windows would otherwise
+        // each open a Save As dialog at the same time.
         let script = "window.__TAURI_INTERNALS__?.invoke('save_document_content', { text: window.webModules?.core?.getEditorText?.() ?? '', saveAs: false });";
-        for (_, webview) in app.webview_windows() {
-            let _ = webview.eval(script);
+        let doc_mgr = app.state::<DocumentManager>();
+        for (label, webview) in app.webview_windows() {
+            if doc_mgr.with_session(&label, |s| s.is_dirty) {
+                let _ = webview.eval(script);
+            }
         }
         return;
     }
 
     if menu_id == "file.revert" {
-        revert_to_saved(app, &active_label);
+        let has_path = app
+            .state::<DocumentManager>()
+            .with_session(&active_label, |s| s.file_path.is_some());
+        if !has_path {
+            show_info("This document has not been saved to disk yet, so there is nothing to revert to.");
+            return;
+        }
+        if confirm_discard_changes(app, &active_label) {
+            revert_to_saved(app, &active_label);
+        }
         return;
     }
 
@@ -1142,6 +1159,8 @@ pub fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, menu_id: &str) {
         let doc_mgr = app.state::<DocumentManager>();
         if let Some(path) = doc_mgr.with_session(&active_label, |s| s.file_path.clone()) {
             copy_to_clipboard(&path.to_string_lossy());
+        } else {
+            show_info("This document has not been saved to disk yet.");
         }
         return;
     }
@@ -1154,6 +1173,8 @@ pub fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, menu_id: &str) {
                 .and_then(|p| p.parent().map(|d| d.to_path_buf()))
         }) {
             copy_to_clipboard(&folder.to_string_lossy());
+        } else {
+            show_info("This document has not been saved to disk yet.");
         }
         return;
     }
@@ -1341,8 +1362,9 @@ pub fn reveal_in_file_manager(path: &Path) {
     }
     #[cfg(target_os = "windows")]
     {
+        use std::os::windows::process::CommandExt;
         let _ = std::process::Command::new("explorer")
-            .arg(format!("/select,{}", path.display()))
+            .raw_arg(format!("/select,\"{}\"", path.display()))
             .spawn();
     }
     #[cfg(target_os = "linux")]
@@ -1351,6 +1373,45 @@ pub fn reveal_in_file_manager(path: &Path) {
             let _ = std::process::Command::new("xdg-open").arg(parent).spawn();
         }
     }
+}
+
+/// Menu label that shows a keyboard shortcut handled by the editor page itself.
+///
+/// These keys are not registered as menu accelerators: the page already handles them, and an
+/// accelerator as well could run the action twice. On Windows, text after a tab is drawn as the
+/// item's shortcut column, like a real accelerator.
+fn shortcut_hint(label: &str, shortcut: &str) -> String {
+    if cfg!(target_os = "windows") {
+        format!("{label}\t{shortcut}")
+    } else {
+        format!("{label} ({shortcut})")
+    }
+}
+
+fn show_info(message: &str) {
+    let _ = MessageDialog::new()
+        .set_title("MarkEdit-Rust")
+        .set_description(message)
+        .set_level(MessageLevel::Info)
+        .set_buttons(MessageButtons::Ok)
+        .show();
+}
+
+/// Asks before an action replaces the editor content with the file on disk.
+/// Returns `true` when there are no unsaved changes or the user agreed to discard them.
+fn confirm_discard_changes<R: Runtime>(app: &AppHandle<R>, label: &str) -> bool {
+    let is_dirty = app.state::<DocumentManager>().with_session(label, |s| s.is_dirty);
+    if !is_dirty {
+        return true;
+    }
+
+    let choice = MessageDialog::new()
+        .set_title("MarkEdit-Rust")
+        .set_description("This document has unsaved changes. Discard them and reload the file?")
+        .set_level(MessageLevel::Warning)
+        .set_buttons(MessageButtons::OkCancel)
+        .show();
+    matches!(choice, MessageDialogResult::Ok | MessageDialogResult::Yes)
 }
 
 fn focused_webview<R: Runtime>(app: &AppHandle<R>) -> Option<tauri::WebviewWindow<R>> {
@@ -1387,15 +1448,22 @@ fn open_document_path<R: Runtime>(app: &AppHandle<R>, path: PathBuf) {
     }
 
     let doc_mgr = app.state::<DocumentManager>();
-    let is_busy = doc_mgr.with_session("main", |s| {
+    let target = focused_webview(app);
+    let target_label = target
+        .as_ref()
+        .map(|w| w.label().to_string())
+        .unwrap_or_else(|| "main".to_string());
+    let is_busy = doc_mgr.with_session(&target_label, |s| {
         s.is_dirty || s.file_path.is_some() || !s.content_cache.is_empty()
     });
 
-    if is_busy {
+    // Reuse the focused window only while it is still an empty, untouched document;
+    // otherwise (or when no window is open) open the file in a new window.
+    if is_busy || target.is_none() {
         let _ = create_editor_window(app, Some(path));
         refresh_app_menu(app);
-    } else if let Some(webview) = app.get_webview_window("main") {
-        let loaded = doc_mgr.with_session("main", |s| {
+    } else if let Some(webview) = target {
+        let loaded = doc_mgr.with_session(&target_label, |s| {
             let text = s.load_from_path(&path)?;
             Ok::<(String, String), String>((text, s.display_title()))
         });
@@ -1405,6 +1473,7 @@ fn open_document_path<R: Runtime>(app: &AppHandle<R>, path: PathBuf) {
             refresh_app_menu(app);
             let _ = webview.set_title(&title);
             let _ = webview.eval(&WebBridge::reset_editor(&text));
+            crate::persist_last_session(app, None);
         }
     }
 }
@@ -1455,7 +1524,9 @@ fn handle_extension_menu_event<R: Runtime>(app: &AppHandle<R>, menu_id: &str) ->
             true
         }
         "extensions.check_updates" => {
-            check_extension_updates(app, mgr, webview);
+            // Registry refresh and downloads are network calls; keep them off the UI thread.
+            let app = app.clone();
+            std::thread::spawn(move || check_extension_updates(&app, mgr, webview));
             true
         }
         "extensions.install_url" => {
@@ -1608,10 +1679,76 @@ mod tests {
     #[test]
     fn generates_valid_pandoc_command_for_document_path() {
         let p = Path::new("/tmp/notes/sample.md");
+        // Pandoc rejects `-t pdf`; the `.pdf` output extension selects PDF output.
         let cmd = build_pandoc_command(p, "pdf");
         assert_eq!(
             cmd,
-            "pandoc \"/tmp/notes/sample.md\" -t pdf -o \"/tmp/notes/sample.pdf\""
+            "pandoc \"/tmp/notes/sample.md\" -o \"/tmp/notes/sample.pdf\""
         );
+        assert_eq!(
+            build_pandoc_command(p, "docx"),
+            "pandoc \"/tmp/notes/sample.md\" -t docx -o \"/tmp/notes/sample.docx\""
+        );
+    }
+
+    /// Accelerators registered in this file (the menu itself needs an AppHandle to build).
+    fn registered_accelerators() -> Vec<String> {
+        let source = include_str!("mod.rs");
+        let needle = concat!(".accel", "erator(\"");
+        source
+            .match_indices(needle)
+            .filter_map(|(start, _)| {
+                let rest = &source[start + needle.len()..];
+                rest.find('"').map(|end| rest[..end].to_string())
+            })
+            .collect()
+    }
+
+    #[test]
+    fn menu_accelerators_are_unique_altgr_safe_and_not_owned_by_the_editor() {
+        let accelerators = registered_accelerators();
+        assert!(accelerators.len() > 30, "parsed {accelerators:?}");
+
+        let mut seen = std::collections::HashSet::new();
+        for acc in &accelerators {
+            assert!(seen.insert(acc.to_lowercase()), "duplicate accelerator {acc}");
+
+            // Ctrl+Alt+<character> is AltGr on many keyboard layouts (e.g. AltGr+S types "ś").
+            let parts: Vec<&str> = acc.split('+').collect();
+            let key = parts.last().copied().unwrap_or_default();
+            let has_ctrl = parts.iter().any(|p| *p == "CmdOrCtrl" || *p == "Ctrl");
+            let has_alt = parts.contains(&"Alt");
+            assert!(
+                !(has_ctrl && has_alt && key.chars().count() == 1),
+                "AltGr-unsafe accelerator {acc}"
+            );
+        }
+
+        // Keys the editor page handles itself (CodeMirror keymaps, chrome keydown handler).
+        for page_key in [
+            "CmdOrCtrl+Z", "CmdOrCtrl+Y", "CmdOrCtrl+F", "CmdOrCtrl+H", "CmdOrCtrl+G",
+            "Alt+Up", "Alt+Down", "Shift+Alt+Up", "Shift+Alt+Down", "CmdOrCtrl+]", "CmdOrCtrl+[",
+            "CmdOrCtrl+/", "Shift+Alt+A", "CmdOrCtrl+Shift+O", "CmdOrCtrl+Shift+I",
+            "CmdOrCtrl+Shift+P", "CmdOrCtrl+Shift+V", "CmdOrCtrl+Shift+K", "CmdOrCtrl+M",
+            "Ctrl+Alt+Up", "Ctrl+Alt+Down",
+        ] {
+            assert!(!accelerators.iter().any(|acc| acc == page_key), "{page_key} is owned by the editor");
+        }
+    }
+
+    #[test]
+    fn find_menu_items_use_existing_find_bar_and_selection_apis() {
+        for id in ["edit.find_next", "edit.find_previous", "edit.find_selection"] {
+            let script = menu_id_to_web_script(id).expect(id);
+            assert!(script.contains(".markedit-chrome-findbar-input"), "{id}");
+            assert!(script.contains("selection?.getText"), "{id}");
+            assert!(!script.contains("search?.selectedText"), "{id}");
+        }
+        // Print is handled natively (window.print is stubbed in release builds).
+        assert!(menu_id_to_web_script("file.print").is_none());
+        // View toggles are persisted.
+        assert!(menu_id_to_web_script("view.line_numbers")
+            .expect("line numbers")
+            .contains("settings_update"));
     }
 }

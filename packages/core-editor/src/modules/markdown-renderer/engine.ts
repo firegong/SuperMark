@@ -1,8 +1,24 @@
 import { escapeHtml, isUnsafeUrl, slugify, parseLinkDestination } from './utils';
-import { renderLatexToMathML, renderLatexToHtml } from './plugins/mathPlugin';
 import { renderMermaidToSvg } from './plugins/mermaidPlugin';
+import { hasDiagramPlugin, renderDiagramWithPlugin, renderMathWithPlugin } from './plugins/registry';
+import { diagramBlockHtml, registerBuiltinRendererPlugins } from './plugins/builtin';
 import { highlightCode } from './plugins/codeHighlightPlugin';
 import type { Line, MarkdownRenderOptions, MarkdownRendererEngine, MarkdownBlockPlugin, MarkdownInlinePlugin, MarkdownSyntaxStandard, RenderContext } from './types';
+
+registerBuiltinRendererPlugins();
+
+function renderInlineMath(escapedLatex: string, displayMode: boolean): string {
+  // parseInline runs on HTML-escaped text; give the math plugin the original LaTeX
+  // (otherwise `&` column separators arrive as `&amp;` and `<` as `&lt;`).
+  const latex = escapedLatex
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, '\'')
+    .replace(/&amp;/g, '&');
+  const math = renderMathWithPlugin(latex, displayMode);
+  return displayMode ? `<div class="markedit-math-block">${math}</div>` : `<span class="markedit-math-inline">${math}</span>`;
+}
 
 const alertTitles: Record<string, { label: string; icon: string }> = {
   note: { label: 'Note', icon: 'M8 1a7 7 0 100 14A7 7 0 008 1zm0 11a.75.75 0 010-1.5.75.75 0 010 1.5zm0-3c.41 0 .75-.34.75-.75V4.5a.75.75 0 00-1.5 0v3.75c0 .41.34.75.75.75z' },
@@ -12,9 +28,9 @@ const alertTitles: Record<string, { label: string; icon: string }> = {
   caution: { label: 'Caution', icon: 'M8 1a7 7 0 100 14A7 7 0 008 1zm0 3.5a.75.75 0 01.75.75v4a.75.75 0 01-1.5 0v-4A.75.75 0 018 4.5zm0 7a.75.75 0 110-1.5.75.75 0 010 1.5z' },
 };
 
-function classifyLine(raw: string): Line {
+function classifyLine(raw: string, lineNumber = 0): Line {
   const indent = raw.match(/^(\s*)/)?.[1].length ?? 0;
-  return { raw, text: raw.trim(), indent, lineNumber: 0 };
+  return { raw, text: raw.trim(), indent, lineNumber };
 }
 
 function parseYamlFrontMatter(lines: Line[]): { frontMatter: string | null; remaining: Line[] } {
@@ -159,8 +175,8 @@ function parseInline(text: string, context: RenderContext): string {
   result = result.replace(/`([^`]+)`/g, '<code class="markedit-preview-code">$1</code>');
 
   if (context.options.enableMath) {
-    result = result.replace(/\$\$([^$]+)\$\$/g, (_full: string, latex: string) => renderLatexToHtml(latex, true));
-    result = result.replace(/\$([^\s$][^$]*?)\$/g, (_full: string, latex: string) => renderLatexToHtml(latex, false));
+    result = result.replace(/\$\$([^$]+)\$\$/g, (_full: string, latex: string) => renderInlineMath(latex, true));
+    result = result.replace(/\$([^\s$][^$]*?)\$/g, (_full: string, latex: string) => renderInlineMath(latex, false));
   }
 
   if (context.options.enableStrikethrough) {
@@ -197,7 +213,7 @@ function renderAlert(lines: Line[], context: RenderContext): { html: string; con
   const title = alertMatch[2].trim().length > 0 ? alertMatch[2].trim() : alertTitles[type].label;
   const startLine = lines[0].lineNumber;
 
-  const contentLines: string[] = [];
+  const contentLines: Line[] = [];
   let consumed = 1;
   let firstContent = true;
 
@@ -214,11 +230,11 @@ function renderAlert(lines: Line[], context: RenderContext): { html: string; con
     }
 
     firstContent = false;
-    contentLines.push(bq.content);
+    contentLines.push(classifyLine(bq.content, lines[consumed].lineNumber));
     consumed += 1;
   }
 
-  const inner = renderBlocks(contentLines.map(classifyLine), context);
+  const inner = renderBlocks(contentLines, context);
   const iconSvg = `<svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="${alertTitles[type].icon}"/></svg>`;
   const html = `<div ${blockAttributes(startLine)}><div class="markedit-preview-alert is-${type}"><div class="markedit-preview-alert-title">${iconSvg}${escapeHtml(title)}</div><div class="markedit-preview-alert-content">${inner}</div></div></div>`;
 
@@ -252,11 +268,12 @@ function renderFencedCode(lines: Line[], context: RenderContext): { html: string
 
   const rawCode = content.join('\n');
 
-  if (context.options.enableMermaid && start.lang.toLowerCase() === 'mermaid') {
-    const svg = context.renderMermaid(rawCode);
-    const sourceCode = escapeHtml(rawCode);
-    const html = `<div ${blockAttributes(startLine)}><div class="markedit-preview-mermaid"><div class="markedit-mermaid-diagram">${svg}</div><button type="button" class="markedit-mermaid-toggle">Source</button><pre class="markedit-mermaid-source"><code>${sourceCode}</code></pre></div></div>`;
-    return { html, consumed };
+  // Diagram plugins (mermaid, plantuml, d2, drawio, …), see plugins/registry.ts
+  if (context.options.enableMermaid && hasDiagramPlugin(start.lang)) {
+    const rendered = renderDiagramWithPlugin(start.lang, rawCode);
+    if (rendered !== null) {
+      return { html: `<div ${blockAttributes(startLine)}>${diagramBlockHtml(start.lang.toLowerCase(), rawCode, rendered)}</div>`, consumed };
+    }
   }
 
   const code = context.options.enableCodeHighlight && start.lang.length > 0
@@ -381,7 +398,7 @@ function renderList(lines: Line[], context: RenderContext): { html: string; cons
     const subList = item.subLines.length > 0 ? renderBlocks(item.subLines, context) : '';
     const paragraphs = item.content.split(/\n\s*\n/).filter(paragraph => paragraph.length > 0);
     const isSimpleInline = paragraphs.length === 1 && item.subLines.length === 0;
-    const contentHtml = isSimpleInline ? parseInline(item.content, context) : renderBlocks(item.content.split('\n').map(classifyLine), context);
+    const contentHtml = isSimpleInline ? parseInline(item.content, context) : renderBlocks(item.content.split('\n').map(raw => classifyLine(raw, item.lineNumber)), context);
     const itemClass = item.task !== null && taskEnabled ? 'markedit-preview-task-item' : '';
     const spacing = item.task !== null && taskEnabled ? '' : ' ';
     html += `<li ${blockAttributes(item.lineNumber, itemClass)}>${checkbox}${spacing}${contentHtml}${subList}</li>`;
@@ -446,7 +463,7 @@ function renderBlockquote(lines: Line[], context: RenderContext): { html: string
   }
 
   const startLine = lines[0].lineNumber;
-  const content: string[] = [];
+  const content: Line[] = [];
   let consumed = 0;
 
   while (consumed < lines.length) {
@@ -455,11 +472,12 @@ function renderBlockquote(lines: Line[], context: RenderContext): { html: string
       break;
     }
 
-    content.push(bq.content);
+    // Keep the absolute source line so data-line (checkboxes, scroll sync) stays correct.
+    content.push(classifyLine(bq.content, lines[consumed].lineNumber));
     consumed += 1;
   }
 
-  const inner = renderBlocks(content.map(classifyLine), context);
+  const inner = renderBlocks(content, context);
   const html = `<div ${blockAttributes(startLine)}><blockquote class="markedit-preview-blockquote">${inner}</blockquote></div>`;
   return { html, consumed };
 }
@@ -480,6 +498,12 @@ function renderParagraph(lines: Line[], context: RenderContext): { html: string;
     consumed += 1;
   }
 
+  // Lines that look like a block start but did not parse as one (e.g. `| a`) are plain text.
+  if (consumed === 0 && lines.length > 0) {
+    content.push(lines[0].raw);
+    consumed = 1;
+  }
+
   const text = content.join(' ').replace(/\s+/g, ' ').trim();
   const html = text.length > 0 ? `<p ${blockAttributes(startLine)}>${parseInline(text, context)}</p>` : '';
   return { html, consumed };
@@ -496,7 +520,8 @@ function tryCustomBlockPlugins(lines: Line[], context: RenderContext): { html: s
 }
 
 function renderBlocks(lines: Line[], context: RenderContext): string {
-  const withLineNumbers = lines.map((line, index) => ({ ...line, lineNumber: index }));
+  // Line numbers are absolute (assigned once in render()); nested calls must not renumber them.
+  const withLineNumbers = lines;
   let index = 0;
   let html = '';
 
@@ -573,7 +598,9 @@ function renderBlocks(lines: Line[], context: RenderContext): string {
 
     const paragraph = renderParagraph(withLineNumbers.slice(index), context);
     html += paragraph.html;
-    index += paragraph.consumed;
+    // A line that looks like a table row but is not a table makes renderParagraph stop at once;
+    // always advance so the loop cannot spin forever (e.g. typing `| a`).
+    index += Math.max(1, paragraph.consumed);
   }
 
   return html;
@@ -655,7 +682,7 @@ export class DefaultMarkdownEngine implements MarkdownRendererEngine {
 
   render(markdown: string, options?: MarkdownRenderOptions): string {
     const normalized = markdown.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-    const rawLines = normalized.split('\n').map(classifyLine);
+    const rawLines = normalized.split('\n').map((raw, index) => classifyLine(raw, index));
 
     const opts = fillOptions(this.standard, options);
     const context: RenderContext = {
@@ -703,7 +730,7 @@ export class DefaultMarkdownEngine implements MarkdownRendererEngine {
   }
 
   renderMath(latex: string, displayMode: boolean): string {
-    return renderLatexToMathML(latex, displayMode);
+    return renderMathWithPlugin(latex, displayMode);
   }
 
   renderMermaid(code: string): string {

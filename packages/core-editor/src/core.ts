@@ -2,7 +2,7 @@ import { EditorView } from '@codemirror/view';
 import { EditorSelection, EditorState } from '@codemirror/state';
 import { extensions } from './extensions';
 import { globalState, editingState } from './common/store';
-import { tryGetEditor, focusedEditor, almostEqual, afterDomUpdate, getViewportScale, isReleaseMode, isMotionReduced } from './common/utils';
+import { tryGetEditor, focusedEditor, almostEqual, afterDomUpdate, getViewportScale, isReleaseMode, isMotionReduced, documentLength, toDocumentLineBreaks } from './common/utils';
 
 import hasSelection from './modules/selection/hasSelection';
 import normalizeSelection from './modules/selection/normalizeSelection';
@@ -271,9 +271,10 @@ export function getReadableContentPair(): ReadableContentPair {
 
 export function insertText(text: string, from: number, to: number) {
   const editor = window.editor;
+  const insert = toDocumentLineBreaks(editor.state, text);
   editor.dispatch({
-    changes: { from, to, insert: text },
-    selection: EditorSelection.cursor(from + text.length),
+    changes: { from, to, insert },
+    selection: EditorSelection.cursor(from + documentLength(editor.state, insert)),
   });
 }
 

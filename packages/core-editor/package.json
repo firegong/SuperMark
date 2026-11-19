@@ -27,7 +27,8 @@
     "@lezer/highlight": "^1.0.0",
     "@lezer/html": "^1.0.0",
     "@lezer/lr": "^1.0.0",
-    "@lezer/markdown": "^1.0.0"
+    "@lezer/markdown": "^1.0.0",
+    "mermaid": "12.3.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.0",

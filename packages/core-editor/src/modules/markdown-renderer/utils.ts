@@ -8,7 +8,10 @@ export function escapeHtml(text: string): string {
 }
 
 export function isUnsafeUrl(url: string): boolean {
-  const lower = url.trim().toLowerCase();
+  // Browsers strip leading C0 controls/whitespace and ignore tabs/newlines inside the scheme,
+  // so remove them before checking (e.g. "\u0001javascript:" or "java\tscript:").
+  // eslint-disable-next-line no-control-regex
+  const lower = url.replace(/[\u0000-\u0020\u007f-\u009f]/g, '').toLowerCase();
   return lower.startsWith('javascript:') || lower.startsWith('vbscript:') || lower.startsWith('data:');
 }
 

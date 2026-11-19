@@ -524,10 +524,10 @@ describe('Extensions Manager', () => {
     expect(invokeMock).toHaveBeenCalledWith('extensions_open_folder', {});
   });
 
-  test('Ctrl+Shift+X opens Extensions Manager', () => {
+  test('Ctrl+Shift+X is left to Format > Strikethrough', () => {
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'X', ctrlKey: true, shiftKey: true, bubbles: true }));
 
-    expect(document.querySelector('.markedit-chrome-extensions-backdrop')).not.toBeNull();
+    expect(document.querySelector('.markedit-chrome-extensions-backdrop')).toBeNull();
   });
 
   test('Escape closes Extensions Manager and restores focus', async () => {
@@ -607,7 +607,13 @@ describe('Settings Modal', () => {
     newFilenameExtension: 'md',
     defaultTextEncoding: 'UTF-8',
     defaultLineBreak: '\n',
+    startupBehavior: 'newDocument',
     reduceTransparency: false,
+    markdownRenderer: 'extended',
+    diagramServer: 'https://kroki.io',
+    diagramRendering: 'auto',
+    plantumlCommand: 'plantuml',
+    d2Command: 'd2',
   };
 
   const tick = () => new Promise(resolve => { setTimeout(resolve, 0); });
@@ -1016,6 +1022,14 @@ describe('Markdown Preview', () => {
 
     expect((window.chromeUI as ChromeUI).getMarkdownPreviewMode()).toBe('split');
   });
+
+  test('Ctrl+Shift+V toggles Markdown view; AltGr-like Ctrl+Alt+P does nothing', () => {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'p', ctrlKey: true, altKey: true, bubbles: true }));
+    expect((window.chromeUI as ChromeUI).getMarkdownPreviewMode()).toBe('editor');
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'V', ctrlKey: true, shiftKey: true, bubbles: true }));
+    expect((window.chromeUI as ChromeUI).getMarkdownPreviewMode()).toBe('preview');
+  });
 });
 
 describe('Markdown Preview Rendering', () => {
@@ -1266,7 +1280,13 @@ describe('Settings Modal Window Controls', () => {
     newFilenameExtension: 'md',
     defaultTextEncoding: 'UTF-8',
     defaultLineBreak: '\n',
+    startupBehavior: 'newDocument',
     reduceTransparency: false,
+    markdownRenderer: 'extended',
+    diagramServer: 'https://kroki.io',
+    diagramRendering: 'auto',
+    plantumlCommand: 'plantuml',
+    d2Command: 'd2',
   };
 
   beforeEach(() => {

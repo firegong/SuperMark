@@ -134,9 +134,32 @@ pub struct UserSettings {
     pub default_text_encoding: String,
     #[serde(rename = "general.defaultLineBreak")]
     pub default_line_break: String,
+    /// What to show when the app starts without files: `newDocument` (default) opens an empty
+    /// document, `lastSession` reopens the windows (and unsaved changes) of the last session.
+    #[serde(rename = "general.startupBehavior")]
+    pub startup_behavior: String,
 
     #[serde(rename = "window.reduceTransparency")]
     pub reduce_transparency: bool,
+
+    /// Markdown parser used by the preview: `extended`, `super`, `gfm`, `commonmark` or a
+    /// renderer registered by an extension.
+    #[serde(rename = "preview.markdownRenderer")]
+    pub markdown_renderer: String,
+
+    /// Kroki-compatible server used by the PlantUML / D2 (and advanced Mermaid) diagram
+    /// plugins. Empty turns online diagram rendering off; diagram sources are sent here.
+    #[serde(rename = "preview.diagramServer")]
+    pub diagram_server: String,
+    /// `auto` (local tools first, then the diagram server), `local` or `server`.
+    #[serde(rename = "preview.diagramRendering")]
+    pub diagram_rendering: String,
+    /// Command for local PlantUML: `plantuml`, a path to `plantuml.jar`, or `java -jar …`.
+    #[serde(rename = "preview.plantumlCommand")]
+    pub plantuml_command: String,
+    /// Command for local D2.
+    #[serde(rename = "preview.d2Command")]
+    pub d2_command: String,
 }
 
 impl Default for UserSettings {
@@ -164,7 +187,13 @@ impl Default for UserSettings {
             new_filename_extension: "md".to_string(),
             default_text_encoding: "UTF-8".to_string(),
             default_line_break: "\r\n".to_string(),
+            startup_behavior: "newDocument".to_string(),
             reduce_transparency: false,
+            markdown_renderer: "extended".to_string(),
+            diagram_server: "https://kroki.io".to_string(),
+            diagram_rendering: "auto".to_string(),
+            plantuml_command: "plantuml".to_string(),
+            d2_command: "d2".to_string(),
         }
     }
 }
@@ -265,9 +294,21 @@ impl UserSettings {
                 json!(self.default_line_break),
             );
             obj.insert(
+                "startupBehavior".to_string(),
+                json!(self.startup_behavior),
+            );
+            obj.insert(
                 "reduceTransparency".to_string(),
                 json!(self.reduce_transparency),
             );
+            obj.insert(
+                "markdownRenderer".to_string(),
+                json!(self.markdown_renderer),
+            );
+            obj.insert("diagramServer".to_string(), json!(self.diagram_server));
+            obj.insert("diagramRendering".to_string(), json!(self.diagram_rendering));
+            obj.insert("plantumlCommand".to_string(), json!(self.plantuml_command));
+            obj.insert("d2Command".to_string(), json!(self.d2_command));
         }
         val
     }
@@ -313,7 +354,13 @@ fn canonical_setting_key(key: &str) -> Option<&'static str> {
             Some("general.defaultTextEncoding")
         }
         "general.defaultLineBreak" | "defaultLineBreak" => Some("general.defaultLineBreak"),
+        "general.startupBehavior" | "startupBehavior" => Some("general.startupBehavior"),
         "window.reduceTransparency" | "reduceTransparency" => Some("window.reduceTransparency"),
+        "preview.markdownRenderer" | "markdownRenderer" => Some("preview.markdownRenderer"),
+        "preview.diagramServer" | "diagramServer" => Some("preview.diagramServer"),
+        "preview.diagramRendering" | "diagramRendering" => Some("preview.diagramRendering"),
+        "preview.plantumlCommand" | "plantumlCommand" => Some("preview.plantumlCommand"),
+        "preview.d2Command" | "d2Command" => Some("preview.d2Command"),
         _ => None,
     }
 }
@@ -498,6 +545,12 @@ impl SettingsManager {
         let smart_quotes_arg = json!({ "enabled": editor_cfg.smart_quotes_enabled });
         let appearance_json =
             serde_json::to_string(&settings.appearance).unwrap_or_else(|_| "\"system\"".to_string());
+        let diagram_rendering_json = serde_json::to_string(&settings.diagram_rendering)
+            .unwrap_or_else(|_| "\"auto\"".to_string());
+        let diagram_server_json = serde_json::to_string(&settings.diagram_server)
+            .unwrap_or_else(|_| "\"\"".to_string());
+        let renderer_json = serde_json::to_string(&settings.markdown_renderer)
+            .unwrap_or_else(|_| "\"extended\"".to_string());
         let reduce_trans_str = if settings.reduce_transparency {
             "true"
         } else {
@@ -536,6 +589,9 @@ impl SettingsManager {
     c.setAutoCharacterPairs?.({auto_pairs_arg});
     c.setSmartQuotesEnabled?.({smart_quotes_arg});
   }}
+  window.chromeUI?.setDiagramRendering?.({diagram_rendering_json});
+  window.chromeUI?.setDiagramServer?.({diagram_server_json});
+  window.chromeUI?.setMarkdownRenderer?.({renderer_json});
 }})();"#
         )
     }
@@ -614,5 +670,38 @@ mod tests {
         let sync_js = mgr.build_live_sync_js(&patched_flat);
         assert!(sync_js.contains("c.setTheme"));
         assert!(sync_js.contains("synthwave84"));
+
+        // Markdown parser choice persists under `preview.markdownRenderer`.
+        assert_eq!(patched_flat.markdown_renderer, "extended");
+        let with_renderer = mgr
+            .update_user_settings(&json!({ "markdownRenderer": "super" }))
+            .expect("update markdown renderer");
+        assert_eq!(with_renderer.markdown_renderer, "super");
+        assert_eq!(mgr.load_user_settings().markdown_renderer, "super");
+        assert_eq!(with_renderer.to_frontend_value()["markdownRenderer"], "super");
+        assert_eq!(with_renderer.to_frontend_value()["preview.markdownRenderer"], "super");
+        assert_eq!(with_renderer.diagram_server, "https://kroki.io");
+        assert_eq!(with_renderer.diagram_rendering, "auto");
+        assert_eq!(with_renderer.plantuml_command, "plantuml");
+        let local = mgr
+            .update_user_settings(&json!({ "diagramRendering": "local", "plantumlCommand": "C:\\tools\\plantuml.jar" }))
+            .expect("local diagrams");
+        assert_eq!(local.diagram_rendering, "local");
+        assert_eq!(local.plantuml_command, "C:\\tools\\plantuml.jar");
+        assert!(mgr.build_live_sync_js(&local).contains("setDiagramRendering?.(\"local\")"));
+        let no_server = mgr
+            .update_user_settings(&json!({ "diagramServer": "" }))
+            .expect("turn diagram server off");
+        assert_eq!(no_server.diagram_server, "");
+        assert!(mgr.build_live_sync_js(&no_server).contains("setDiagramServer?.(\"\")"));
+        assert_eq!(with_renderer.startup_behavior, "newDocument");
+        let with_startup = mgr
+            .update_user_settings(&json!({ "startupBehavior": "lastSession" }))
+            .expect("update startup behavior");
+        assert_eq!(with_startup.startup_behavior, "lastSession");
+        assert_eq!(with_startup.to_frontend_value()["startupBehavior"], "lastSession");
+        assert!(mgr
+            .build_live_sync_js(&with_renderer)
+            .contains("window.chromeUI?.setMarkdownRenderer?.(\"super\")"));
     }
 }

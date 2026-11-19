@@ -8,6 +8,7 @@ import {
   setMarkdownSyntaxStandard,
   registerMarkdownRenderer,
   listMarkdownRenderers,
+  hydrateDiagrams,
   type MarkdownSyntaxStandard,
 } from '../modules/markdown-renderer';
 
@@ -109,6 +110,8 @@ function updateContent(force = false): void {
     previewState.lastContent = text;
     body.innerHTML = renderMarkdown(text);
     attachPreviewInteractions();
+    // Async diagram plugins (PlantUML, D2, compressed draw.io, …) finish rendering here.
+    void hydrateDiagrams(body);
     updateSummary();
   };
 
@@ -144,14 +147,12 @@ function attachPreviewInteractions(): void {
       }
 
       const line = parseInt(lineAttr, 10);
-      const checked = checkbox.checked;
       const { from, to } = getEditorLineRange(line);
       const lineText = getEditorView()?.state.doc.sliceString(from, to) ?? '';
-      const updated = checked
-        ? lineText.replace(/\[x\]/i, '[ ]')
-        : lineText.replace(/\[ \]/, '[x]');
-
-      getEditorView()?.dispatch({ changes: { from, to, insert: updated } });
+      const updated = toggleTaskMarker(lineText);
+      if (updated !== null && updated !== lineText) {
+        getEditorView()?.dispatch({ changes: { from, to, insert: updated } });
+      }
     });
   });
 
@@ -178,6 +179,21 @@ function attachPreviewInteractions(): void {
     });
   });
 
+  // SuperMarkdown tab sets
+  previewState.body.querySelectorAll<HTMLButtonElement>('.msm-tab-button').forEach(button => {
+    button.addEventListener('click', () => {
+      const tabset = button.closest('.msm-tabset');
+      if (tabset === null) {
+        return;
+      }
+
+      const index = button.dataset.tab;
+      tabset.querySelectorAll<HTMLElement>(':scope > .msm-tab-list > .msm-tab-button, :scope > .msm-tab-panel').forEach(element => {
+        element.classList.toggle('is-active', element.dataset.tab === index);
+      });
+    });
+  });
+
   // Mermaid source toggle
   previewState.body.querySelectorAll<HTMLButtonElement>('.markedit-mermaid-toggle').forEach(button => {
     button.addEventListener('click', () => {
@@ -187,6 +203,21 @@ function attachPreviewInteractions(): void {
       }
     });
   });
+}
+
+/**
+ * Toggles the task marker of a list item line. The click handler runs after the browser has
+ * already flipped `checkbox.checked`, so the source text (not the DOM state) decides the result:
+ * an open task (`[ ]`) becomes done, any other state (`[x]`, `[X]`, `[/]`, `[-]`) becomes open.
+ */
+export function toggleTaskMarker(lineText: string): string | null {
+  const match = /^(\s*(?:>\s*)*(?:[-*+]|\d{1,9}[.)]|\(@[\w-]*\))[ \t]+)\[([ xX/-])\]/.exec(lineText);
+  if (match === null) {
+    return null;
+  }
+
+  const next = match[2] === ' ' ? 'x' : ' ';
+  return `${match[1]}[${next}]${lineText.slice(match[0].length)}`;
 }
 
 async function copyToClipboard(text: string, button: HTMLButtonElement, feedback: string): Promise<void> {
@@ -299,7 +330,8 @@ export function syncScroll(): void {
   }
 
   const { first, last } = getVisibleEditorLines(scroller, editor);
-  const anchor = findAnchorElement(first, last);
+  // Editor line numbers are 1-based; preview `data-line` attributes are 0-based.
+  const anchor = findAnchorElement(first - 1, last - 1);
 
   if (anchor === null) {
     const ratio = scroller.scrollTop / (scroller.scrollHeight - scroller.clientHeight || 1);
@@ -386,6 +418,7 @@ function createSyntaxStandardSelect(): HTMLSelectElement {
 
   const standards: { value: MarkdownSyntaxStandard; label: string }[] = [
     { value: 'extended', label: 'Extended' },
+    { value: 'super', label: 'SuperMarkdown' },
     { value: 'gfm', label: 'GFM' },
     { value: 'commonmark', label: 'CommonMark' },
   ];
@@ -398,7 +431,7 @@ function createSyntaxStandardSelect(): HTMLSelectElement {
   }
 
   for (const engine of listMarkdownRenderers()) {
-    if (engine.id === 'commonmark' || engine.id === 'gfm' || engine.id === 'extended') {
+    if (standards.some(standard => standard.value === engine.id)) {
       continue;
     }
     const option = document.createElement('option');
@@ -410,8 +443,8 @@ function createSyntaxStandardSelect(): HTMLSelectElement {
   select.value = getActiveMarkdownRenderer().id;
 
   select.addEventListener('change', () => {
-    setActiveMarkdownRenderer(select.value);
-    updateContent(true);
+    setMarkdownRenderer(select.value);
+    void persistMarkdownRenderer(select.value);
   });
 
   return select;
@@ -666,7 +699,37 @@ export function getMarkdownStandard(): MarkdownSyntaxStandard {
 export { registerMarkdownRenderer };
 
 export function setMarkdownRenderer(id: string): void {
+  if (!listMarkdownRenderers().some(engine => engine.id === id)) {
+    console.warn(`Unknown markdown renderer: ${id}`);
+    return;
+  }
+
+  const changed = getActiveMarkdownRenderer().id !== id;
   setActiveMarkdownRenderer(id);
+  document.querySelectorAll<HTMLSelectElement>('.markedit-preview-standard-select').forEach(select => {
+    select.value = id;
+  });
+  if (changed) {
+    updateContent(true);
+  }
+}
+
+/** Saves the parser choice as the `preview.markdownRenderer` user setting. */
+async function persistMarkdownRenderer(id: string): Promise<void> {
+  const invoke = window.__TAURI_INTERNALS__?.invoke;
+  if (invoke === undefined) {
+    return;
+  }
+
+  try {
+    await invoke('settings_update', { patch: { markdownRenderer: id } });
+  } catch (error) {
+    console.error('Failed to save markdown renderer:', error);
+  }
+}
+
+/** Re-renders the preview, e.g. after a renderer plugin or the diagram server changed. */
+export function refreshMarkdownPreview(): void {
   updateContent(true);
 }
 
