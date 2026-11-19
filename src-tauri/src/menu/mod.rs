@@ -23,6 +23,8 @@ pub struct ViewState {
     pub mode: String,
     pub renderer: String,
     pub sync_scroll: bool,
+    /// Elements rendered inside the editor (tables, math, diagrams…).
+    pub live_preview: bool,
 }
 
 static VIEW_STATE: Mutex<Option<ViewState>> = Mutex::new(None);
@@ -63,12 +65,14 @@ pub fn current_view_state() -> ViewState {
         .lock()
         .ok()
         .and_then(|state| state.clone())
-        .unwrap_or_else(|| ViewState {
-            mode: "editor".to_string(),
-            renderer: crate::settings::SettingsManager::new()
-                .load_user_settings()
-                .markdown_renderer,
-            sync_scroll: true,
+        .unwrap_or_else(|| {
+            let settings = crate::settings::SettingsManager::new().load_user_settings();
+            ViewState {
+                mode: "editor".to_string(),
+                renderer: settings.markdown_renderer,
+                sync_scroll: true,
+                live_preview: settings.live_preview,
+            }
         })
 }
 
@@ -106,6 +110,7 @@ pub fn apply_view_state<R: Runtime>(app: &AppHandle<R>, state: ViewState) {
         set_menu_checked(app, &format!("view.parser.{id}"), state.renderer == *id);
     }
     set_menu_checked(app, "view.preview_sync", state.sync_scroll);
+    set_menu_checked(app, "view.live_preview", state.live_preview);
     if let Ok(mut stored) = VIEW_STATE.lock() {
         *stored = Some(state);
     }
@@ -695,6 +700,11 @@ pub fn build_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> 
                 .build(app)?,
         )
         .item(&MenuItemBuilder::with_id("view.preview_copy_html", "Copy Preview HTML").build(app)?)
+        .item(
+            &CheckMenuItemBuilder::with_id("view.live_preview", "Live Preview in Editor")
+                .checked(view_state.live_preview)
+                .build(app)?,
+        )
         .separator()
         .item(&MenuItemBuilder::with_id("view.toc", "Table of Contents").build(app)?)
         .item(&MenuItemBuilder::with_id("view.stats", "Document Statistics").build(app)?)
@@ -1030,6 +1040,7 @@ pub fn menu_id_to_web_script(menu_id: &str) -> Option<String> {
         "view.mode.preview" => Some(WebBridge::format_chrome_call("setMarkdownPreviewMode", Some(json!("preview")))),
         "view.preview_sync" => Some(WebBridge::format_chrome_call("togglePreviewSyncScroll", None)),
         "view.preview_copy_html" => Some(WebBridge::format_chrome_call("copyPreviewHtml", None)),
+        "view.live_preview" => Some(WebBridge::format_chrome_call("toggleEditorLivePreview", None)),
         "view.toc" | "go.header" => Some(WebBridge::format_chrome_call("toggleToc", None)),
         "view.stats" => Some(WebBridge::format_chrome_call("toggleStatistics", None)),
         "view.line_numbers" => Some(
@@ -1102,6 +1113,8 @@ fn apply_expected_view_state<R: Runtime>(app: &AppHandle<R>, menu_id: &str) {
         state.renderer = id.to_string();
     } else if menu_id == "view.preview_sync" {
         state.sync_scroll = !state.sync_scroll;
+    } else if menu_id == "view.live_preview" {
+        state.live_preview = !state.live_preview;
     } else {
         return;
     }
@@ -1824,6 +1837,7 @@ mod tests {
         }
         assert!(menu_id_to_web_script("view.preview_sync").expect("sync").contains("togglePreviewSyncScroll"));
         assert!(menu_id_to_web_script("view.preview_copy_html").expect("copy").contains("copyPreviewHtml"));
+        assert!(menu_id_to_web_script("view.live_preview").expect("live").contains("toggleEditorLivePreview"));
 
         // Parser items switch the renderer and persist the choice.
         let parser = parser_menu_script("view.parser.super").expect("parser");

@@ -127,6 +127,7 @@ async fn view_state_changed(
     mode: String,
     renderer: String,
     sync_scroll: bool,
+    live_preview: Option<bool>,
 ) -> Result<(), String> {
     let others_focused = window
         .app_handle()
@@ -136,7 +137,12 @@ async fn view_state_changed(
     if !others_focused {
         menu::apply_view_state(
             window.app_handle(),
-            menu::ViewState { mode, renderer, sync_scroll },
+            menu::ViewState {
+                mode,
+                renderer,
+                sync_scroll,
+                live_preview: live_preview.unwrap_or(false),
+            },
         );
     }
     Ok(())

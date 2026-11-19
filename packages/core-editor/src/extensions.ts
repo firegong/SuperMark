@@ -31,7 +31,7 @@ import { IndentBehavior } from './config';
 import { bundledLanguages } from './languages';
 import { editingState } from './common/store';
 import { playSystemBeep } from './common/utils';
-import { createLivePreviewExtension } from './chrome/liveEditorPreview';
+import { livePreviewExtension } from './chrome/liveEditorPreview';
 
 import { isActive as isWritingToolsActive } from './modules/writingTools';
 import { localizePhrases } from './modules/localization';
@@ -167,8 +167,8 @@ export function extensions(options: { lineBreak?: string }) {
     linkStyles, // Must after invisibles because whitespaces can break this
     selectedLines.of(window.config.focusMode ? selectedLinesDecoration : []),
 
-    // Live rendered preview inside the editor
-    createLivePreviewExtension(),
+    // Optional rendering of tables, math, diagrams… inside the editor (off by default)
+    livePreviewExtension(),
 
     // Input handling
     wordTokenizer(),

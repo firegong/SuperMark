@@ -87,6 +87,8 @@ declare global {
     setDiagramServer(url: string): void;
     setDiagramRendering(mode: string): void;
     togglePreviewSyncScroll(): void;
+    setEditorLivePreview(enabled: boolean): void;
+    toggleEditorLivePreview(): void;
     copyPreviewHtml(): void;
     closeAll(): void;
   }

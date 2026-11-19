@@ -3,7 +3,7 @@ import { EditorView } from '@codemirror/view';
 import type { ExtensionUpdateBehavior, ExtensionsManagerState } from '../src/chrome/extensionsModal';
 import type { UserSettings } from '../src/chrome/settingsModal';
 import { setMarkdownPreviewMode, syncScroll } from '../src/chrome/markdownPreview';
-import { createLivePreviewExtension } from '../src/chrome/liveEditorPreview';
+import { createLivePreviewExtension, livePreviewExtension } from '../src/chrome/liveEditorPreview';
 import {
   renderMarkdownToHtml,
   setMarkdownSyntaxStandard,
@@ -628,6 +628,7 @@ describe('Settings Modal', () => {
     invisiblesBehavior: 'selection',
     typewriterMode: false,
     focusMode: false,
+    livePreview: false,
     lineWrapping: true,
     lineHeight: 1.5,
     tabKeyBehavior: 2,
@@ -1196,7 +1197,7 @@ describe('Native View menu state', () => {
 
     setMarkdownPreviewMode('split');
     await tick();
-    expect(viewStates(invoke).at(-1)).toEqual({ mode: 'split', renderer: getActiveMarkdownRenderer().id, syncScroll: true });
+    expect(viewStates(invoke).at(-1)).toEqual({ mode: 'split', renderer: getActiveMarkdownRenderer().id, syncScroll: true, livePreview: false });
 
     (window.chromeUI as ChromeUI).togglePreviewSyncScroll();
     expect(viewStates(invoke).at(-1)).toMatchObject({ mode: 'split', syncScroll: false });
@@ -1210,6 +1211,30 @@ describe('Native View menu state', () => {
     const before = viewStates(invoke).length;
     window.dispatchEvent(new Event('focus'));
     expect(viewStates(invoke).length).toBe(before + 1);
+  });
+
+  test('live preview in the editor is off by default and toggled from the View menu', async () => {
+    const invoke = jest.fn<Invoke>(async () => undefined);
+    (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = { invoke };
+    // An editor with the app's live preview slot (the saved setting is off).
+    document.body.innerHTML = '';
+    editor.setUp('Intro\n\n| a | b |\n|---|---|\n| 1 | 2 |', livePreviewExtension());
+    const view = window.editor;
+    view.dispatch({ selection: { anchor: 0 } });
+
+    // Off: the table is plain source.
+    expect(view.dom.querySelector('.cm-live-table')).toBeNull();
+
+    (window.chromeUI as ChromeUI).toggleEditorLivePreview();
+    await tick();
+    expect(view.dom.querySelector('.cm-live-table')).not.toBeNull();
+    expect(viewStates(invoke).at(-1)).toMatchObject({ livePreview: true });
+    expect(invoke).toHaveBeenCalledWith('settings_update', { patch: { livePreview: true } });
+
+    (window.chromeUI as ChromeUI).toggleEditorLivePreview();
+    await tick();
+    expect(view.dom.querySelector('.cm-live-table')).toBeNull();
+    expect(viewStates(invoke).at(-1)).toMatchObject({ livePreview: false });
   });
 
   test('Copy Preview HTML copies the rendered document in any mode', async () => {
@@ -1409,6 +1434,7 @@ describe('Settings Modal Window Controls', () => {
     invisiblesBehavior: 'selection',
     typewriterMode: false,
     focusMode: false,
+    livePreview: false,
     lineWrapping: true,
     lineHeight: 1.5,
     tabKeyBehavior: 2,

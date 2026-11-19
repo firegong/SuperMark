@@ -1,5 +1,5 @@
 import { EditorView, Decoration, DecorationSet, WidgetType } from '@codemirror/view';
-import { StateField, type EditorState, type Extension } from '@codemirror/state';
+import { Compartment, StateField, type EditorState, type Extension } from '@codemirror/state';
 import { getMarkdownSyntaxStandard, renderMath, renderMermaid } from '../modules/markdown-renderer';
 
 function isRangeActive(state: EditorState, from: number, to: number): boolean {
@@ -333,4 +333,35 @@ export function createLivePreviewExtension(): Extension {
   });
 
   return field;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Live preview is optional and off by default: the editor shows Markdown source and the
+// preview renders it. View → Live Preview in Editor (setting `editor.livePreview`) turns it on.
+// ---------------------------------------------------------------------------------------------
+
+const livePreviewCompartment = new Compartment();
+
+function configuredLivePreview(): boolean {
+  return (window.config as { livePreview?: unknown } | undefined)?.livePreview === true;
+}
+
+/** The editor extension slot; starts with the saved setting. */
+export function livePreviewExtension(): Extension {
+  return livePreviewCompartment.of(configuredLivePreview() ? createLivePreviewExtension() : []);
+}
+
+export function isEditorLivePreview(): boolean {
+  return configuredLivePreview();
+}
+
+/** Turns live preview on or off in this window (no-op when already in that state). */
+export function setEditorLivePreview(enabled: boolean): boolean {
+  const changed = configuredLivePreview() !== enabled;
+  (window.config as { livePreview?: boolean }).livePreview = enabled;
+  const editor = window.editor as typeof window.editor | undefined;
+  if (changed && editor !== undefined) {
+    editor.dispatch({ effects: livePreviewCompartment.reconfigure(enabled ? createLivePreviewExtension() : []) });
+  }
+  return changed;
 }

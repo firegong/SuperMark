@@ -62,6 +62,9 @@ pub struct EditorConfig {
     pub read_only_mode: bool,
     pub typewriter_mode: bool,
     pub focus_mode: bool,
+    /// Render tables, math, diagrams and other elements inside the editor (off: plain source).
+    #[serde(default)]
+    pub live_preview: bool,
     pub line_wrapping: bool,
     pub line_height: f64,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -106,6 +109,10 @@ pub struct UserSettings {
     pub typewriter_mode: bool,
     #[serde(rename = "editor.focusMode")]
     pub focus_mode: bool,
+    /// Render tables, math, diagrams and other elements inside the editor. Off by default:
+    /// the editor shows Markdown source; the preview renders it.
+    #[serde(rename = "editor.livePreview")]
+    pub live_preview: bool,
     #[serde(rename = "editor.lineWrapping")]
     pub line_wrapping: bool,
     #[serde(rename = "editor.lineHeight")]
@@ -174,6 +181,7 @@ impl Default for UserSettings {
             invisibles_behavior: "selection".to_string(),
             typewriter_mode: false,
             focus_mode: false,
+            live_preview: false,
             line_wrapping: true,
             line_height: 1.5,
             tab_key_behavior: 0,
@@ -223,6 +231,7 @@ impl UserSettings {
             read_only_mode: false,
             typewriter_mode: self.typewriter_mode,
             focus_mode: self.focus_mode,
+            live_preview: self.live_preview,
             line_wrapping: self.line_wrapping,
             line_height: self.line_height,
             default_line_break: Some(self.default_line_break.clone()),
@@ -256,6 +265,7 @@ impl UserSettings {
             );
             obj.insert("typewriterMode".to_string(), json!(self.typewriter_mode));
             obj.insert("focusMode".to_string(), json!(self.focus_mode));
+            obj.insert("livePreview".to_string(), json!(self.live_preview));
             obj.insert("lineWrapping".to_string(), json!(self.line_wrapping));
             obj.insert("lineHeight".to_string(), json!(self.line_height));
             obj.insert("tabKeyBehavior".to_string(), json!(self.tab_key_behavior));
@@ -327,6 +337,7 @@ fn canonical_setting_key(key: &str) -> Option<&'static str> {
         "editor.invisiblesBehavior" | "invisiblesBehavior" => Some("editor.invisiblesBehavior"),
         "editor.typewriterMode" | "typewriterMode" => Some("editor.typewriterMode"),
         "editor.focusMode" | "focusMode" => Some("editor.focusMode"),
+        "editor.livePreview" | "livePreview" => Some("editor.livePreview"),
         "editor.lineWrapping" | "lineWrapping" => Some("editor.lineWrapping"),
         "editor.lineHeight" | "lineHeight" => Some("editor.lineHeight"),
         "editor.tabKeyBehavior" | "tabKeyBehavior" => Some("editor.tabKeyBehavior"),
@@ -442,6 +453,7 @@ impl SettingsManager {
             s.invisibles_behavior = legacy.invisibles_behavior;
             s.typewriter_mode = legacy.typewriter_mode;
             s.focus_mode = legacy.focus_mode;
+            s.live_preview = legacy.live_preview;
             s.line_wrapping = legacy.line_wrapping;
             s.line_height = legacy.line_height;
             if let Some(lb) = legacy.default_line_break {
@@ -505,6 +517,7 @@ impl SettingsManager {
         user.invisibles_behavior = config.invisibles_behavior.clone();
         user.typewriter_mode = config.typewriter_mode;
         user.focus_mode = config.focus_mode;
+        user.live_preview = config.live_preview;
         user.line_wrapping = config.line_wrapping;
         user.line_height = config.line_height;
         if let Some(ref lb) = config.default_line_break {
@@ -551,6 +564,7 @@ impl SettingsManager {
             .unwrap_or_else(|_| "\"\"".to_string());
         let renderer_json = serde_json::to_string(&settings.markdown_renderer)
             .unwrap_or_else(|_| "\"extended\"".to_string());
+        let live_preview = settings.live_preview;
         let reduce_trans_str = if settings.reduce_transparency {
             "true"
         } else {
@@ -592,6 +606,7 @@ impl SettingsManager {
   window.chromeUI?.setDiagramRendering?.({diagram_rendering_json});
   window.chromeUI?.setDiagramServer?.({diagram_server_json});
   window.chromeUI?.setMarkdownRenderer?.({renderer_json});
+  window.chromeUI?.setEditorLivePreview?.({live_preview});
 }})();"#
         )
     }

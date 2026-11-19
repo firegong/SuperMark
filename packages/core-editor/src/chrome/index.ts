@@ -26,6 +26,15 @@ import {
   copyPreviewHtml,
   MarkdownPreviewMode,
 } from './markdownPreview';
+import { isEditorLivePreview, setEditorLivePreview } from './liveEditorPreview';
+
+async function saveLivePreview(enabled: boolean): Promise<void> {
+  try {
+    await window.__TAURI_INTERNALS__?.invoke('settings_update', { patch: { livePreview: enabled } });
+  } catch (error) {
+    console.error('Failed to save the live preview setting:', error);
+  }
+}
 import type { MarkdownRendererEngine, DiagramPlugin, MathPlugin } from '../modules/markdown-renderer';
 import {
   registerDiagramPlugin,
@@ -219,6 +228,18 @@ export function initChromeUI(): void {
     },
     togglePreviewSyncScroll() {
       togglePreviewSyncScroll();
+    },
+    setEditorLivePreview(enabled) {
+      if (setEditorLivePreview(enabled)) {
+        publishViewState();
+      }
+    },
+    toggleEditorLivePreview() {
+      const enabled = !isEditorLivePreview();
+      setEditorLivePreview(enabled);
+      publishViewState();
+      // Saved, and applied to the other windows by the settings live sync.
+      void saveLivePreview(enabled);
     },
     copyPreviewHtml() {
       void copyPreviewHtml();

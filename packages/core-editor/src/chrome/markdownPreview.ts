@@ -1,4 +1,5 @@
 import { createElement } from './utils';
+import { isEditorLivePreview } from './liveEditorPreview';
 import { clearIncludeCache, includeOptions } from './includeLoader';
 import {
   buildAnchors,
@@ -1040,6 +1041,7 @@ async function reportViewState(): Promise<void> {
       mode: previewState.mode,
       renderer: getActiveMarkdownRenderer().id,
       syncScroll: previewState.syncScroll,
+      livePreview: isEditorLivePreview(),
     });
   } catch (error) {
     console.error('Failed to report view state:', error);

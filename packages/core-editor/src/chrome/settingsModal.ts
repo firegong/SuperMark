@@ -14,6 +14,7 @@ export interface UserSettings {
   invisiblesBehavior: 'never' | 'selection' | 'trailing' | 'always';
   typewriterMode: boolean;
   focusMode: boolean;
+  livePreview: boolean;
   lineWrapping: boolean;
   lineHeight: number;
   tabKeyBehavior: number;
@@ -71,6 +72,7 @@ export function normalizeUserSettings(
     invisiblesBehavior: 'selection',
     typewriterMode: false,
     focusMode: false,
+    livePreview: false,
     lineWrapping: true,
     lineHeight: 1.5,
     tabKeyBehavior: 2,
@@ -117,6 +119,7 @@ export function normalizeUserSettings(
     ),
     typewriterMode: Boolean(pickValue(raw, ['typewriterMode', 'editor.typewriterMode'], base.typewriterMode)),
     focusMode: Boolean(pickValue(raw, ['focusMode', 'editor.focusMode'], base.focusMode)),
+    livePreview: Boolean(pickValue(raw, ['livePreview', 'editor.livePreview'], base.livePreview)),
     lineWrapping: Boolean(pickValue(raw, ['lineWrapping', 'editor.lineWrapping'], base.lineWrapping)),
     lineHeight: Number(pickValue(raw, ['lineHeight', 'editor.lineHeight'], base.lineHeight)),
     tabKeyBehavior: Number(pickValue(raw, ['tabKeyBehavior', 'editor.tabKeyBehavior'], base.tabKeyBehavior)),
@@ -549,6 +552,9 @@ export function createSettingsModal(
       case 'focusMode':
         configModule?.setFocusMode?.({ enabled: Boolean(value) });
         break;
+      case 'livePreview':
+        window.chromeUI?.setEditorLivePreview(Boolean(value));
+        break;
       case 'lineWrapping':
         configModule?.setLineWrapping?.({ enabled: Boolean(value) });
         break;
@@ -640,6 +646,7 @@ export function createSettingsModal(
     applyLocalChange('invisiblesBehavior', next.invisiblesBehavior);
     applyLocalChange('typewriterMode', next.typewriterMode);
     applyLocalChange('focusMode', next.focusMode);
+    applyLocalChange('livePreview', next.livePreview);
     applyLocalChange('lineWrapping', next.lineWrapping);
     applyLocalChange('lineHeight', next.lineHeight);
     applyLocalChange('tabKeyBehavior', next.tabKeyBehavior);
@@ -708,6 +715,9 @@ export function createSettingsModal(
       void updateSetting('invisiblesBehavior', value);
     });
     displaySection.appendChild(invisiblesField);
+    displaySection.appendChild(createToggle('Live Preview in Editor', settings.livePreview, value => {
+      void updateSetting('livePreview', value);
+    }));
 
     const editSection = createSection('Edit Behavior');
     editSection.appendChild(createToggle('Line Wrapping', settings.lineWrapping, value => {
