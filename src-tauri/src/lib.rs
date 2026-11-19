@@ -554,6 +554,23 @@ pub fn run() {
             let app_menu = menu::build_app_menu(app_handle)?;
             app.set_menu(app_menu)?;
 
+            // The main window is created here (tauri.conf.json has `"create": false`) so the
+            // bridge bootstrap runs as an initialization script before the page's own scripts,
+            // exactly like document windows. Injecting it later with `eval` raced the page load:
+            // the polyfill was lost or `notifyWindowDidLoad` was missed, so opened files never
+            // reached the editor.
+            let main_config = app
+                .config()
+                .app
+                .windows
+                .iter()
+                .find(|window| window.label == "main")
+                .cloned()
+                .ok_or("tauri.conf.json has no \"main\" window")?;
+            WebviewWindowBuilder::from_config(app_handle, &main_config)?
+                .initialization_script(&init_script)
+                .build()?;
+
             let doc_mgr = app.state::<DocumentManager>();
             let _ = doc_mgr.extensions().ensure_directories();
 
@@ -702,9 +719,6 @@ pub fn run() {
                 }
             });
 
-            if let Some(main_win) = app.get_webview_window("main") {
-                let _ = main_win.eval(&init_script);
-            }
             Ok(())
         })
         .on_menu_event(|app, event| {
@@ -773,4 +787,32 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running MarkEdit-Win Tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    /// The main window must be created in `setup` (with the bridge bootstrap as an
+    /// initialization script), not automatically from tauri.conf.json: injecting the bootstrap
+    /// later with `eval` raced the page load and opened files never reached the editor.
+    #[test]
+    fn main_window_is_created_by_setup_with_the_bootstrap() {
+        let conf: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.conf.json")).expect("tauri.conf.json");
+        let main = conf["app"]["windows"]
+            .as_array()
+            .and_then(|windows| windows.iter().find(|w| w["label"] == "main"))
+            .expect("main window config");
+        assert_eq!(main["create"], serde_json::json!(false));
+
+        let source = include_str!("lib.rs");
+        assert!(source.contains(".initialization_script(&init_script)"));
+        assert!(!source.contains(concat!("main_win.eval(", "&init_script)")));
+    }
+
+    #[test]
+    fn index_html_merges_host_config_instead_of_overwriting_it() {
+        let html = include_str!("../../packages/core-editor/index.html");
+        assert!(html.contains("Object.assign({}, typeof hostConfig === 'object' ? hostConfig : {}, injected)"));
+        assert!(!html.contains(concat!("window.config = ", "\"{{EDITOR_CONFIG}}\";")));
+    }
 }

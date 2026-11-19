@@ -9,11 +9,19 @@
   <link href="./src/modules/preview/index.css" type="text/css" rel="stylesheet">
   <link href="./src/@quicklook/index.css" type="text/css" rel="stylesheet">
   <script>
-    window.config = "{{EDITOR_CONFIG}}";
-    MarkEdit = {
-      editorConfig: window.config,
-      userSettings: "{{USER_SETTINGS}}",
-    };
+    // Merge, do not overwrite: the desktop host injects window.config and MarkEdit.userSettings
+    // with an initialization script that runs before this one.
+    (function () {
+      var hostConfig = "{{EDITOR_CONFIG}}";
+      var hostSettings = "{{USER_SETTINGS}}";
+      var injected = typeof window.config === 'object' && window.config !== null ? window.config : {};
+      window.config = Object.assign({}, typeof hostConfig === 'object' ? hostConfig : {}, injected);
+      var existing = typeof window.MarkEdit === 'object' && window.MarkEdit !== null ? window.MarkEdit : {};
+      window.MarkEdit = Object.assign({}, existing, {
+        editorConfig: window.config,
+        userSettings: existing.userSettings || (typeof hostSettings === 'object' ? hostSettings : {}),
+      });
+    })();
   </script>
 </head>
 <body>
