@@ -1,5 +1,15 @@
 import { createElement } from './utils';
 import { clearIncludeCache, includeOptions } from './includeLoader';
+import {
+  buildAnchors,
+  lineToOffset,
+  matchHeadings,
+  offsetToLine,
+  referenceOffset,
+  scrollTopForOffset,
+  sourceHeadings,
+  type ScrollAnchor,
+} from './scrollSync';
 import { globalState } from '../common/store';
 import {
   renderMarkdown,
@@ -95,8 +105,10 @@ function updateContent(force = false): void {
     // SuperMarkdown @include: files are read ahead and the preview re-renders when they arrive.
     body.innerHTML = renderMarkdown(text, includeOptions(text, () => updateContent(true)));
     attachPreviewInteractions();
-    // Async diagram plugins (PlantUML, D2, compressed draw.io, …) finish rendering here.
-    void hydrateDiagrams(body);
+    realignAfterRender();
+    // Async diagram plugins (PlantUML, D2, compressed draw.io, …) finish rendering here; their
+    // final size moves everything below them.
+    void hydrateAndRealign(body);
   };
 
   if (force) {
@@ -156,6 +168,7 @@ async function renderDocumentInFrame(body: HTMLElement, renderDocument: (markdow
   // Same styles as before: swap the body in place so scroll position and styles stay put.
   if (frame !== null && frameDocument !== null && frame.dataset.head === headSignature) {
     frameDocument.body.innerHTML = parsed.body.innerHTML;
+    realignAfterRender();
     return;
   }
 
@@ -191,7 +204,8 @@ async function renderDocumentInFrame(body: HTMLElement, renderDocument: (markdow
         loaded.getElementById(decodeURIComponent(href.slice(1)))?.scrollIntoView();
       }
     });
-    syncScroll();
+    attachFrameScrollSync(loaded);
+    realignAfterRender();
   }, { once: true });
   frame.srcdoc = html;
 }
@@ -255,6 +269,7 @@ function attachPreviewInteractions(): void {
       tabset.querySelectorAll<HTMLElement>(':scope > .msm-tab-list > .msm-tab-button, :scope > .msm-tab-panel').forEach(element => {
         element.classList.toggle('is-active', element.dataset.tab === index);
       });
+      invalidateScrollAnchors();
     });
   });
 
@@ -264,6 +279,7 @@ function attachPreviewInteractions(): void {
       const container = button.closest('.markedit-preview-mermaid');
       if (container !== null) {
         container.classList.toggle('is-source-visible');
+        invalidateScrollAnchors();
       }
     });
   });
@@ -291,130 +307,318 @@ async function copyToClipboard(text: string, button: HTMLButtonElement, feedback
   setTimeout(() => { button.textContent = original; }, 1200);
 }
 
-function getVisibleEditorLines(scroller: HTMLElement, editor: typeof window.editor): { first: number; last: number } {
-  const totalLines = editor.state.doc.lines;
+// ---------------------------------------------------------------------------------------------
+// Scroll sync (split view), in both directions. See scrollSync.ts for the geometry.
+// ---------------------------------------------------------------------------------------------
 
-  if (scroller.scrollTop <= 2) {
-    return { first: 1, last: Math.min(1, totalLines) };
-  }
+type ScrollSide = 'editor' | 'preview';
 
-  const topBlock = editor.lineBlockAtHeight(scroller.scrollTop);
-  const bottomBlock = editor.lineBlockAtHeight(scroller.scrollTop + (scroller.clientHeight || 400));
-
-  const hasRealLayout = !(topBlock.from === 0 && bottomBlock.to === 0);
-  if (hasRealLayout) {
-    return {
-      first: editor.state.doc.lineAt(topBlock.from).number,
-      last: editor.state.doc.lineAt(bottomBlock.to).number,
-    };
-  }
-
-  const topFraction = scroller.scrollTop / Math.max(1, scroller.scrollHeight);
-  const visibleFraction = (scroller.clientHeight || 200) / Math.max(1, scroller.scrollHeight);
-  const first = Math.max(1, Math.floor(topFraction * totalLines) + 1);
-  const last = Math.min(totalLines, Math.max(first, Math.ceil((topFraction + visibleFraction) * totalLines)));
-  return { first, last };
+interface PreviewSurface {
+  scroller: HTMLElement;
+  root: HTMLElement;
+  framed: boolean;
+  /** Offset of an element from the top of the scrollable content. */
+  offsetOf: (element: Element) => number;
 }
 
-function getEditorViewportOffset(scroller: HTMLElement, editor: typeof window.editor): number {
-  if (scroller.scrollTop <= 2) {
-    return 0;
-  }
+const scrollSyncState: {
+  anchors: ScrollAnchor[] | null;
+  anchorsKey: string;
+  anchorsTime: number;
+  contentVersion: number;
+  /** Last user input (wheel, click, key, touch) in each pane: the more recent one drives. */
+  lastInput: Record<ScrollSide, number>;
+  /** Positions this code set: the scroll events they cause are not user scrolling. */
+  echo: Record<ScrollSide, { top: number; until: number } | null>;
+} = {
+  anchors: null,
+  anchorsKey: '',
+  anchorsTime: 0,
+  contentVersion: 0,
+  lastInput: { editor: 0, preview: 0 },
+  echo: { editor: null, preview: null },
+};
 
-  const topBlock = editor.lineBlockAtHeight(scroller.scrollTop);
-  if (topBlock.from === 0 && topBlock.to === 0) {
-    return 0;
-  }
+const ANCHOR_CACHE_MS = 1500;
+const ECHO_MS = 300;
+/** After input in the preview, editor scroll adjustments (re-measuring) do not move it back. */
+const PREVIEW_DRIVE_MS = 1000;
 
-  return Math.max(0, topBlock.top - scroller.scrollTop);
+function now(): number {
+  return typeof performance !== 'undefined' ? performance.now() : Date.now();
 }
 
-function getRelativeOffset(child: HTMLElement, parent: HTMLElement): number {
-  const childRect = child.getBoundingClientRect();
-  const parentRect = parent.getBoundingClientRect();
-
-  if (childRect.height > 0 && parentRect.height > 0) {
-    return childRect.top - parentRect.top + parent.scrollTop;
-  }
-
-  return child.offsetTop - parent.offsetTop;
+function isScrollSyncActive(): boolean {
+  return previewState.syncScroll && previewState.mode === 'split' && previewState.body !== null;
 }
 
-function findAnchorElement(firstLine: number, lastLine: number): HTMLElement | null {
+function previewSurface(): PreviewSurface | null {
   const body = previewState.body;
   if (body === null) {
     return null;
   }
 
-  const candidates = Array.from(body.querySelectorAll<HTMLElement>('[data-line]'))
-    .map(element => ({ element, line: parseInt(element.dataset.line ?? '-1', 10) }))
-    .filter(({ line }) => line >= firstLine && line <= lastLine)
-    .sort((a, b) => a.line - b.line);
-
-  if (candidates.length === 0) {
-    return null;
+  const frame = previewFrame(body);
+  if (frame !== null) {
+    const frameDocument = frame.contentDocument;
+    const scroller = frameDocument?.scrollingElement as HTMLElement | null | undefined;
+    if (frameDocument === null || scroller === null || scroller === undefined) {
+      return null;
+    }
+    return {
+      scroller,
+      root: frameDocument.body,
+      framed: true,
+      offsetOf: element => element.getBoundingClientRect().top + scroller.scrollTop,
+    };
   }
 
-  const heading = candidates.find(({ element }) => (
-    element.matches('h1, h2, h3, h4, h5, h6, .markedit-preview-heading') ||
-    element.querySelector('h1, h2, h3, h4, h5, h6, .markedit-preview-heading') !== null
-  ));
-  if (heading !== undefined) {
-    return heading.element;
-  }
-
-  const listItem = candidates.find(({ element }) => (
-    element.tagName === 'LI' ||
-    element.classList.contains('markedit-preview-task-item') ||
-    element.classList.contains('markedit-preview-list')
-  ));
-  if (listItem !== undefined) {
-    return listItem.element;
-  }
-
-  return candidates[0].element;
+  return {
+    scroller: body,
+    root: body,
+    framed: false,
+    offsetOf: element => element.getBoundingClientRect().top - body.getBoundingClientRect().top + body.scrollTop,
+  };
 }
 
+function isRendered(element: Element): boolean {
+  const rect = element.getBoundingClientRect();
+  return rect.width > 0 || rect.height > 0;
+}
+
+/** Forget measured preview positions (content re-rendered). */
+function invalidateScrollAnchors(): void {
+  scrollSyncState.contentVersion += 1;
+  scrollSyncState.anchors = null;
+}
+
+/**
+ * Anchors of the preview, cached while its size and content stay the same. Late layout changes
+ * (images, diagrams, tabs, details) change the content height or width, which rebuilds them.
+ */
+function previewAnchors(surface: PreviewSurface, totalLines: number): ScrollAnchor[] {
+  const { scroller, root } = surface;
+  const key = `${scrollSyncState.contentVersion}:${totalLines}:${scroller.scrollHeight}:${scroller.clientWidth}:${surface.framed ? 1 : 0}`;
+  if (scrollSyncState.anchors !== null && scrollSyncState.anchorsKey === key && now() - scrollSyncState.anchorsTime < ANCHOR_CACHE_MS) {
+    return scrollSyncState.anchors;
+  }
+
+  const raw: ScrollAnchor[] = [];
+  root.querySelectorAll<HTMLElement>('[data-line]').forEach(element => {
+    const line = parseInt(element.dataset.line ?? '', 10);
+    if (!Number.isNaN(line) && isRendered(element)) {
+      raw.push({ line, top: surface.offsetOf(element) });
+    }
+  });
+
+  // No line attributes (e.g. markdown-it in a frame): match headings by text instead.
+  if (raw.length === 0) {
+    const headings = Array.from(root.querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5, h6')).filter(isRendered);
+    const lines = matchHeadings(headings.map(heading => heading.textContent), sourceHeadings(getEditorText()));
+    headings.forEach((heading, index) => {
+      const line = lines.at(index);
+      if (line !== null && line !== undefined) {
+        raw.push({ line, top: surface.offsetOf(heading) });
+      }
+    });
+  }
+
+  scrollSyncState.anchors = buildAnchors(raw, totalLines, scroller.scrollHeight);
+  scrollSyncState.anchorsKey = key;
+  scrollSyncState.anchorsTime = now();
+  return scrollSyncState.anchors;
+}
+
+/** Offset of the editor's document inside its scroller (content padding, top panels). */
+function editorDocumentOffset(editor: typeof window.editor): number {
+  const scroller = editor.scrollDOM;
+  const offset = editor.documentTop - scroller.getBoundingClientRect().top + scroller.scrollTop;
+  return Number.isFinite(offset) ? offset : 0;
+}
+
+/** Fractional 0-based source line at a content offset of the editor scroller. */
+function editorLineAtOffset(editor: typeof window.editor, offset: number): number {
+  const doc = editor.state.doc;
+  const height = offset - editorDocumentOffset(editor);
+  if (height <= 0) {
+    return 0;
+  }
+
+  const block = editor.lineBlockAtHeight(height);
+  if (block.height <= 0) {
+    // No layout (e.g. hidden): fall back to the share of the content height.
+    const scroller = editor.scrollDOM;
+    return doc.lines * Math.min(1, offset / Math.max(1, scroller.scrollHeight));
+  }
+  if (height >= block.top + block.height && block.to >= doc.length) {
+    return doc.lines;
+  }
+
+  const first = doc.lineAt(block.from).number - 1;
+  const last = doc.lineAt(block.to).number - 1;
+  const fraction = Math.max(0, Math.min(1, (height - block.top) / block.height));
+  return first + fraction * (last - first + 1);
+}
+
+/** Content offset of the editor scroller at a fractional 0-based source line. */
+function editorOffsetAtLine(editor: typeof window.editor, line: number): number {
+  const doc = editor.state.doc;
+  const base = editorDocumentOffset(editor);
+  if (line >= doc.lines) {
+    const lastBlock = editor.lineBlockAt(doc.length);
+    return base + lastBlock.top + lastBlock.height;
+  }
+
+  const index = Math.max(0, Math.floor(line));
+  const docLine = doc.line(index + 1);
+  const block = editor.lineBlockAt(docLine.from);
+  if (block.height <= 0) {
+    // No layout: the same share of the content height as editorLineAtOffset.
+    return editor.scrollDOM.scrollHeight * Math.max(0, line) / Math.max(1, doc.lines);
+  }
+  const first = doc.lineAt(block.from).number - 1;
+  const span = doc.lineAt(block.to).number - first;
+  const fraction = (line - first) / Math.max(1, span);
+  return base + block.top + Math.max(0, Math.min(1, fraction)) * block.height;
+}
+
+/** Scrolls `element` and remembers the position, so its scroll event is not taken as user input. */
+function setSyncedScrollTop(side: ScrollSide, element: HTMLElement, top: number): void {
+  const before = element.scrollTop;
+  if (Math.abs(before - top) < 0.5) {
+    return;
+  }
+  element.scrollTop = top;
+  const after = element.scrollTop;
+  if (Math.abs(after - before) >= 0.5) {
+    scrollSyncState.echo[side] = { top: after, until: now() + ECHO_MS };
+  }
+}
+
+/** Whether a scroll event is the result of `setSyncedScrollTop`. */
+function isScrollEcho(side: ScrollSide, top: number): boolean {
+  const echo = scrollSyncState.echo[side];
+  if (echo === null) {
+    return false;
+  }
+  if (now() > echo.until) {
+    scrollSyncState.echo[side] = null;
+    return false;
+  }
+  if (Math.abs(top - echo.top) <= 1) {
+    scrollSyncState.echo[side] = null;
+    return true;
+  }
+  return false;
+}
+
+/** Editor → preview: shows the part of the preview that matches the editor's viewport. */
 export function syncScroll(): void {
-  if (!previewState.syncScroll || previewState.mode !== 'split' || previewState.body === null) {
+  if (!isScrollSyncActive()) {
     return;
   }
 
   const editor = getEditorView();
-  const scroller = editor?.scrollDOM;
-  if (editor === undefined || scroller === undefined) {
+  const surface = previewSurface();
+  if (editor === undefined || surface === null) {
     return;
   }
 
-  const body = previewState.body;
+  const line = editorLineAtOffset(editor, referenceOffset(editor.scrollDOM));
+  const offset = lineToOffset(previewAnchors(surface, editor.state.doc.lines), line);
+  setSyncedScrollTop('preview', surface.scroller, scrollTopForOffset(offset, surface.scroller));
+}
 
-  // Framed documents have no line anchors: keep the same relative position.
-  const frameScroller = previewFrame(body)?.contentDocument?.scrollingElement ?? null;
-  if (frameScroller !== null) {
-    const ratio = scroller.scrollTop / Math.max(1, scroller.scrollHeight - scroller.clientHeight);
-    frameScroller.scrollTop = ratio * Math.max(0, frameScroller.scrollHeight - frameScroller.clientHeight);
+/** Preview → editor: scrolls the editor to the source of what the preview shows. */
+export function syncEditorScroll(): void {
+  if (!isScrollSyncActive()) {
     return;
   }
 
-  if (scroller.scrollTop <= 2) {
-    body.scrollTop = 0;
+  const editor = getEditorView();
+  const surface = previewSurface();
+  if (editor === undefined || surface === null) {
     return;
   }
 
-  const { first, last } = getVisibleEditorLines(scroller, editor);
-  // Editor line numbers are 1-based; preview `data-line` attributes are 0-based.
-  const anchor = findAnchorElement(first - 1, last - 1);
+  const line = offsetToLine(previewAnchors(surface, editor.state.doc.lines), referenceOffset(surface.scroller));
+  const offset = editorOffsetAtLine(editor, line);
+  setSyncedScrollTop('editor', editor.scrollDOM, scrollTopForOffset(offset, editor.scrollDOM));
+}
 
-  if (anchor === null) {
-    const ratio = scroller.scrollTop / (scroller.scrollHeight - scroller.clientHeight || 1);
-    body.scrollTop = ratio * (body.scrollHeight - body.clientHeight || 1);
+function handleEditorScroll(): void {
+  const scroller = getEditorView()?.scrollDOM;
+  if (scroller === undefined || isScrollEcho('editor', scroller.scrollTop)) {
     return;
   }
 
-  const anchorTop = getRelativeOffset(anchor, body);
-  const editorOffset = getEditorViewportOffset(scroller, editor);
-  const maxOffset = Math.max(0, scroller.clientHeight * 0.35);
-  body.scrollTop = Math.max(0, anchorTop - Math.min(editorOffset, maxOffset));
+  // The user is scrolling the preview and the editor moved by itself: it re-measured lines that
+  // had estimated heights. Put it back at the preview's position instead of moving the preview.
+  const { editor: editorInput, preview: previewInput } = scrollSyncState.lastInput;
+  if (previewInput > editorInput && now() - previewInput < PREVIEW_DRIVE_MS) {
+    syncEditorScroll();
+    return;
+  }
+
+  syncScroll();
+}
+
+function handlePreviewScroll(): void {
+  const surface = previewSurface();
+  if (surface === null || isScrollEcho('preview', surface.scroller.scrollTop)) {
+    return;
+  }
+
+  // Only scrolling the user started in the preview moves the editor (not re-rendering).
+  const { editor: editorInput, preview: previewInput } = scrollSyncState.lastInput;
+  if (previewInput <= editorInput) {
+    return;
+  }
+
+  syncEditorScroll();
+}
+
+function notePreviewInput(): void {
+  scrollSyncState.lastInput.preview = now();
+}
+
+function noteInput(event: Event): void {
+  const target = event.target;
+  const pane = previewState.pane;
+  if (pane !== null && target instanceof Node && pane.contains(target)) {
+    notePreviewInput();
+  } else {
+    scrollSyncState.lastInput.editor = now();
+  }
+}
+
+const inputEvents = ['wheel', 'mousedown', 'touchstart', 'keydown'] as const;
+
+/** Tracks input in the frame of a self-styled document (its events do not reach the page). */
+function attachFrameScrollSync(frameDocument: Document): void {
+  frameDocument.addEventListener('scroll', handlePreviewScroll, { passive: true });
+  for (const name of inputEvents) {
+    frameDocument.addEventListener(name, notePreviewInput, { capture: true, passive: true });
+  }
+}
+
+async function hydrateAndRealign(body: HTMLElement): Promise<void> {
+  await hydrateDiagrams(body);
+  realignAfterRender();
+}
+
+/** Re-aligns the preview after it was re-rendered, unless the user is scrolling it. */
+function realignAfterRender(): void {
+  invalidateScrollAnchors();
+  if (!isScrollSyncActive()) {
+    return;
+  }
+  const { editor: editorInput, preview: previewInput } = scrollSyncState.lastInput;
+  if (previewInput > editorInput) {
+    syncEditorScroll();
+  } else {
+    syncScroll();
+  }
 }
 
 function createPreviewPane(): HTMLElement {
@@ -430,6 +634,7 @@ function createPreviewPane(): HTMLElement {
   document.body.appendChild(pane);
 
   const body = createElement('div', 'markedit-preview-body', pane);
+  body.addEventListener('scroll', handlePreviewScroll, { passive: true });
   previewState.body = body;
 
   previewState.pane = pane;
@@ -522,7 +727,7 @@ function startLiveSync(): void {
     return;
   }
 
-  editor.scrollDOM.addEventListener('scroll', syncScroll);
+  editor.scrollDOM.addEventListener('scroll', handleEditorScroll, { passive: true });
 
   const target = editor.dom;
   if (mutationObserver === null) {
@@ -540,12 +745,17 @@ function stopLiveSync(): void {
     clearTimeout(previewState.updateTimeout);
     previewState.updateTimeout = null;
   }
-  getEditorView()?.scrollDOM.removeEventListener('scroll', syncScroll);
+  getEditorView()?.scrollDOM.removeEventListener('scroll', handleEditorScroll);
   mutationObserver?.disconnect();
   mutationObserver = null;
 }
 
 function setupGlobalListeners(): void {
+  // Which pane the user works in decides the direction of scroll sync.
+  for (const name of inputEvents) {
+    window.addEventListener(name, noteInput, { capture: true, passive: true });
+  }
+
   window.addEventListener('mousemove', event => {
     if (!previewState.isDragging) {
       return;

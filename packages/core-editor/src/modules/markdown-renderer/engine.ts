@@ -320,7 +320,7 @@ function renderTable(lines: Line[], context: RenderContext): { html: string; con
       break;
     }
 
-    html += `<tr>${renderCells(row.cells, 'td')}</tr>`;
+    html += `<tr data-line="${lines[consumed].lineNumber}">${renderCells(row.cells, 'td')}</tr>`;
     consumed += 1;
   }
 

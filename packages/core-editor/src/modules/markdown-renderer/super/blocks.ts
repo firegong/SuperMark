@@ -681,7 +681,7 @@ export function checkboxState(char: string): 'todo' | 'done' | 'doing' | 'cancel
  * cell in their direction; each merged region is emitted once with rowspan/colspan. A region
  * that is not rectangular, or a marker pointing outside the section, is shown literally.
  */
-function renderTableSection(rows: string[][], tag: 'th' | 'td', aligns: string[], context: SuperContext): string {
+function renderTableSection(rows: string[][], tag: 'th' | 'td', aligns: string[], context: SuperContext, rowLines: number[] = []): string {
   const height = rows.length;
   const width = aligns.length;
   const owner: ([number, number] | null)[][] = rows.map(() => new Array<[number, number] | null>(width).fill(null));
@@ -737,7 +737,9 @@ function renderTableSection(rows: string[][], tag: 'th' | 'td', aligns: string[]
 
   let html = '';
   for (let r = 0; r < height; r += 1) {
-    html += '<tr>';
+    // Source line of each row: a finer anchor for preview scroll sync.
+    const rowLine = rowLines.at(r);
+    html += rowLine === undefined ? '<tr>' : `<tr data-line="${rowLine}">`;
     for (let c = 0; c < width; c += 1) {
       const cell = rows[r][c] ?? '';
       const target = owner[r][c];
@@ -799,6 +801,8 @@ function renderPipeTable(lines: SourceLine[], index: number, context: SuperConte
   }
 
   const header: string[][] = [];
+  const headerLines: number[] = [];
+  const bodyLines: number[] = [];
   let cursor = index;
   let separator: string[] = [];
   while (cursor < lines.length) {
@@ -809,6 +813,7 @@ function renderPipeTable(lines: SourceLine[], index: number, context: SuperConte
       break;
     }
     header.push(cells);
+    headerLines.push(lines[cursor - 1].line);
   }
 
   const aligns = separator.map(cell => {
@@ -826,11 +831,12 @@ function renderPipeTable(lines: SourceLine[], index: number, context: SuperConte
       break;
     }
     body.push(normalize(cells));
+    bodyLines.push(lines[cursor].line);
     cursor += 1;
   }
 
-  const sections = `<thead>${renderTableSection(header.map(normalize), 'th', aligns, context)}</thead>`
-    + (body.length > 0 ? `<tbody>${renderTableSection(body, 'td', aligns, context)}</tbody>` : '');
+  const sections = `<thead>${renderTableSection(header.map(normalize), 'th', aligns, context, headerLines)}</thead>`
+    + (body.length > 0 ? `<tbody>${renderTableSection(body, 'td', aligns, context, bodyLines)}</tbody>` : '');
   const wrapped = wrapTable(sections, lines[index].line, lines[cursor]?.text, context);
   return { html: wrapped.html, consumed: cursor - index + (wrapped.captionUsed ? 1 : 0) };
 }

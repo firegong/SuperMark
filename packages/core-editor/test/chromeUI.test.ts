@@ -1239,53 +1239,104 @@ describe('Split View Sync Scroll', () => {
     setMarkdownPreviewMode('editor');
   });
 
+  // jsdom has no layout: give the preview blocks positions and both panes scroll metrics.
   function setupPreviewBody(): HTMLElement {
     const body = document.querySelector('.markedit-preview-body') as HTMLElement;
     body.innerHTML = `
-      <div class="markedit-preview-block" data-line="1"><h1 class="markedit-preview-heading">Heading</h1></div>
-      <div class="markedit-preview-block" data-line="2"><p>Spacer</p></div>
+      <div class="markedit-preview-block" data-line="0"><h1>Heading</h1></div>
       <ul class="markedit-preview-list">
-        <li class="markedit-preview-block" data-line="4">item 1</li>
-        <li class="markedit-preview-block" data-line="5">item 2</li>
+        <li class="markedit-preview-block" data-line="2">item 1</li>
+        <li class="markedit-preview-block" data-line="3">item 2</li>
       </ul>
-      <div class="markedit-preview-block" data-line="7"><p>More text.</p></div>
+      <div class="markedit-preview-block" data-line="5"><p>More text.</p></div>
     `;
 
-    const heading = body.querySelector('[data-line="1"]') as HTMLElement;
-    const listItem = body.querySelector('[data-line="4"]') as HTMLElement;
-
-    Object.defineProperty(heading, 'offsetTop', { value: 50, configurable: true });
-    Object.defineProperty(listItem, 'offsetTop', { value: 200, configurable: true });
-    Object.defineProperty(body, 'offsetTop', { value: 0, configurable: true });
-
+    const tops: Record<string, number> = { 0: 0, 2: 200, 3: 300, 5: 600 };
+    body.querySelectorAll<HTMLElement>('[data-line]').forEach(element => {
+      element.getBoundingClientRect = () => ({ top: tops[element.dataset.line ?? ''] - body.scrollTop, width: 100, height: 20 }) as DOMRect;
+    });
+    body.getBoundingClientRect = () => ({ top: 0, width: 100, height: 200 }) as DOMRect;
+    mockScroller(body, 1000, 200);
     return body;
   }
 
-  function setEditorScroll(scrollTop: number, scrollHeight: number, clientHeight: number): void {
-    const scroller = window.editor.scrollDOM;
-    Object.defineProperty(scroller, 'scrollTop', { value: scrollTop, configurable: true });
-    Object.defineProperty(scroller, 'scrollHeight', { value: scrollHeight, configurable: true });
-    Object.defineProperty(scroller, 'clientHeight', { value: clientHeight, configurable: true });
+  function mockScroller(element: HTMLElement, scrollHeight: number, clientHeight: number): void {
+    let top = 0;
+    Object.defineProperty(element, 'scrollTop', {
+      configurable: true,
+      get: () => top,
+      set: (value: number) => { top = Math.max(0, Math.min(value, scrollHeight - clientHeight)); },
+    });
+    Object.defineProperty(element, 'scrollHeight', { value: scrollHeight, configurable: true });
+    Object.defineProperty(element, 'clientHeight', { value: clientHeight, configurable: true });
   }
 
-  test('aligns preview to the topmost visible heading when a heading is in viewport', () => {
+  // Editor lines are 100px tall; the 6-line document is 600px in a 100px viewport.
+  function setupEditorScroller(): HTMLElement {
+    const view = window.editor;
+    const scroller = view.scrollDOM;
+    mockScroller(scroller, 600, 100);
+    const doc = view.state.doc;
+    const blockOf = (index: number) => {
+      const line = doc.line(Math.max(0, Math.min(index, doc.lines - 1)) + 1);
+      return { from: line.from, to: line.to, top: (line.number - 1) * 100, height: 100 };
+    };
+    Object.defineProperty(view, 'documentTop', { configurable: true, get: () => -scroller.scrollTop });
+    view.lineBlockAtHeight = ((height: number) => blockOf(Math.floor(height / 100))) as unknown as typeof view.lineBlockAtHeight;
+    view.lineBlockAt = ((pos: number) => blockOf(doc.lineAt(pos).number - 1)) as unknown as typeof view.lineBlockAt;
+    return scroller;
+  }
+
+  test('editor scrolling moves the preview to the interpolated position', () => {
     const body = setupPreviewBody();
-    // Make lines 1-2 visible so the heading (line 1) is in range
-    setEditorScroll(5, 100, 30);
+    const scroller = setupEditorScroller();
 
+    // Reference offset 300 of 600 → line 3 → preview offset 300 → scrollTop 300 × 800 / 1000.
+    scroller.scrollTop = 250;
+    scroller.dispatchEvent(new Event('scroll'));
+    expect(body.scrollTop).toBeCloseTo(240);
+
+    // Line 4.2 lies between line 3 (300) and line 5 (600): preview offset 480.
+    scroller.scrollTop = 350;
     syncScroll();
+    expect(body.scrollTop).toBeCloseTo(384);
 
-    expect(body.scrollTop).toBe(50);
+    scroller.scrollTop = 0;
+    syncScroll();
+    expect(body.scrollTop).toBe(0);
+
+    scroller.scrollTop = 500;
+    syncScroll();
+    expect(body.scrollTop).toBe(800);
   });
 
-  test('aligns preview to the topmost visible list item when no heading is in viewport', () => {
+  test('preview scrolling moves the editor', () => {
     const body = setupPreviewBody();
-    // Make lines 4-5 visible so list items are in range but the heading (line 1) is not
-    setEditorScroll(40, 100, 30);
+    const scroller = setupEditorScroller();
 
-    syncScroll();
+    body.dispatchEvent(new Event('wheel', { bubbles: true }));
+    body.scrollTop = 240; // reference offset 300 → line 3 → editor offset 300
+    body.dispatchEvent(new Event('scroll'));
+    expect(scroller.scrollTop).toBeCloseTo(250);
 
-    expect(body.scrollTop).toBe(200);
+    // The editor's own scroll event (caused by the sync) does not move the preview back.
+    scroller.dispatchEvent(new Event('scroll'));
+    expect(body.scrollTop).toBe(240);
+  });
+
+  test('preview scroll caused by the sync or by re-rendering does not move the editor', () => {
+    const body = setupPreviewBody();
+    const scroller = setupEditorScroller();
+
+    window.editor.contentDOM.dispatchEvent(new Event('wheel', { bubbles: true }));
+    scroller.scrollTop = 250;
+    scroller.dispatchEvent(new Event('scroll'));
+    body.dispatchEvent(new Event('scroll'));
+    expect(scroller.scrollTop).toBe(250);
+
+    body.scrollTop = 10;
+    body.dispatchEvent(new Event('scroll'));
+    expect(scroller.scrollTop).toBe(250);
   });
 });
 

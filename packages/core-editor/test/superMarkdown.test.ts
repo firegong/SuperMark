@@ -258,7 +258,7 @@ describe('SuperMarkdown: tables (§7, §12, §18)', () => {
   test('right merge and multi-row headers', () => {
     const html = render('| > | A |\n| x | y |\n|---|---|\n| 1 | 2 |');
     expect(html).toContain('<th colspan="2">A</th>');
-    expect(html.match(/<tr>/g)?.length).toBe(3);
+    expect(html.match(/<tr[ >]/g)?.length).toBe(3);
   });
 
   test('merging across the header separator is an error', () => {
