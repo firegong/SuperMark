@@ -1,4 +1,5 @@
 import { createButton, createElement, setupModalTitleBar } from './utils';
+import { listThemeExtensions, setThemeExtension } from './themeExtensions';
 import { InvisiblesBehavior } from '../config';
 import { TabKeyBehavior } from '../modules/indentation';
 import { listMarkdownRenderers, setDiagramServer, setDiagramRendering, clearDiagramCache } from '../modules/markdown-renderer';
@@ -7,6 +8,8 @@ export type SettingsTab = 'editor' | 'assistant' | 'general' | 'window';
 
 export interface UserSettings {
   theme: string;
+  /** Theme extension (script file name) applied over the theme; empty: the built-in theme only. */
+  themeExtension: string;
   fontFamily: string;
   fontSize: number;
   showLineNumbers: boolean;
@@ -65,6 +68,7 @@ export function normalizeUserSettings(
 
   const base: UserSettings = fallback ?? {
     theme: 'github-light',
+    themeExtension: '',
     fontFamily: 'ui-monospace',
     fontSize: 16,
     showLineNumbers: true,
@@ -106,6 +110,7 @@ export function normalizeUserSettings(
 
   return {
     theme: String(pickValue(raw, ['theme', 'lightTheme', 'editor.lightTheme'], base.theme)),
+    themeExtension: String(pickValue(raw, ['themeExtension', 'editor.themeExtension'], base.themeExtension)),
     fontFamily: normalizedFontFamily,
     fontSize: Number(pickValue(raw, ['fontSize', 'editor.fontSize'], base.fontSize)),
     showLineNumbers: Boolean(pickValue(raw, ['showLineNumbers', 'editor.showLineNumbers'], base.showLineNumbers)),
@@ -185,6 +190,10 @@ const builtInThemes: { id: string; label: string; colors: string }[] = [
   { id: 'solarized-light', label: 'Solarized (Light)', colors: '#fdf6e3,#657b83,#f5eed9,#859900,#d33682,#268bd2' },
   { id: 'solarized-dark', label: 'Solarized (Dark)', colors: '#002b36,#839496,#053542,#859900,#d33682,#268bd2' },
 ];
+
+/** Placeholder swatches for theme extensions (their colors are only known once applied). */
+const extensionLightSwatch = '#fafafa,#383a42,#eef0f3,#a626a4,#4078f2,#50a14f';
+const extensionDarkSwatch = '#282c34,#abb2bf,#2c313a,#c678dd,#61afef,#98c379';
 
 const fontFamilies: { value: string; label: string }[] = [
   { value: 'ui-monospace', label: 'System Mono' },
@@ -528,11 +537,15 @@ export function createSettingsModal(
   }
 
   function applyLocalChange<K extends keyof UserSettings>(key: K, value: UserSettings[K]): void {
-    window.config = { ...window.config, [key]: value } as typeof window.config;
+    // Update in place: theme extensions hook properties of this object (e.g. `theme`).
+    Object.assign(window.config, { [key]: value });
 
     switch (key) {
       case 'theme':
         configModule?.setTheme?.({ name: value as string });
+        break;
+      case 'themeExtension':
+        setThemeExtension(String(value));
         break;
       case 'fontSize':
         configModule?.setFontSize?.({ fontSize: Number(value) });
@@ -639,6 +652,7 @@ export function createSettingsModal(
 
   function applyAllLocal(next: UserSettings): void {
     applyLocalChange('theme', next.theme);
+    applyLocalChange('themeExtension', next.themeExtension);
     applyLocalChange('fontFamily', next.fontFamily);
     applyLocalChange('fontSize', next.fontSize);
     applyLocalChange('showLineNumbers', next.showLineNumbers);
@@ -690,11 +704,30 @@ export function createSettingsModal(
     for (const theme of builtInThemes) {
       const card = createElement('button', 'markedit-settings-theme-card');
       card.type = 'button';
-      card.classList.toggle('is-selected', settings.theme === theme.id);
+      card.classList.toggle('is-selected', settings.theme === theme.id && settings.themeExtension === '');
       card.appendChild(createThemeSwatch(theme.colors));
       createElement('div', 'markedit-settings-theme-label', card, theme.label);
       card.addEventListener('click', () => {
+        // A built-in theme replaces any theme extension.
+        if (settings.themeExtension !== '') {
+          void updateSetting('themeExtension', '');
+        }
         void updateSetting('theme', theme.id);
+      });
+      themeGrid.appendChild(card);
+    }
+
+    // Installed theme extensions: choosing one applies its colors over the editor.
+    for (const extension of listThemeExtensions()) {
+      const card = createElement('button', 'markedit-settings-theme-card is-extension');
+      card.type = 'button';
+      card.classList.toggle('is-selected', settings.themeExtension === extension.capability);
+      card.appendChild(createThemeSwatch(extension.dark && !extension.light ? extensionDarkSwatch : extensionLightSwatch));
+      const modes = extension.light && extension.dark ? 'Light & Dark' : extension.dark ? 'Dark only' : 'Light only';
+      createElement('div', 'markedit-settings-theme-label', card, `${extension.label} (Extension)`);
+      card.title = `${extension.capability} — ${modes}`;
+      card.addEventListener('click', () => {
+        void updateSetting('themeExtension', extension.capability);
       });
       themeGrid.appendChild(card);
     }

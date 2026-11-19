@@ -27,6 +27,7 @@ import {
   MarkdownPreviewMode,
 } from './markdownPreview';
 import { isEditorLivePreview, setEditorLivePreview } from './liveEditorPreview';
+import { setThemeExtension } from './themeExtensions';
 
 async function saveLivePreview(enabled: boolean): Promise<void> {
   try {
@@ -233,6 +234,10 @@ export function initChromeUI(): void {
       if (setEditorLivePreview(enabled)) {
         publishViewState();
       }
+    },
+    setThemeExtension(capability) {
+      (window.config as { themeExtension?: string }).themeExtension = capability;
+      setThemeExtension(capability);
     },
     toggleEditorLivePreview() {
       const enabled = !isEditorLivePreview();

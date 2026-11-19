@@ -88,6 +88,7 @@ declare global {
     setDiagramRendering(mode: string): void;
     togglePreviewSyncScroll(): void;
     setEditorLivePreview(enabled: boolean): void;
+    setThemeExtension(capability: string): void;
     toggleEditorLivePreview(): void;
     copyPreviewHtml(): void;
     closeAll(): void;

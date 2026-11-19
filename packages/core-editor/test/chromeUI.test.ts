@@ -4,6 +4,7 @@ import type { ExtensionUpdateBehavior, ExtensionsManagerState } from '../src/chr
 import type { UserSettings } from '../src/chrome/settingsModal';
 import { setMarkdownPreviewMode, syncScroll } from '../src/chrome/markdownPreview';
 import { createLivePreviewExtension, livePreviewExtension } from '../src/chrome/liveEditorPreview';
+import { beginExtensionScript, endExtensionScript, resetThemeContributions } from '../src/chrome/themeExtensions';
 import {
   renderMarkdownToHtml,
   setMarkdownSyntaxStandard,
@@ -621,6 +622,7 @@ describe('Settings Modal', () => {
 
   const sampleSettings: UserSettings = {
     theme: 'github-light',
+    themeExtension: '',
     fontFamily: 'ui-monospace',
     fontSize: 16,
     showLineNumbers: true,
@@ -728,6 +730,50 @@ describe('Settings Modal', () => {
 
     expect(settingsInvokeMock).toHaveBeenCalledWith('settings_update', { patch: { theme: 'github-dark' } });
     expect(configSetters.setTheme).toHaveBeenCalledWith({ name: 'github-dark' });
+  });
+
+  test('installed theme extensions are offered as themes and saved as the theme extension', async () => {
+    // A theme extension recorded while extension scripts ran (see themeExtensions.ts).
+    const theming = window as unknown as { __markeditTheming__?: { customThemes: Record<string, unknown> } };
+    theming.__markeditTheming__ = { customThemes: {} };
+    resetThemeContributions();
+    beginExtensionScript();
+    theming.__markeditTheming__.customThemes.dark = 'one-dark';
+    endExtensionScript('markedit-theme-one-dark.js');
+
+    // The host keeps what was saved.
+    let saved: UserSettings = { ...sampleSettings };
+    settingsInvokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+      if (cmd === 'settings_update') {
+        saved = { ...saved, ...(args?.patch as Partial<UserSettings>) };
+      }
+      return saved;
+    });
+
+    try {
+      (window.chromeUI as ChromeUI).openSettings('editor');
+      await tick();
+
+      const card = Array.from(document.querySelectorAll('.markedit-settings-theme-card.is-extension'))
+        .find(element => element.textContent.includes('One Dark (Extension)'));
+      expect(card).toBeDefined();
+      (card as HTMLButtonElement).click();
+      await tick();
+
+      expect(settingsInvokeMock).toHaveBeenCalledWith('settings_update', { patch: { themeExtension: 'markedit-theme-one-dark.js' } });
+      expect(theming.__markeditTheming__.customThemes).toEqual({ dark: 'one-dark' });
+
+      // Back to a built-in theme: the extension's colors are removed.
+      const builtIn = Array.from(document.querySelectorAll('.markedit-settings-theme-card'))
+        .find(element => element.textContent.includes('GitHub (Light)'));
+      (builtIn as HTMLButtonElement).click();
+      await tick();
+      expect(settingsInvokeMock).toHaveBeenCalledWith('settings_update', { patch: { themeExtension: '' } });
+      expect(theming.__markeditTheming__.customThemes).toEqual({});
+    } finally {
+      resetThemeContributions();
+      delete theming.__markeditTheming__;
+    }
   });
 
   test('toggle switch invokes settings_update and config setter', async () => {
@@ -1427,6 +1473,7 @@ describe('Settings Modal Window Controls', () => {
 
   const minimalSettings: UserSettings = {
     theme: 'github-light',
+    themeExtension: '',
     fontFamily: 'ui-monospace',
     fontSize: 16,
     showLineNumbers: true,

@@ -2,6 +2,7 @@ import { describe, expect, test, beforeEach, jest } from '@jest/globals';
 import * as editor from './utils/editor';
 import { applyExtensions, loadHostDocument, reloadDocumentFromHost } from '../src/hostDocument';
 import { getActiveMarkdownRenderer, listMarkdownRenderers, setActiveMarkdownRenderer } from '../src/modules/markdown-renderer';
+import { listThemeExtensions, setThemeExtension, themeExtensionLabel } from '../src/chrome/themeExtensions';
 
 // resetEditor rebuilds the whole editor (covered by core tests); here it only needs the text.
 jest.mock('../src/core', () => {
@@ -94,5 +95,79 @@ describe('host document loading', () => {
     setActiveMarkdownRenderer('super');
     expect(getActiveMarkdownRenderer().id).toBe('super');
     setActiveMarkdownRenderer('extended');
+  });
+
+  // A stand-in for the `markedit-theming` library the theme extensions bundle: each script
+  // writes its theme into customThemes; assigning config.theme re-applies (recorded here).
+  function themeScript(capability: string, light?: string, dark?: string) {
+    const writes = [light === undefined ? '' : `t.customThemes.light = ${JSON.stringify(light)};`, dark === undefined ? '' : `t.customThemes.dark = ${JSON.stringify(dark)};`].join(' ');
+    const source = `
+      var w = window;
+      if (typeof w.__markeditTheming__ !== 'object') {
+        w.__markeditTheming__ = { customThemes: {}, applied: [] };
+        var name = w.config.theme;
+        Object.defineProperty(w.config, 'theme', {
+          configurable: true,
+          get: function() { return name; },
+          set: function(value) { name = value; w.__markeditTheming__.applied.push(JSON.stringify(w.__markeditTheming__.customThemes)); },
+        });
+      }
+      var t = w.__markeditTheming__;
+      ${writes}`;
+    return { path: `/ext/${capability}`, capability, source };
+  }
+
+  type Theming = { customThemes: Record<string, unknown>; applied: string[] };
+  const theming = () => (window as unknown as { __markeditTheming__: Theming }).__markeditTheming__;
+
+  describe('theme extensions follow the theme chosen in Settings', () => {
+    beforeEach(() => {
+      delete (window as unknown as { __markeditTheming__?: unknown }).__markeditTheming__;
+      window.config = { theme: 'github-light' } as typeof window.config;
+    });
+
+    const scripts = () => [
+      themeScript('markedit-theme-vscode.js', 'vscode-light', 'vscode-dark'),
+      themeScript('markedit-theme-one-dark.js', undefined, 'one-dark'),
+    ];
+
+    test('with a built-in theme selected, no extension colors apply', () => {
+      applyExtensions({ styles: [], scripts: scripts() });
+
+      expect(theming().customThemes).toEqual({});
+      expect(theming().applied.at(-1)).toBe('{}');
+      expect(listThemeExtensions()).toEqual([
+        { capability: 'markedit-theme-vscode.js', label: 'VS Code', light: true, dark: true },
+        { capability: 'markedit-theme-one-dark.js', label: 'One Dark', light: false, dark: true },
+      ]);
+    });
+
+    test('only the selected theme extension applies, and it can be switched', () => {
+      (window.config as { themeExtension?: string }).themeExtension = 'markedit-theme-vscode.js';
+      applyExtensions({ styles: [], scripts: scripts() });
+      expect(theming().customThemes).toEqual({ light: 'vscode-light', dark: 'vscode-dark' });
+
+      setThemeExtension('markedit-theme-one-dark.js');
+      expect(theming().customThemes).toEqual({ dark: 'one-dark' });
+      expect(theming().applied.at(-1)).toBe(JSON.stringify({ dark: 'one-dark' }));
+
+      setThemeExtension('');
+      expect(theming().customThemes).toEqual({});
+    });
+
+    test('a disabled theme extension stops applying when extensions reload', () => {
+      (window.config as { themeExtension?: string }).themeExtension = 'markedit-theme-one-dark.js';
+      applyExtensions({ styles: [], scripts: scripts() });
+      expect(theming().customThemes).toEqual({ dark: 'one-dark' });
+
+      applyExtensions({ styles: [], scripts: [] });
+      expect(theming().customThemes).toEqual({});
+      expect(listThemeExtensions()).toEqual([]);
+    });
+
+    test('labels theme extensions by their file name', () => {
+      expect(themeExtensionLabel('markedit-theme-rose-pine.js')).toBe('Rose Pine');
+      expect(themeExtensionLabel('markedit-theme-nushu.js')).toBe('Nushu');
+    });
   });
 });

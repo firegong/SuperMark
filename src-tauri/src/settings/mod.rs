@@ -65,6 +65,9 @@ pub struct EditorConfig {
     /// Render tables, math, diagrams and other elements inside the editor (off: plain source).
     #[serde(default)]
     pub live_preview: bool,
+    /// Theme extension (script file name) applied over the theme; empty: built-in theme only.
+    #[serde(default)]
+    pub theme_extension: String,
     pub line_wrapping: bool,
     pub line_height: f64,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -99,6 +102,10 @@ pub struct UserSettings {
     pub light_theme: String,
     #[serde(rename = "editor.darkTheme")]
     pub dark_theme: String,
+    /// Installed theme extension (script file name, e.g. `markedit-theme-one-dark.js`) whose
+    /// colors apply over the theme. Empty: the built-in theme as chosen, no extension colors.
+    #[serde(rename = "editor.themeExtension")]
+    pub theme_extension: String,
     #[serde(rename = "editor.showLineNumbers")]
     pub show_line_numbers: bool,
     #[serde(rename = "editor.showActiveLineIndicator")]
@@ -176,6 +183,7 @@ impl Default for UserSettings {
             font_size: 15.0,
             light_theme: "github-light".to_string(),
             dark_theme: "github-dark".to_string(),
+            theme_extension: String::new(),
             show_line_numbers: true,
             show_active_line_indicator: true,
             invisibles_behavior: "selection".to_string(),
@@ -232,6 +240,7 @@ impl UserSettings {
             typewriter_mode: self.typewriter_mode,
             focus_mode: self.focus_mode,
             live_preview: self.live_preview,
+            theme_extension: self.theme_extension.clone(),
             line_wrapping: self.line_wrapping,
             line_height: self.line_height,
             default_line_break: Some(self.default_line_break.clone()),
@@ -252,6 +261,7 @@ impl UserSettings {
             obj.insert("theme".to_string(), json!(active_theme));
             obj.insert("lightTheme".to_string(), json!(self.light_theme));
             obj.insert("darkTheme".to_string(), json!(self.dark_theme));
+            obj.insert("themeExtension".to_string(), json!(self.theme_extension));
             obj.insert("fontFamily".to_string(), json!(self.font_family));
             obj.insert("fontSize".to_string(), json!(self.font_size));
             obj.insert("showLineNumbers".to_string(), json!(self.show_line_numbers));
@@ -330,6 +340,7 @@ fn canonical_setting_key(key: &str) -> Option<&'static str> {
         "editor.fontSize" | "fontSize" => Some("editor.fontSize"),
         "editor.lightTheme" | "lightTheme" => Some("editor.lightTheme"),
         "editor.darkTheme" | "darkTheme" => Some("editor.darkTheme"),
+        "editor.themeExtension" | "themeExtension" => Some("editor.themeExtension"),
         "editor.showLineNumbers" | "showLineNumbers" => Some("editor.showLineNumbers"),
         "editor.showActiveLineIndicator" | "showActiveLineIndicator" => {
             Some("editor.showActiveLineIndicator")
@@ -454,6 +465,7 @@ impl SettingsManager {
             s.typewriter_mode = legacy.typewriter_mode;
             s.focus_mode = legacy.focus_mode;
             s.live_preview = legacy.live_preview;
+            s.theme_extension = legacy.theme_extension;
             s.line_wrapping = legacy.line_wrapping;
             s.line_height = legacy.line_height;
             if let Some(lb) = legacy.default_line_break {
@@ -518,6 +530,7 @@ impl SettingsManager {
         user.typewriter_mode = config.typewriter_mode;
         user.focus_mode = config.focus_mode;
         user.live_preview = config.live_preview;
+        user.theme_extension = config.theme_extension.clone();
         user.line_wrapping = config.line_wrapping;
         user.line_height = config.line_height;
         if let Some(ref lb) = config.default_line_break {
@@ -565,6 +578,8 @@ impl SettingsManager {
         let renderer_json = serde_json::to_string(&settings.markdown_renderer)
             .unwrap_or_else(|_| "\"extended\"".to_string());
         let live_preview = settings.live_preview;
+        let theme_extension_json =
+            serde_json::to_string(&settings.theme_extension).unwrap_or_else(|_| "\"\"".to_string());
         let reduce_trans_str = if settings.reduce_transparency {
             "true"
         } else {
@@ -575,7 +590,9 @@ impl SettingsManager {
             r#"(function() {{
   const nextCfg = {cfg_json};
   const nextUser = {user_json};
-  window.config = Object.assign({{}}, window.config, nextCfg);
+  // In place: theme extensions hook properties of window.config (e.g. `theme`).
+  if (typeof window.config !== 'object' || window.config === null) {{ window.config = {{}}; }}
+  Object.assign(window.config, nextCfg);
   if (window.MarkEdit) {{
     window.MarkEdit.editorConfig = window.config;
     window.MarkEdit.userSettings = nextUser;
@@ -607,6 +624,7 @@ impl SettingsManager {
   window.chromeUI?.setDiagramServer?.({diagram_server_json});
   window.chromeUI?.setMarkdownRenderer?.({renderer_json});
   window.chromeUI?.setEditorLivePreview?.({live_preview});
+  window.chromeUI?.setThemeExtension?.({theme_extension_json});
 }})();"#
         )
     }

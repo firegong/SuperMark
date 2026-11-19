@@ -1,6 +1,13 @@
 import { replaceText, resetEditor, ReplaceGranularity } from './core';
 import { notifyAppReady } from './api/methods';
 import {
+  applyThemeSelection,
+  beginExtensionScript,
+  endExtensionScript,
+  resetThemeContributions,
+  setThemeExtension,
+} from './chrome/themeExtensions';
+import {
   getActiveMarkdownRenderer,
   listMarkdownRenderers,
   registerMarkdownRenderer,
@@ -114,6 +121,12 @@ export function syncExtensionRenderers(scripts: { capability: string }[]): void 
   }
 }
 
+/** The theme extension chosen in Settings (`editor.themeExtension`); none uses the built-in theme. */
+function configuredThemeExtension(): string {
+  const value = (window.config as { themeExtension?: unknown } | undefined)?.themeExtension;
+  return typeof value === 'string' ? value : '';
+}
+
 export function applyExtensions(bootstrap: ExtensionBootstrap): void {
   applyBuiltinExtensions(bootstrap.disabledBuiltins ?? []);
   document.querySelectorAll('style[data-markedit-user-style]').forEach(element => element.remove());
@@ -123,6 +136,10 @@ export function applyExtensions(bootstrap: ExtensionBootstrap): void {
     element.textContent = style.css;
     document.head.appendChild(element);
   }
+
+  // Theme extensions: the theme chosen in Settings decides which one (if any) applies.
+  resetThemeContributions();
+  setThemeExtension(configuredThemeExtension());
 
   if (bootstrap.scripts.length === 0) {
     syncExtensionRenderers([]);
@@ -137,14 +154,18 @@ export function applyExtensions(bootstrap: ExtensionBootstrap): void {
   }
 
   for (const script of bootstrap.scripts) {
+    beginExtensionScript();
     try {
       // Compiling here turns a syntax error into an exception for this script only.
       const run = new Function('MarkEdit', 'require', `${script.source}\n//# sourceURL=${script.capability}`) as (...args: unknown[]) => void;
       hooks.__runScriptWithContext__?.(script.capability, run);
     } catch (error) {
       console.error(`[MarkEdit] Failed to run extension ${script.capability}:`, error);
+    } finally {
+      endExtensionScript(script.capability);
     }
   }
+  applyThemeSelection();
 
   syncExtensionRenderers(bootstrap.scripts);
 }
