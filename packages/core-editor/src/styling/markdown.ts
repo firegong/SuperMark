@@ -7,7 +7,7 @@ import { linkDefinitionConfig } from './nodes/def';
 import { listIndentStyle } from './nodes/indent';
 import { inlineCodeStyle, codeBlockStyle, previewMermaid } from './nodes/code';
 import { previewMath } from './nodes/math';
-import { previewTable, tableStyle } from './nodes/table';
+import { tableStyle } from './nodes/table';
 import { frontMatterStyle } from './nodes/frontMatter';
 import { taskMarkerStyle } from './nodes/task';
 
@@ -92,6 +92,5 @@ export const renderExtensions = [
 export const actionExtensions = [
   previewMermaid,
   previewMath,
-  previewTable,
   taskMarkerStyle,
 ];
