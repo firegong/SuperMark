@@ -1,4 +1,4 @@
-# MarkEdit-Win (MarkEdit for Windows)
+# SuperMarkdownEdit (formerly MarkEdit-Win)
 
 macOS용 오픈소스 경량 마크다운 에디터인 **[MarkEdit](https://github.com/MarkEdit-app/MarkEdit)** 를 **Tauri v2 (Rust + Microsoft Edge WebView2)** 기반으로 Windows 환경에 포팅한 프로젝트입니다.
 

@@ -242,8 +242,8 @@ pub fn refresh_app_menu<R: Runtime>(app: &AppHandle<R>) {
 }
 
 pub fn build_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
-    let app_menu = SubmenuBuilder::new(app, "MarkEdit-Rust")
-        .item(&MenuItemBuilder::with_id("app.about", "About MarkEdit-Rust").build(app)?)
+    let app_menu = SubmenuBuilder::new(app, "SuperMarkdownEdit")
+        .item(&MenuItemBuilder::with_id("app.about", "About SuperMarkdownEdit").build(app)?)
         .item(&MenuItemBuilder::with_id("app.updates", "Check for Updates...").build(app)?)
         .separator()
         .item(
@@ -818,7 +818,7 @@ pub fn build_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> 
                 .build(app)?,
         )
         .separator()
-        .item(&MenuItemBuilder::with_id("help.homepage", "MarkEdit-Rust Home Page").build(app)?)
+        .item(&MenuItemBuilder::with_id("help.homepage", "SuperMarkdownEdit Home Page").build(app)?)
         .item(&MenuItemBuilder::with_id("help.releases", "Version History & Releases").build(app)?)
         .item(&MenuItemBuilder::with_id("help.issue", "Report an Issue...").build(app)?)
         .item(&MenuItemBuilder::with_id("help.upstream", "About Upstream MarkEdit").build(app)?)
@@ -1222,7 +1222,7 @@ pub fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, menu_id: &str) {
         }
         let Some(path) = current_path else {
             let _ = MessageDialog::new()
-                .set_title("MarkEdit-Rust")
+                .set_title("SuperMarkdownEdit")
                 .set_description("Save or open a file on disk before reopening with a specific encoding.")
                 .set_level(MessageLevel::Info)
                 .set_buttons(MessageButtons::Ok)
@@ -1279,7 +1279,7 @@ pub fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, menu_id: &str) {
             let count = doc_mgr.versions().list_versions(&path).len();
             if count == 0 {
                 let _ = MessageDialog::new()
-                    .set_title("MarkEdit-Rust")
+                    .set_title("SuperMarkdownEdit")
                     .set_description("No local versions exist for this document.")
                     .set_level(MessageLevel::Info)
                     .set_buttons(MessageButtons::Ok)
@@ -1287,7 +1287,7 @@ pub fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, menu_id: &str) {
                 return;
             }
             let choice = MessageDialog::new()
-                .set_title("MarkEdit-Rust")
+                .set_title("SuperMarkdownEdit")
                 .set_description(format!(
                     "Delete all {count} local version snapshot(s) for this document?"
                 ))
@@ -1307,7 +1307,7 @@ pub fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, menu_id: &str) {
             reveal_in_file_manager(&path);
         } else {
             let _ = MessageDialog::new()
-                .set_title("MarkEdit-Rust")
+                .set_title("SuperMarkdownEdit")
                 .set_description("This document has not been saved to disk yet.")
                 .set_level(MessageLevel::Info)
                 .set_buttons(MessageButtons::Ok)
@@ -1351,7 +1351,7 @@ pub fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, menu_id: &str) {
             copy_to_clipboard(&cmd);
         } else {
             let _ = MessageDialog::new()
-                .set_title("MarkEdit-Rust")
+                .set_title("SuperMarkdownEdit")
                 .set_description("Please save the document first before generating a Pandoc command.")
                 .set_level(MessageLevel::Info)
                 .set_buttons(MessageButtons::Ok)
@@ -1437,9 +1437,9 @@ pub fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, menu_id: &str) {
 
     if menu_id == "app.about" {
         let _ = MessageDialog::new()
-            .set_title("About MarkEdit-Rust")
+            .set_title("About SuperMarkdownEdit")
             .set_description(format!(
-                "MarkEdit-Rust v{}\n\nFast, lightweight Markdown editor powered by Tauri v2 (Rust) and CodeMirror 6 CoreEditor.",
+                "SuperMarkdownEdit v{}\n\nFast, lightweight Markdown editor powered by Tauri v2 (Rust) and CodeMirror 6 CoreEditor.",
                 env!("CARGO_PKG_VERSION")
             ))
             .set_level(MessageLevel::Info)
@@ -1551,7 +1551,7 @@ fn shortcut_hint(label: &str, shortcut: &str) -> String {
 
 fn show_info(message: &str) {
     let _ = MessageDialog::new()
-        .set_title("MarkEdit-Rust")
+        .set_title("SuperMarkdownEdit")
         .set_description(message)
         .set_level(MessageLevel::Info)
         .set_buttons(MessageButtons::Ok)
@@ -1567,7 +1567,7 @@ fn confirm_discard_changes<R: Runtime>(app: &AppHandle<R>, label: &str) -> bool 
     }
 
     let choice = MessageDialog::new()
-        .set_title("MarkEdit-Rust")
+        .set_title("SuperMarkdownEdit")
         .set_description("This document has unsaved changes. Discard them and reload the file?")
         .set_level(MessageLevel::Warning)
         .set_buttons(MessageButtons::OkCancel)
@@ -1600,7 +1600,7 @@ pub fn open_in_shell(target: &str) {
 fn open_document_path<R: Runtime>(app: &AppHandle<R>, path: PathBuf) {
     if !path.exists() {
         let _ = MessageDialog::new()
-            .set_title("MarkEdit-Rust")
+            .set_title("SuperMarkdownEdit")
             .set_description(format!("File not found:\n{}", path.display()))
             .set_level(MessageLevel::Warning)
             .set_buttons(MessageButtons::Ok)
@@ -1737,7 +1737,7 @@ fn check_extension_updates<R: Runtime>(
 
     if updates.is_empty() {
         let _ = MessageDialog::new()
-            .set_title("MarkEdit-Rust")
+            .set_title("SuperMarkdownEdit")
             .set_description("All installed extensions are up to date.")
             .set_level(MessageLevel::Info)
             .set_buttons(MessageButtons::Ok)
@@ -1754,7 +1754,7 @@ fn check_extension_updates<R: Runtime>(
         .collect();
 
     let confirm = MessageDialog::new()
-        .set_title("MarkEdit-Rust")
+        .set_title("SuperMarkdownEdit")
         .set_description(format!(
             "{} extension update(s) available:\n\n{}\n\nInstall updates now?",
             updates.len(),
@@ -1777,7 +1777,7 @@ fn check_extension_updates<R: Runtime>(
             downloader::download_update(&scripts_dir, record, entry, &config, app_version)
         {
             eprintln!(
-                "[MarkEdit-Rust] Failed to install extension update '{}': {}",
+                "[SuperMarkdownEdit] Failed to install extension update '{}': {}",
                 entry.id, err
             );
         }

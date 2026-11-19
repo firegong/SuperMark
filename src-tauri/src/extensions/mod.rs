@@ -321,7 +321,7 @@ impl ExtensionManager {
                 r#"try {{
   window.__runScriptWithContext__?.({cap_json}, new Function('MarkEdit', 'require', {source_json}));
 }} catch (err) {{
-  console.error('[MarkEdit-Rust] Failed to execute extension script ' + {cap_json} + ':', err);
+  console.error('[SuperMarkdownEdit] Failed to execute extension script ' + {cap_json} + ':', err);
 }}"#
             ));
         }

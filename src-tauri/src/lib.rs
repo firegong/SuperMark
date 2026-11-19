@@ -501,7 +501,7 @@ fn reload_extensions_everywhere(window: &WebviewWindow, mgr: &extensions::Extens
 pub fn report_open_failure(path: &std::path::Path, error: &str) {
     diagnostics::log(&format!("failed to open {}: {error}", path.display()));
     let _ = MessageDialog::new()
-        .set_title("MarkEdit-Rust")
+        .set_title("SuperMarkdownEdit")
         .set_description(format!("The document could not be opened:\n{}\n\n{error}", path.display()))
         .set_level(MessageLevel::Error)
         .set_buttons(MessageButtons::Ok)
@@ -569,7 +569,7 @@ fn restore_last_session<R: Runtime>(app: &AppHandle<R>) {
                 let title = doc_mgr.apply_restore_item(window.label(), item);
                 let _ = window.set_title(&title);
             }
-            Err(err) => eprintln!("[MarkEdit-Rust] Failed to reopen window: {err}"),
+            Err(err) => eprintln!("[SuperMarkdownEdit] Failed to reopen window: {err}"),
         }
     }
 }
@@ -715,7 +715,7 @@ pub fn run() {
                                 updates.len()
                             );
                             let result = MessageDialog::new()
-                                .set_title("MarkEdit-Rust")
+                                .set_title("SuperMarkdownEdit")
                                 .set_description(&prompt)
                                 .set_level(MessageLevel::Info)
                                 .set_buttons(MessageButtons::OkCancel)
@@ -736,7 +736,7 @@ pub fn run() {
                                         env!("CARGO_PKG_VERSION"),
                                     ) {
                                         eprintln!(
-                                            "[MarkEdit-Rust] Failed to install extension update '{}': {}",
+                                            "[SuperMarkdownEdit] Failed to install extension update '{}': {}",
                                             entry.id, err
                                         );
                                     }
@@ -771,7 +771,7 @@ pub fn run() {
                                     env!("CARGO_PKG_VERSION"),
                                 ) {
                                     eprintln!(
-                                        "[MarkEdit-Rust] Failed to install extension update '{}': {}",
+                                        "[SuperMarkdownEdit] Failed to install extension update '{}': {}",
                                         entry.id, err
                                     );
                                 }
@@ -810,7 +810,7 @@ pub fn run() {
                 if is_dirty {
                     api.prevent_close();
                     let result = MessageDialog::new()
-                        .set_title("MarkEdit-Rust")
+                        .set_title("SuperMarkdownEdit")
                         .set_description("Do you want to save the changes made to this document?")
                         .set_level(MessageLevel::Warning)
                         .set_buttons(MessageButtons::YesNoCancel)
@@ -863,7 +863,7 @@ pub fn run() {
             versions_delete_all
         ])
         .run(tauri::generate_context!())
-        .expect("error while running MarkEdit-Win Tauri application");
+        .expect("error while running SuperMarkdownEdit");
 }
 
 #[cfg(test)]

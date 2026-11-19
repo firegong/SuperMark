@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "MarkEdit-Rust",
+  "productName": "SuperMarkdownEdit",
   "version": "0.1.0",
   "identifier": "app.markedit.rust",
   "build": {
@@ -13,7 +13,7 @@
       {
         "label": "main",
         "create": false,
-        "title": "Untitled — MarkEdit-Rust",
+        "title": "Untitled — SuperMarkdownEdit",
         "width": 960,
         "height": 680,
         "minWidth": 420,

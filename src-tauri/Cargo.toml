@@ -1,7 +1,7 @@
 [package]
 name = "markedit-win"
 version = "0.1.0"
-description = "MarkEdit for Windows (Tauri v2 + WebView2 + CodeMirror 6 CoreEditor)"
+description = "SuperMarkdownEdit — Markdown editor for Windows (Tauri v2 + WebView2 + CodeMirror 6 CoreEditor)"
 authors = ["MarkEdit-Win Contributors"]
 license = "MIT"
 edition = "2021"
