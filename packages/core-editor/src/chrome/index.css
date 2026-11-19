@@ -1537,10 +1537,11 @@ body.markedit-mode-preview #editor {
   padding: 28px 32px;
 }
 
+/* A readable column anchored to the left edge (not centered), in split view and Markdown view. */
 .markedit-preview-body > * {
   max-width: 860px;
-  margin-left: auto;
-  margin-right: auto;
+  margin-left: 0;
+  margin-right: 0;
 }
 
 .markedit-preview-body h1,
@@ -1784,6 +1785,9 @@ body.markedit-mode-preview #editor {
 .markedit-preview-table th {
   background: var(--chrome-active);
   font-weight: 600;
+  /* Browsers center <th>; Markdown's default column alignment is left. Columns marked
+     `:---:` / `---:` keep their inline text-align. */
+  text-align: left;
 }
 
 .markedit-preview-table tbody tr:nth-child(even) {
