@@ -2,7 +2,7 @@ import { describe, expect, test, beforeEach, afterEach, jest } from '@jest/globa
 import { EditorView } from '@codemirror/view';
 import type { ExtensionUpdateBehavior, ExtensionsManagerState } from '../src/chrome/extensionsModal';
 import type { UserSettings } from '../src/chrome/settingsModal';
-import { getMarkdownPreviewMode, setMarkdownPreviewMode, syncScroll } from '../src/chrome/markdownPreview';
+import { setMarkdownPreviewMode, syncScroll } from '../src/chrome/markdownPreview';
 import { createLivePreviewExtension } from '../src/chrome/liveEditorPreview';
 import {
   renderMarkdownToHtml,
@@ -394,6 +394,40 @@ describe('Extensions Manager', () => {
     expect(document.querySelector('.markedit-ext-verified-seal')).not.toBeNull();
     expect(document.querySelector('.markedit-ext-theme-preview')).not.toBeNull();
     expect(document.querySelectorAll('.markedit-ext-theme-pane').length).toBe(2);
+  });
+
+  test('built-in extensions are listed in Installed with a toggle and no Uninstall', async () => {
+    invokeMock.mockImplementation(async (_cmd: string, args?: Record<string, unknown>) => ({
+      ...sampleState,
+      builtins: [{
+        id: 'supermarkdown',
+        name: 'SuperMarkdown',
+        description: 'Markdown parser',
+        version: '0.1.0',
+        enabled: args?.id === 'supermarkdown' ? Boolean(args.enabled) : true,
+      }],
+    }));
+    await openAndRender('installed');
+
+    const row = document.querySelector('[data-builtin-id="supermarkdown"]') as HTMLElement;
+    expect(row).not.toBeNull();
+    expect(row.textContent).toContain('SuperMarkdown');
+    expect(row.textContent).toContain('Built-in');
+    expect(row.querySelector('[data-action="uninstall"]')).toBeNull();
+    // Built-in first, then the installed extension.
+    const rows = document.querySelectorAll('.markedit-chrome-extensions-row');
+    expect(rows[0]).toBe(row);
+    expect(rows.length).toBe(2);
+
+    const toggle = row.querySelector('[data-action="toggle-enabled"]') as HTMLInputElement;
+    expect(toggle.checked).toBe(true);
+    toggle.checked = false;
+    toggle.dispatchEvent(new Event('change', { bubbles: true }));
+    await tick();
+
+    expect(invokeMock).toHaveBeenCalledWith('extensions_set_enabled', { id: 'supermarkdown', enabled: false });
+    const updated = document.querySelector('[data-builtin-id="supermarkdown"] [data-action="toggle-enabled"]') as HTMLInputElement;
+    expect(updated.checked).toBe(false);
   });
 
   test('search filters Discover cards', async () => {
@@ -989,29 +1023,25 @@ describe('Markdown Preview', () => {
     expect(document.body.classList.contains('markedit-mode-preview')).toBe(false);
   });
 
-  test('mode switcher toolbar buttons change mode', async () => {
+  test('the preview pane has no view buttons; modes are set from the native View menu', async () => {
     (window.chromeUI as ChromeUI).setMarkdownPreviewMode('split');
     await tick();
 
-    const previewButton = document.querySelector('[data-mode="preview"]') as HTMLButtonElement;
-    previewButton.click();
-    await tick();
+    expect(document.querySelector('.markedit-markdown-preview-pane')).not.toBeNull();
+    expect(document.querySelector('.markedit-preview-toolbar')).toBeNull();
+    expect(document.querySelector('[data-mode]')).toBeNull();
+    expect(document.querySelector('.markedit-preview-standard-select')).toBeNull();
 
+    (window.chromeUI as ChromeUI).setMarkdownPreviewMode('preview');
+    await tick();
     expect((window.chromeUI as ChromeUI).getMarkdownPreviewMode()).toBe('preview');
-
-    const editorButton = document.querySelector('[data-mode="editor"]') as HTMLButtonElement;
-    editorButton.click();
-    await tick();
-
-    expect((window.chromeUI as ChromeUI).getMarkdownPreviewMode()).toBe('editor');
   });
 
-  test('close button returns to editor mode', async () => {
+  test('Escape returns from Markdown view to the editor', async () => {
     (window.chromeUI as ChromeUI).setMarkdownPreviewMode('preview');
     await tick();
 
-    const closeButton = document.querySelector('.markedit-preview-toolbar .markedit-chrome-close-button') as HTMLButtonElement;
-    closeButton.click();
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     await tick();
 
     expect((window.chromeUI as ChromeUI).getMarkdownPreviewMode()).toBe('editor');
@@ -1127,7 +1157,7 @@ describe('Markdown Syntax Standard Switching', () => {
   });
 });
 
-describe('Floating Mode Switcher', () => {
+describe('Native View menu state', () => {
   const tick = () => new Promise(resolve => { setTimeout(resolve, 0); });
 
   beforeEach(() => {
@@ -1148,43 +1178,47 @@ describe('Floating Mode Switcher', () => {
 
   afterEach(() => {
     setMarkdownPreviewMode('editor');
+    delete (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
   });
 
-  test('mode switcher pill is visible in editor mode', () => {
-    const pill = document.getElementById('markedit-mode-switcher');
-    expect(pill).not.toBeNull();
+  type Invoke = (cmd: string, args?: Record<string, unknown>) => Promise<unknown>;
+  const viewStates = (invoke: jest.Mock<Invoke>) => invoke.mock.calls
+    .filter(([cmd]) => cmd === 'view_state_changed')
+    .map(([, args]) => args);
 
-    const buttons = pill?.querySelectorAll('button');
-    expect(buttons?.length).toBe(3);
-    expect(buttons?.[0].textContent).toBe('Editor');
-    expect(buttons?.[0].classList.contains('is-active')).toBe(true);
+  test('no floating mode switcher is added to the page', () => {
+    expect(document.getElementById('markedit-mode-switcher')).toBeNull();
   });
 
-  test('mode switcher pill is hidden in split and preview modes', async () => {
+  test('mode, parser and scroll sync changes are reported to the View menu', async () => {
+    const invoke = jest.fn<Invoke>(async () => undefined);
+    (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = { invoke };
+
     setMarkdownPreviewMode('split');
     await tick();
+    expect(viewStates(invoke).at(-1)).toEqual({ mode: 'split', renderer: getActiveMarkdownRenderer().id, syncScroll: true });
 
-    const pillSplit = document.getElementById('markedit-mode-switcher') as HTMLElement | null;
-    expect(pillSplit).not.toBeNull();
-    expect(window.getComputedStyle(pillSplit as HTMLElement).display).toBe('none');
-    expect(getMarkdownPreviewMode()).toBe('split');
+    (window.chromeUI as ChromeUI).togglePreviewSyncScroll();
+    expect(viewStates(invoke).at(-1)).toMatchObject({ mode: 'split', syncScroll: false });
+    (window.chromeUI as ChromeUI).togglePreviewSyncScroll();
 
-    setMarkdownPreviewMode('preview');
-    await tick();
+    (window.chromeUI as ChromeUI).setMarkdownRenderer('super');
+    expect(viewStates(invoke).at(-1)).toMatchObject({ renderer: 'super' });
+    (window.chromeUI as ChromeUI).setMarkdownRenderer('extended');
 
-    const pillPreview = document.getElementById('markedit-mode-switcher') as HTMLElement | null;
-    expect(pillPreview).not.toBeNull();
-    expect(window.getComputedStyle(pillPreview as HTMLElement).display).toBe('none');
-    expect(getMarkdownPreviewMode()).toBe('preview');
+    // The menu is shared by all windows: a focused window reports its own state.
+    const before = viewStates(invoke).length;
+    window.dispatchEvent(new Event('focus'));
+    expect(viewStates(invoke).length).toBe(before + 1);
   });
 
-  test('clicking mode switcher pill buttons changes mode', async () => {
-    const previewButton = document.querySelector('#markedit-mode-switcher [data-mode="preview"]') as HTMLButtonElement;
-    previewButton.click();
-    await tick();
+  test('Copy Preview HTML copies the rendered document in any mode', async () => {
+    const writeText = jest.fn(async (_text: string) => undefined);
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
 
-    expect(getMarkdownPreviewMode()).toBe('preview');
-    expect(document.querySelector('#markedit-mode-switcher .is-active')?.textContent).toBe('Preview');
+    (window.chromeUI as ChromeUI).copyPreviewHtml();
+    await tick();
+    expect(writeText.mock.calls[0][0]).toContain('<h1');
   });
 });
 

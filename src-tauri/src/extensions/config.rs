@@ -71,6 +71,9 @@ pub struct Config {
     pub update_behavior: Option<UpdateBehavior>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub installed: Vec<Installed>,
+    /// Built-in extensions (see `extensions::BUILTIN_EXTENSIONS`) the user turned off.
+    #[serde(rename = "builtin.disabled", default, skip_serializing_if = "Vec::is_empty")]
+    pub disabled_builtins: Vec<String>,
 }
 
 impl Default for Config {
@@ -80,6 +83,7 @@ impl Default for Config {
             registry_url: Some(DEFAULT_REGISTRY_URL.to_string()),
             update_behavior: Some(UpdateBehavior::Quiet),
             installed: Vec::new(),
+            disabled_builtins: Vec::new(),
         }
     }
 }

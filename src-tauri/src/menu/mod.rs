@@ -7,12 +7,109 @@ use rfd::{MessageButtons, MessageDialog, MessageDialogResult, MessageLevel};
 use serde_json::json;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
+use std::sync::Mutex;
 use tauri::{
-    menu::{Menu, MenuBuilder, MenuItemBuilder, Submenu, SubmenuBuilder},
+    menu::{CheckMenuItemBuilder, Menu, MenuBuilder, MenuItemBuilder, MenuItemKind, Submenu, SubmenuBuilder},
     AppHandle, Manager, Runtime,
 };
 
 static ZOOM_PERCENT: AtomicI32 = AtomicI32::new(100);
+
+/// Editor view state shown as checkmarks in the View menu (Editor / Split / Markdown View,
+/// Markdown Parser, Sync Preview Scroll). The editor reports it whenever it changes and when a
+/// window gains focus, so the app-wide menu reflects the focused window.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ViewState {
+    pub mode: String,
+    pub renderer: String,
+    pub sync_scroll: bool,
+}
+
+static VIEW_STATE: Mutex<Option<ViewState>> = Mutex::new(None);
+
+/// Markdown parsers offered in View → Markdown Parser (id, label).
+pub const MARKDOWN_PARSERS: &[(&str, &str)] = &[
+    ("extended", "Extended (GFM + Math + Diagrams)"),
+    ("super", "SuperMarkdown"),
+    ("gfm", "GitHub Flavored Markdown (GFM)"),
+    ("commonmark", "CommonMark (Strict)"),
+    ("markdown-it", "markdown-it (MarkEdit Preview)"),
+];
+
+/// Parsers provided by an installed extension: (parser id, extension id).
+const EXTENSION_PARSERS: &[(&str, &str)] = &[("markdown-it", "markedit-preview")];
+
+/// Whether View → Markdown Parser offers `parser_id` right now.
+fn parser_available(parser_id: &str, extensions: Option<&ExtensionManager>) -> bool {
+    if let Some(builtin) = crate::extensions::builtin_for_parser(parser_id) {
+        return extensions.is_none_or(|mgr| mgr.is_builtin_enabled(builtin));
+    }
+    if let Some((_, extension_id)) = EXTENSION_PARSERS.iter().find(|(id, _)| *id == parser_id) {
+        return extensions.is_some_and(|mgr| {
+            mgr.config()
+                .read()
+                .installed
+                .iter()
+                .any(|record| record.id == *extension_id && record.is_enabled())
+        });
+    }
+    true
+}
+
+pub const VIEW_MODES: &[&str] = &["editor", "split", "preview"];
+
+pub fn current_view_state() -> ViewState {
+    VIEW_STATE
+        .lock()
+        .ok()
+        .and_then(|state| state.clone())
+        .unwrap_or_else(|| ViewState {
+            mode: "editor".to_string(),
+            renderer: crate::settings::SettingsManager::new()
+                .load_user_settings()
+                .markdown_renderer,
+            sync_scroll: true,
+        })
+}
+
+fn find_menu_item<R: Runtime>(items: Vec<MenuItemKind<R>>, id: &str) -> Option<MenuItemKind<R>> {
+    for item in items {
+        if item.id() == id {
+            return Some(item);
+        }
+        if let MenuItemKind::Submenu(submenu) = &item {
+            if let Some(found) = submenu.items().ok().and_then(|children| find_menu_item(children, id)) {
+                return Some(found);
+            }
+        }
+    }
+    None
+}
+
+fn set_menu_checked<R: Runtime>(app: &AppHandle<R>, id: &str, checked: bool) {
+    let Some(menu) = app.menu() else {
+        return;
+    };
+    if let Some(item) = menu.items().ok().and_then(|items| find_menu_item(items, id)) {
+        if let Some(check) = item.as_check_menuitem() {
+            let _ = check.set_checked(checked);
+        }
+    }
+}
+
+/// Updates the stored view state and the View menu checkmarks.
+pub fn apply_view_state<R: Runtime>(app: &AppHandle<R>, state: ViewState) {
+    for mode in VIEW_MODES {
+        set_menu_checked(app, &format!("view.mode.{mode}"), state.mode == *mode);
+    }
+    for (id, _) in MARKDOWN_PARSERS {
+        set_menu_checked(app, &format!("view.parser.{id}"), state.renderer == *id);
+    }
+    set_menu_checked(app, "view.preview_sync", state.sync_scroll);
+    if let Ok(mut stored) = VIEW_STATE.lock() {
+        *stored = Some(state);
+    }
+}
 static FLOAT_ON_TOP: AtomicBool = AtomicBool::new(false);
 
 pub const REOPEN_ENCODINGS: &[(&str, &str)] = &[
@@ -78,6 +175,36 @@ fn build_user_submenu<R: Runtime>(
     sub.build()
 }
 
+/// Shortcuts an extension menu item may not take: standard editing keys (an extension's
+/// "Command+V" would become Ctrl+V on Windows and replace Paste) and the app's own accelerators.
+fn is_reserved_accelerator(accelerator: &str) -> bool {
+    const EDITING: &[&str] = &[
+        "CmdOrCtrl+C", "CmdOrCtrl+V", "CmdOrCtrl+X", "CmdOrCtrl+A", "CmdOrCtrl+Z", "CmdOrCtrl+Y",
+        "CmdOrCtrl+Shift+Z", "Ctrl+C", "Ctrl+V", "Ctrl+X", "Ctrl+A", "Ctrl+Z", "Ctrl+Y",
+    ];
+    let normalized = accelerator.to_ascii_lowercase();
+    if EDITING.iter().any(|reserved| reserved.to_ascii_lowercase() == normalized) {
+        return true;
+    }
+    app_accelerators().iter().any(|own| own.to_ascii_lowercase() == normalized)
+}
+
+/// Accelerators registered by the built-in menu (read from this file's builder calls).
+fn app_accelerators() -> &'static [String] {
+    static CACHE: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+    CACHE.get_or_init(|| {
+        let source = include_str!("mod.rs");
+        let needle = concat!(".accel", "erator(\"");
+        source
+            .match_indices(needle)
+            .filter_map(|(start, _)| {
+                let rest = &source[start + needle.len()..];
+                rest.find('"').map(|end| rest[..end].to_string())
+            })
+            .collect()
+    })
+}
+
 fn format_user_accelerator(spec: &UserMenuItemSpec) -> Option<String> {
     let key = spec.key.as_ref()?.trim();
     if key.is_empty() {
@@ -96,12 +223,21 @@ fn format_user_accelerator(spec: &UserMenuItemSpec) -> Option<String> {
         }
     }
     parts.push(key.to_string());
-    Some(parts.join("+"))
+    let accelerator = parts.join("+");
+    if is_reserved_accelerator(&accelerator) {
+        crate::diagnostics::log(&format!(
+            "extension menu item {:?}: shortcut {accelerator} conflicts with a built-in shortcut and was not registered",
+            spec.title
+        ));
+        return None;
+    }
+    Some(accelerator)
 }
 
 pub fn refresh_app_menu<R: Runtime>(app: &AppHandle<R>) {
     if let Ok(menu) = build_app_menu(app) {
         let _ = app.set_menu(menu);
+        apply_view_state(app, current_view_state());
     }
 }
 
@@ -517,41 +653,48 @@ pub fn build_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> 
         .item(&MenuItemBuilder::with_id("view.le_cr", "Classic Mac (CR)").build(app)?)
         .build()?;
 
-    let md_standard_submenu = SubmenuBuilder::new(app, "Markdown Syntax Standard")
-        .item(
-            &MenuItemBuilder::with_id(
-                "view.md_standard.extended",
-                "Extended (GFM + Math + Mermaid)",
-            )
-            .build(app)?,
-        )
-        .item(
-            &MenuItemBuilder::with_id("view.md_standard.gfm", "GitHub Flavored Markdown (GFM)")
+    // View controls that used to be floating buttons in the page live here as native check
+    // items, so the window shows only the editor and preview.
+    let view_state = current_view_state();
+    let mut parser_builder = SubmenuBuilder::new(app, "Markdown Parser");
+    let extensions = app.try_state::<DocumentManager>().map(|mgr| mgr.extensions().clone());
+    for (id, label) in MARKDOWN_PARSERS {
+        // Parsers from built-in or installed extensions are listed only while those are enabled.
+        if !parser_available(id, extensions.as_ref()) {
+            continue;
+        }
+        parser_builder = parser_builder.item(
+            &CheckMenuItemBuilder::with_id(format!("view.parser.{id}"), *label)
+                .checked(view_state.renderer == *id)
                 .build(app)?,
-        )
-        .item(
-            &MenuItemBuilder::with_id("view.md_standard.commonmark", "CommonMark (Strict)")
-                .build(app)?,
-        )
-        .build()?;
-
-    let preview_submenu = SubmenuBuilder::new(app, "Markdown Preview")
-        .item(
-            &MenuItemBuilder::with_id("view.preview_split", shortcut_hint("Toggle Split Preview", "Ctrl+Shift+P"))
-                .build(app)?,
-        )
-        .item(
-            &MenuItemBuilder::with_id("view.preview_full", shortcut_hint("Toggle Markdown View Mode", "Ctrl+Shift+V"))
-                .build(app)?,
-        )
-        .separator()
-        .item(&MenuItemBuilder::with_id("view.preview_off", "Editor Only Mode").build(app)?)
-        .separator()
-        .item(&md_standard_submenu)
-        .build()?;
+        );
+    }
+    let parser_submenu = parser_builder.build()?;
 
     let view_menu = SubmenuBuilder::new(app, "View")
-        .item(&preview_submenu)
+        .item(
+            &CheckMenuItemBuilder::with_id("view.mode.editor", "Editor")
+                .checked(view_state.mode == "editor")
+                .build(app)?,
+        )
+        .item(
+            &CheckMenuItemBuilder::with_id("view.mode.split", shortcut_hint("Split Preview", "Ctrl+Shift+P"))
+                .checked(view_state.mode == "split")
+                .build(app)?,
+        )
+        .item(
+            &CheckMenuItemBuilder::with_id("view.mode.preview", shortcut_hint("Markdown View", "Ctrl+Shift+V"))
+                .checked(view_state.mode == "preview")
+                .build(app)?,
+        )
+        .separator()
+        .item(&parser_submenu)
+        .item(
+            &CheckMenuItemBuilder::with_id("view.preview_sync", "Sync Preview Scroll")
+                .checked(view_state.sync_scroll)
+                .build(app)?,
+        )
+        .item(&MenuItemBuilder::with_id("view.preview_copy_html", "Copy Preview HTML").build(app)?)
         .separator()
         .item(&MenuItemBuilder::with_id("view.toc", "Table of Contents").build(app)?)
         .item(&MenuItemBuilder::with_id("view.stats", "Document Statistics").build(app)?)
@@ -882,30 +1025,11 @@ pub fn menu_id_to_web_script(menu_id: &str) -> Option<String> {
             Some(json!({ "columnName": "Column", "itemName": "Item" })),
         )),
         "format.hr" => Some(WebBridge::format_call("format", "insertHorizontalRule", None)),
-        "view.preview_split" => Some(WebBridge::format_chrome_call(
-            "toggleMarkdownPreview",
-            Some(json!("split")),
-        )),
-        "view.preview_full" => Some(WebBridge::format_chrome_call(
-            "toggleMarkdownPreview",
-            Some(json!("preview")),
-        )),
-        "view.preview_off" => Some(WebBridge::format_chrome_call(
-            "setMarkdownPreviewMode",
-            Some(json!("editor")),
-        )),
-        "view.md_standard.extended" => Some(WebBridge::format_chrome_call(
-            "setMarkdownStandard",
-            Some(json!("extended")),
-        )),
-        "view.md_standard.gfm" => Some(WebBridge::format_chrome_call(
-            "setMarkdownStandard",
-            Some(json!("gfm")),
-        )),
-        "view.md_standard.commonmark" => Some(WebBridge::format_chrome_call(
-            "setMarkdownStandard",
-            Some(json!("commonmark")),
-        )),
+        "view.mode.editor" => Some(WebBridge::format_chrome_call("setMarkdownPreviewMode", Some(json!("editor")))),
+        "view.mode.split" => Some(WebBridge::format_chrome_call("setMarkdownPreviewMode", Some(json!("split")))),
+        "view.mode.preview" => Some(WebBridge::format_chrome_call("setMarkdownPreviewMode", Some(json!("preview")))),
+        "view.preview_sync" => Some(WebBridge::format_chrome_call("togglePreviewSyncScroll", None)),
+        "view.preview_copy_html" => Some(WebBridge::format_chrome_call("copyPreviewHtml", None)),
         "view.toc" | "go.header" => Some(WebBridge::format_chrome_call("toggleToc", None)),
         "view.stats" => Some(WebBridge::format_chrome_call("toggleStatistics", None)),
         "view.line_numbers" => Some(
@@ -958,7 +1082,41 @@ pub fn menu_id_to_web_script(menu_id: &str) -> Option<String> {
     }
 }
 
+/// Script for View → Markdown Parser items; the choice is saved and synced to every window.
+fn parser_menu_script(menu_id: &str) -> Option<String> {
+    let id = menu_id.strip_prefix("view.parser.")?;
+    MARKDOWN_PARSERS.iter().find(|(known, _)| *known == id)?;
+    let id_json = serde_json::to_string(id).ok()?;
+    Some(format!(
+        "window.chromeUI?.setMarkdownRenderer?.({id_json}); window.__TAURI_INTERNALS__?.invoke('settings_update', {{ patch: {{ markdownRenderer: {id_json} }} }});"
+    ))
+}
+
+/// Check items toggle themselves when clicked; show the state the click asks for right away
+/// (the editor then reports its actual state).
+fn apply_expected_view_state<R: Runtime>(app: &AppHandle<R>, menu_id: &str) {
+    let mut state = current_view_state();
+    if let Some(mode) = menu_id.strip_prefix("view.mode.") {
+        state.mode = mode.to_string();
+    } else if let Some(id) = menu_id.strip_prefix("view.parser.") {
+        state.renderer = id.to_string();
+    } else if menu_id == "view.preview_sync" {
+        state.sync_scroll = !state.sync_scroll;
+    } else {
+        return;
+    }
+    apply_view_state(app, state);
+}
+
 pub fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, menu_id: &str) {
+    apply_expected_view_state(app, menu_id);
+    if let Some(script) = parser_menu_script(menu_id) {
+        if let Some(webview) = focused_webview(app) {
+            let _ = webview.eval(&script);
+        }
+        return;
+    }
+
     let active_label = focused_webview(app)
         .map(|w| w.label().to_string())
         .unwrap_or_else(|| "main".to_string());
@@ -1075,11 +1233,14 @@ pub fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, menu_id: &str) {
             let text = s.load_from_path_with_encoding(&path, enc_label)?;
             Ok::<(String, String), String>((text, s.display_title()))
         });
-        if let Ok((text, title)) = loaded {
-            if let Some(webview) = focused_webview(app) {
-                let _ = webview.set_title(&title);
-                let _ = webview.eval(&WebBridge::reset_editor(&text));
+        match loaded {
+            Ok((_text, title)) => {
+                if let Some(webview) = focused_webview(app) {
+                    let _ = webview.set_title(&title);
+                    let _ = webview.eval(&WebBridge::reload_document());
+                }
             }
+            Err(error) => crate::report_open_failure(&path, &error),
         }
         return;
     }
@@ -1468,12 +1629,16 @@ fn open_document_path<R: Runtime>(app: &AppHandle<R>, path: PathBuf) {
             Ok::<(String, String), String>((text, s.display_title()))
         });
 
-        if let Ok((text, title)) = loaded {
-            doc_mgr.push_recent(path);
-            refresh_app_menu(app);
-            let _ = webview.set_title(&title);
-            let _ = webview.eval(&WebBridge::reset_editor(&text));
-            crate::persist_last_session(app, None);
+        match loaded {
+            Ok((_text, title)) => {
+                crate::diagnostics::log(&format!("opened {} in window {target_label}", path.display()));
+                doc_mgr.push_recent(path);
+                refresh_app_menu(app);
+                let _ = webview.set_title(&title);
+                let _ = webview.eval(&WebBridge::reload_document());
+                crate::persist_last_session(app, None);
+            }
+            Err(error) => crate::report_open_failure(&path, &error),
         }
     }
 }
@@ -1496,15 +1661,9 @@ fn revert_to_saved<R: Runtime>(app: &AppHandle<R>, label: &str) {
     }
 }
 
-pub fn extensions_reload_script(mgr: &ExtensionManager) -> String {
-    let bootstrap = mgr.build_extension_bootstrap_js();
-    let cleanup =
-        "document.querySelectorAll('style[data-markedit-user-style]').forEach((el) => el.remove());";
-    if bootstrap.is_empty() {
-        cleanup.to_string()
-    } else {
-        format!("{cleanup}\n{bootstrap}")
-    }
+/// Asks the editor to fetch (`extensions_bootstrap`) and re-apply the installed extensions.
+pub fn extensions_reload_script(_mgr: &ExtensionManager) -> String {
+    "window.__markeditReloadExtensions__?.();".to_string()
 }
 
 fn handle_extension_menu_event<R: Runtime>(app: &AppHandle<R>, menu_id: &str) -> bool {
@@ -1657,18 +1816,20 @@ mod tests {
         let settings = menu_id_to_web_script("app.settings").expect("app.settings");
         assert!(settings.contains("openSettings"));
 
-        let preview_split =
-            menu_id_to_web_script("view.preview_split").expect("view.preview_split");
-        assert!(preview_split.contains("toggleMarkdownPreview"));
+        // View mode items set the mode (radio-like check items), not toggle it.
+        for mode in VIEW_MODES {
+            let script = menu_id_to_web_script(&format!("view.mode.{mode}")).expect("view mode");
+            assert!(script.contains("setMarkdownPreviewMode"));
+            assert!(script.contains(&format!("\"{mode}\"")));
+        }
+        assert!(menu_id_to_web_script("view.preview_sync").expect("sync").contains("togglePreviewSyncScroll"));
+        assert!(menu_id_to_web_script("view.preview_copy_html").expect("copy").contains("copyPreviewHtml"));
 
-        let preview_full =
-            menu_id_to_web_script("view.preview_full").expect("view.preview_full");
-        assert!(preview_full.contains("toggleMarkdownPreview"));
-
-        let md_gfm =
-            menu_id_to_web_script("view.md_standard.gfm").expect("view.md_standard.gfm");
-        assert!(md_gfm.contains("setMarkdownStandard"));
-        assert!(md_gfm.contains("\"gfm\""));
+        // Parser items switch the renderer and persist the choice.
+        let parser = parser_menu_script("view.parser.super").expect("parser");
+        assert!(parser.contains("setMarkdownRenderer?.(\"super\")"));
+        assert!(parser.contains("settings_update"));
+        assert!(parser_menu_script("view.parser.unknown").is_none());
 
         let user_ext =
             menu_id_to_web_script("user_ext_action.custom_1").expect("user_ext_action");
@@ -1734,6 +1895,50 @@ mod tests {
         ] {
             assert!(!accelerators.iter().any(|acc| acc == page_key), "{page_key} is owned by the editor");
         }
+    }
+
+    #[test]
+    fn extension_parsers_are_offered_only_while_their_extension_is_enabled() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let mgr = ExtensionManager::new(tmp.path());
+        mgr.ensure_directories().expect("dirs");
+
+        assert!(parser_available("extended", Some(&mgr)));
+        assert!(parser_available("super", Some(&mgr)));
+        assert!(!parser_available("markdown-it", Some(&mgr)), "extension not installed");
+
+        std::fs::write(mgr.scripts_dir().join("markedit-preview.js"), "// preview").expect("write");
+        mgr.config().reconcile_installed(&mgr.scripts_dir()).expect("reconcile");
+        assert!(parser_available("markdown-it", Some(&mgr)));
+
+        mgr.set_extension_enabled("markedit-preview", false, "1.0.0").expect("disable");
+        assert!(!parser_available("markdown-it", Some(&mgr)));
+
+        mgr.set_extension_enabled("supermarkdown", false, "1.0.0").expect("disable builtin");
+        assert!(!parser_available("super", Some(&mgr)));
+        assert!(parser_menu_script("view.parser.markdown-it").is_some());
+    }
+
+    #[test]
+    fn extension_shortcuts_cannot_take_editing_or_app_keys() {
+        let spec = |key: &str, modifiers: &[&str]| -> UserMenuItemSpec {
+            serde_json::from_value(json!({
+                "title": "Change Mode",
+                "key": key,
+                "modifiers": modifiers,
+            }))
+            .expect("menu item")
+        };
+        // markedit-preview registers "Change Mode" as Command+V: on Windows that is Paste.
+        assert_eq!(format_user_accelerator(&spec("V", &["Command"])), None);
+        assert_eq!(format_user_accelerator(&spec("z", &["Command"])), None);
+        // Keys the app already uses stay with the app (Ctrl+B is Format › Bold).
+        assert_eq!(format_user_accelerator(&spec("B", &["Command"])), None);
+        // Free combinations still work.
+        assert_eq!(
+            format_user_accelerator(&spec("V", &["Command", "Option"])),
+            Some("CmdOrCtrl+Alt+V".to_string())
+        );
     }
 
     #[test]

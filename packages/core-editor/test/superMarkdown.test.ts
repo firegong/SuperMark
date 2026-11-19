@@ -303,7 +303,7 @@ describe('SuperMarkdown: math, footnotes, citations, metadata (§8, §20, §23)'
     const html = render('$$\nE = mc^2\n$$ [#eq:energy]\n\n식 [#eq:energy]');
     expect(html).toContain('id="eq:energy"');
     expect(html).toContain('<span class="msm-equation-number">(1)</span>');
-    expect(html).toContain('>식 (1)</a>');
+    expect(html).toContain('식 <a class="msm-xref" href="#eq:energy">(1)</a>');
   });
 
   test('%% inside math is not a comment', () => {
@@ -335,6 +335,13 @@ describe('SuperMarkdown: math, footnotes, citations, metadata (§8, §20, §23)'
 
   test('variables are not substituted in code', () => {
     expect(render('---\nk: v\n---\n`{{k}}`')).toContain('{{k}}');
+  });
+
+  test('a reference does not repeat the word written before it', () => {
+    const html = render('$$\nE = mc^2\n$$ [#eq:e]\n\n식 [#eq:e]에 따라, [#eq:e] 참조, 수식 [#eq:e]');
+    expect(html).toContain('식 <a class="msm-xref" href="#eq:e">(1)</a>에');
+    expect(html).toContain(', <a class="msm-xref" href="#eq:e">식 (1)</a> 참조');
+    expect(html).toContain('수식 <a class="msm-xref" href="#eq:e">(1)</a>');
   });
 
   test('section cross references use hierarchical numbers', () => {

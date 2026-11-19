@@ -1,4 +1,5 @@
 pub mod bridge;
+pub mod diagnostics;
 pub mod diagrams;
 pub mod document;
 pub mod extensions;
@@ -118,6 +119,29 @@ async fn save_document_content(
     Ok(true)
 }
 
+/// The editor reports its view mode, Markdown parser and preview scroll sync so the View
+/// menu can show them as checkmarks. Only the focused window's state is shown.
+#[tauri::command]
+async fn view_state_changed(
+    window: WebviewWindow,
+    mode: String,
+    renderer: String,
+    sync_scroll: bool,
+) -> Result<(), String> {
+    let others_focused = window
+        .app_handle()
+        .webview_windows()
+        .values()
+        .any(|other| other.label() != window.label() && other.is_focused().unwrap_or(false));
+    if !others_focused {
+        menu::apply_view_state(
+            window.app_handle(),
+            menu::ViewState { mode, renderer, sync_scroll },
+        );
+    }
+    Ok(())
+}
+
 /// Renders a PlantUML / D2 diagram with the locally installed tool (see `diagrams`).
 /// Errors start with `not-installed:` (try another renderer) or `failed:` (diagram error).
 #[tauri::command]
@@ -184,7 +208,7 @@ async fn install_extension_from_url(
         &app_version,
     )?;
 
-    let _ = window.eval(&menu::extensions_reload_script(mgr));
+    reload_extensions_everywhere(&window, mgr);
     Ok(true)
 }
 
@@ -216,7 +240,7 @@ async fn extensions_install(
     .join()
     .map_err(|_| "Failed to join extension install worker".to_string())??;
 
-    let _ = window.eval(&menu::extensions_reload_script(doc_mgr.extensions()));
+    reload_extensions_everywhere(&window, doc_mgr.extensions());
     Ok(state)
 }
 
@@ -233,7 +257,7 @@ async fn extensions_install_url(
     .join()
     .map_err(|_| "Failed to join extension URL install worker".to_string())??;
 
-    let _ = window.eval(&menu::extensions_reload_script(doc_mgr.extensions()));
+    reload_extensions_everywhere(&window, doc_mgr.extensions());
     Ok(state)
 }
 
@@ -245,7 +269,7 @@ async fn extensions_uninstall(
 ) -> Result<crate::extensions::ExtensionsManagerState, String> {
     let mgr = doc_mgr.extensions();
     let state = mgr.uninstall_extension(&id, env!("CARGO_PKG_VERSION"))?;
-    let _ = window.eval(&menu::extensions_reload_script(mgr));
+    reload_extensions_everywhere(&window, mgr);
     Ok(state)
 }
 
@@ -258,7 +282,7 @@ async fn extensions_set_enabled(
 ) -> Result<crate::extensions::ExtensionsManagerState, String> {
     let mgr = doc_mgr.extensions();
     let state = mgr.set_extension_enabled(&id, enabled, env!("CARGO_PKG_VERSION"))?;
-    let _ = window.eval(&menu::extensions_reload_script(mgr));
+    reload_extensions_everywhere(&window, mgr);
     Ok(state)
 }
 
@@ -275,7 +299,7 @@ async fn extensions_update(
     .join()
     .map_err(|_| "Failed to join extension update worker".to_string())??;
 
-    let _ = window.eval(&menu::extensions_reload_script(doc_mgr.extensions()));
+    reload_extensions_everywhere(&window, doc_mgr.extensions());
     Ok(state)
 }
 
@@ -464,6 +488,43 @@ pub fn build_bootstrap_script() -> String {
     )
 }
 
+/// Re-applies extensions in every window and rebuilds the menu: extensions (and built-in
+/// extensions) decide which Markdown parsers View → Markdown Parser offers.
+fn reload_extensions_everywhere(window: &WebviewWindow, mgr: &extensions::ExtensionManager) {
+    for webview in window.app_handle().webview_windows().values() {
+        let _ = webview.eval(&menu::extensions_reload_script(mgr));
+    }
+    menu::refresh_app_menu(window.app_handle());
+}
+
+/// Logs a document that could not be read and tells the user (instead of an empty window).
+pub fn report_open_failure(path: &std::path::Path, error: &str) {
+    diagnostics::log(&format!("failed to open {}: {error}", path.display()));
+    let _ = MessageDialog::new()
+        .set_title("MarkEdit-Rust")
+        .set_description(format!("The document could not be opened:\n{}\n\n{error}", path.display()))
+        .set_level(MessageLevel::Error)
+        .set_buttons(MessageButtons::Ok)
+        .show();
+}
+
+/// The window's current document text, pulled by the editor after File > Open and similar
+/// (`window.__markeditReloadDocument__`), so large files are not pushed through `eval`.
+#[tauri::command]
+async fn document_content(window: WebviewWindow, doc_mgr: State<'_, DocumentManager>) -> Result<Value, String> {
+    let label = window.label().to_string();
+    let text = doc_mgr.with_session(&label, |s| s.content_cache.clone());
+    Ok(serde_json::json!({ "text": text }))
+}
+
+/// Installed extensions as data, for reloading them (`window.__markeditReloadExtensions__`).
+#[tauri::command]
+async fn extensions_bootstrap(
+    doc_mgr: State<'_, DocumentManager>,
+) -> Result<extensions::ExtensionBootstrap, String> {
+    Ok(doc_mgr.extensions().extension_bootstrap())
+}
+
 /// Saves which documents are open (`last-session.json`) for the `lastSession` startup behavior.
 ///
 /// `closing` is a window that is going away. When it is the last window the snapshot is kept
@@ -522,12 +583,15 @@ pub fn create_editor_window<R: Runtime>(
     let label = doc_mgr.next_window_label();
     let init_script = build_bootstrap_script();
 
-    let title = doc_mgr.with_session(&label, |session| {
-        if let Some(ref p) = initial_path {
-            let _ = session.load_from_path(p);
-        }
-        session.display_title()
+    let (title, load_error) = doc_mgr.with_session(&label, |session| {
+        let error = initial_path
+            .as_ref()
+            .and_then(|p| session.load_from_path(p).err().map(|e| (p.clone(), e)));
+        (session.display_title(), error)
     });
+    if let Some((path, error)) = load_error {
+        report_open_failure(&path, &error);
+    }
 
     if let Some(p) = initial_path {
         doc_mgr.push_recent(p);
@@ -582,11 +646,21 @@ pub fn run() {
                 .filter(|p| p.exists())
                 .collect();
 
+            diagnostics::log(&format!(
+                "startup: args {:?}, files to open {:?}",
+                std::env::args().skip(1).collect::<Vec<_>>(),
+                cli_paths
+            ));
+
             if let Some(first_path) = cli_paths.first() {
-                let title = doc_mgr.with_session("main", |s| {
-                    let _ = s.load_from_path(first_path);
-                    s.display_title()
+                let (title, load_error) = doc_mgr.with_session("main", |s| {
+                    let error = s.load_from_path(first_path).err();
+                    (s.display_title(), error)
                 });
+                match load_error {
+                    Some(error) => report_open_failure(first_path, &error),
+                    None => diagnostics::log(&format!("opened {}", first_path.display())),
+                }
                 doc_mgr.push_recent(first_path.clone());
                 if let Some(main_win) = app.get_webview_window("main") {
                     let _ = main_win.set_title(&title);
@@ -765,6 +839,9 @@ pub fn run() {
             save_document_content,
             save_idle_backup,
             diagram_render_local,
+            view_state_changed,
+            document_content,
+            extensions_bootstrap,
             diagram_tools_status,
             install_extension_from_url,
             extensions_get_state,

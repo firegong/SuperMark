@@ -40,8 +40,18 @@ export interface ExtensionUpdateInfo {
   latestVersion: string;
 }
 
+/** Extensions that ship with the app (e.g. the SuperMarkdown parser): can be turned off, not uninstalled. */
+export interface BuiltinExtensionRecord {
+  id: string;
+  name: string;
+  description: string;
+  version: string;
+  enabled: boolean;
+}
+
 export interface ExtensionsManagerState {
   catalog: ExtensionCatalogEntry[];
+  builtins?: BuiltinExtensionRecord[];
   installed: InstalledExtensionRecord[];
   updates: ExtensionUpdateInfo[];
   updateBehavior: ExtensionUpdateBehavior;
@@ -290,7 +300,7 @@ export function createExtensionsModal(
   const tabsRow = createElement('div', 'markedit-chrome-extensions-tabs', header);
   const tabs: Record<ExtensionsManagerTab, { label: string; icon: () => SVGSVGElement; count: () => number }> = {
     discover: { label: 'Discover', icon: () => createSparklesIcon(), count: () => getFilteredCatalog().length },
-    installed: { label: 'Installed', icon: () => createBoxIcon(), count: () => state.installed.length },
+    installed: { label: 'Installed', icon: () => createBoxIcon(), count: () => state.installed.length + (state.builtins ?? []).length },
     updates: { label: 'Updates', icon: () => createUpdateIcon(), count: () => state.updates.length },
   };
 
@@ -637,6 +647,43 @@ export function createExtensionsModal(
     return row;
   }
 
+  function renderBuiltinRow(builtin: BuiltinExtensionRecord): HTMLElement {
+    const row = createElement('div', 'markedit-chrome-extensions-row markedit-chrome-extensions-builtin');
+    row.dataset.builtinId = builtin.id;
+
+    const icon = createExtensionIcon(null, { id: builtin.id, file: builtin.id, version: builtin.version });
+    icon.classList.add('markedit-chrome-extensions-row-icon');
+    row.appendChild(icon);
+
+    const main = createElement('div', 'markedit-chrome-extensions-row-main', row);
+    const info = createElement('div', 'markedit-chrome-extensions-row-info', main);
+    const nameRow = createElement('div', 'markedit-chrome-extensions-row-name-line', info);
+    createElement('span', '', nameRow, builtin.name);
+    createElement('div', 'markedit-chrome-extensions-row-description', info, builtin.description);
+
+    const meta = createElement('div', 'markedit-chrome-extensions-row-meta', info);
+    createElement('span', 'markedit-chrome-extensions-version', meta, builtin.version);
+    createElement('span', 'markedit-chrome-extensions-category markedit-chrome-extensions-builtin-badge', meta, 'Built-in');
+
+    const actions = createElement('div', 'markedit-chrome-extensions-row-actions', row);
+    const toggle = createElement('label', 'markedit-chrome-extensions-toggle');
+    const toggleInput = createElement('input', '') as HTMLInputElement;
+    toggleInput.type = 'checkbox';
+    toggleInput.checked = builtin.enabled;
+    toggleInput.disabled = inFlight;
+    toggleInput.dataset.action = 'toggle-enabled';
+    toggleInput.dataset.extensionId = builtin.id;
+    toggleInput.addEventListener('change', event => {
+      void setEnabled(builtin.id, (event.target as HTMLInputElement).checked);
+    });
+    toggle.appendChild(toggleInput);
+    createElement('span', 'markedit-chrome-extensions-toggle-slider', toggle);
+    actions.appendChild(toggle);
+    // Built-in: no Uninstall button.
+
+    return row;
+  }
+
   function renderUpdateRow(update: ExtensionUpdateInfo): HTMLElement {
     const catalog = getCatalogEntry(update.id);
     const row = createElement('div', 'markedit-chrome-extensions-row');
@@ -689,9 +736,14 @@ export function createExtensionsModal(
         body.appendChild(renderDiscoverCard(entry));
       }
     } else if (activeTab === 'installed') {
-      if (state.installed.length === 0) {
+      const builtins = state.builtins ?? [];
+      if (state.installed.length === 0 && builtins.length === 0) {
         createElement('div', 'markedit-chrome-extensions-empty', body, 'No installed extensions.');
         return;
+      }
+
+      for (const builtin of builtins) {
+        body.appendChild(renderBuiltinRow(builtin));
       }
 
       for (const record of state.installed) {

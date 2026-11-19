@@ -25,6 +25,7 @@ import { NativeModuleTranslation } from './src/bridge/native/translation';
 import { NativeModuleSecretStorage } from './src/bridge/native/secretStorage';
 
 import { resetEditor } from './src/core';
+import { loadHostDocument, reloadDocumentFromHost, reloadExtensionsFromHost } from './src/hostDocument';
 import { initThemeExtractors, initMarkEditModules } from './src/api/modules';
 import { setUp, applyReducedMotion } from './src/styling/config';
 import { loadTheme } from './src/styling/themes';
@@ -154,14 +155,26 @@ function setUpMainApp(config: Config) {
   }
 
   window.onload = () => {
-    window.nativeModules.core.notifyWindowDidLoad();
-
-    // On Prod, text is reset by the native code
     if (!isReleaseMode) {
+      window.nativeModules.core.notifyWindowDidLoad();
       window.config = config;
-      resetEditor(config.text);
+      void resetEditor(config.text);
+      return;
     }
+
+    // The desktop host replies with the document and installed extensions (see hostDocument.ts).
+    void (async () => {
+      try {
+        const reply = await (window.nativeModules.core.notifyWindowDidLoad as unknown as () => Promise<unknown>)();
+        await loadHostDocument(reply);
+      } catch (error) {
+        console.error('[MarkEdit] Loading the document failed:', error);
+      }
+    })();
   };
+
+  Object.defineProperty(window, '__markeditReloadDocument__', { value: reloadDocumentFromHost });
+  Object.defineProperty(window, '__markeditReloadExtensions__', { value: reloadExtensionsFromHost });
 
   setUp(config, loadTheme(config.theme).colors);
   startObserving();
@@ -171,3 +184,4 @@ function setUpMainApp(config: Config) {
   const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
   reducedMotionQuery.addEventListener('change', event => applyReducedMotion(event.matches));
 }
+

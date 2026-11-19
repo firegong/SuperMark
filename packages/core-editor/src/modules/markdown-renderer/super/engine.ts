@@ -316,10 +316,25 @@ function renderToc(context: SuperContext, depth: number): string {
   return `${html}</ul></nav>`;
 }
 
+/**
+ * "식 [#eq:energy]" should read "식 (1)", not "식 식 (1)": when the text right before a
+ * reference already ends with the label's leading word (식, 그림, 표, 목록, …), drop it.
+ */
+function omitRepeatedWord(label: string, before: string): string {
+  const space = label.indexOf(' ');
+  if (space <= 0) {
+    return label;
+  }
+
+  const word = label.slice(0, space);
+  const plainBefore = before.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ');
+  return plainBefore.trimEnd().endsWith(word) && /\s$/.test(plainBefore) ? label.slice(space + 1) : label;
+}
+
 function resolvePlaceholders(html: string, context: SuperContext): string {
   const numbers = sectionNumbers(context);
 
-  return html.replace(placeholderPattern, (_match, type: string, value: string) => {
+  return html.replace(placeholderPattern, (_match, type: string, value: string, offset: number, whole: string) => {
     if (type === 'T') {
       return renderToc(context, parseInt(value, 10) || 3);
     }
@@ -342,7 +357,7 @@ function resolvePlaceholders(html: string, context: SuperContext): string {
         case 'tbl':
         case 'eq':
         case 'lst':
-          text = context.crossRefLabels[label.kind](label.index);
+          text = omitRepeatedWord(context.crossRefLabels[label.kind](label.index), whole.slice(Math.max(0, offset - 80), offset));
       }
       return `<a class="msm-xref" href="#${escapeHtml(label.id)}">${escapeHtml(text)}</a>`;
     }

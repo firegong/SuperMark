@@ -10,12 +10,34 @@ const engines = new Map<string, MarkdownRendererEngine>([
 
 let activeEngine: MarkdownRendererEngine = extendedEngine;
 
+/** Renderers provided by built-in extensions that the user turned off. */
+const unavailableEngines = new Set<string>();
+
+/**
+ * Shows or hides a renderer (built-in extensions such as SuperMarkdown can be turned off in
+ * Extensions → Installed). Returns true when the hidden renderer is the active one, so the
+ * caller can switch to another parser (and refresh the preview and View menu).
+ */
+export function setMarkdownRendererAvailable(id: string, available: boolean): boolean {
+  if (available) {
+    unavailableEngines.delete(id);
+    return false;
+  }
+
+  unavailableEngines.add(id);
+  return activeEngine.id === id;
+}
+
+export function isMarkdownRendererAvailable(id: string): boolean {
+  return engines.has(id) && !unavailableEngines.has(id);
+}
+
 export function registerMarkdownRenderer(engine: MarkdownRendererEngine): void {
   engines.set(engine.id, engine);
 }
 
 export function setActiveMarkdownRenderer(id: string): void {
-  const engine = engines.get(id);
+  const engine = unavailableEngines.has(id) ? undefined : engines.get(id);
   if (engine === undefined) {
     throw new Error(`Unknown markdown renderer engine: ${id}`);
   }
@@ -27,7 +49,7 @@ export function getActiveMarkdownRenderer(): MarkdownRendererEngine {
 }
 
 export function listMarkdownRenderers(): MarkdownRendererEngine[] {
-  return Array.from(engines.values());
+  return Array.from(engines.values()).filter(engine => !unavailableEngines.has(engine.id));
 }
 
 export function setMarkdownSyntaxStandard(standard: MarkdownSyntaxStandard): void {
@@ -66,6 +88,15 @@ export function registerMarkdownPlugin(plugin: MarkdownBlockPlugin | MarkdownInl
 
 export function renderMarkdown(markdown: string, options?: MarkdownRenderOptions): string {
   return activeEngine.render(markdown, options);
+}
+
+/** Renders with the active engine, using its asynchronous renderer when it has one. */
+export async function renderMarkdownAsync(markdown: string, options?: MarkdownRenderOptions): Promise<string> {
+  const engine = activeEngine;
+  if (engine.renderAsync === undefined) {
+    return engine.render(markdown, options);
+  }
+  return engine.renderAsync(markdown);
 }
 
 export function renderMarkdownInline(markdown: string, options?: MarkdownRenderOptions): string {

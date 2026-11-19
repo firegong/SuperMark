@@ -65,12 +65,9 @@ impl WebBridge {
         )
     }
 
-    pub fn reset_editor_then_restore(text: &str, restored: &str) -> String {
-        let restored_json = serde_json::to_string(restored).unwrap_or_else(|_| "\"\"".to_string());
-        format!(
-            "Promise.resolve({reset}).then(() => {{ if (window.webModules?.core?.getEditorText?.() !== {restored_json}) {{ window.webModules?.core?.replaceText?.({{ text: {restored_json}, granularity: 'wholeDocument' }}); }} }});",
-            reset = Self::reset_editor(text).trim_end_matches(';'),
-        )
+    /// Makes the editor fetch its document again (`document_content`) and reset to it.
+    pub fn reload_document() -> String {
+        "window.__markeditReloadDocument__?.();".to_string()
     }
 
     pub fn notify_app_ready() -> String {
@@ -114,28 +111,28 @@ fn handle_core_module(
 ) -> Result<(Value, Option<String>), String> {
     match method {
         "notifyWindowDidLoad" => {
-            let (initial_text, pending_restore) = doc_mgr.with_session(window_label, |s| {
-                (s.content_cache.clone(), s.pending_restore_text.take())
+            let (initial_text, pending_restore, path) = doc_mgr.with_session(window_label, |s| {
+                (s.content_cache.clone(), s.pending_restore_text.take(), s.file_path.clone())
             });
-            let ext_bootstrap = doc_mgr.extensions().build_extension_bootstrap_js();
-            // Each part runs in its own try block: a failing extension must never keep the
-            // document text from reaching the editor (a later save would overwrite the file).
-            let guard = |code: String| {
-                format!("try {{\n{code}\n}} catch (err) {{ console.error('[MarkEdit-Rust] bootstrap step failed:', err); }}")
-            };
-            let mut parts = Vec::new();
-            if !ext_bootstrap.is_empty() {
-                parts.push(guard(ext_bootstrap));
-            }
-            match pending_restore {
-                // Load the file first, then apply the recovered text as an undoable edit so the
-                // document shows as modified (resetEditor alone would report it clean).
-                Some(text) => parts.push(guard(WebBridge::reset_editor_then_restore(&initial_text, &text))),
-                None => parts.push(guard(WebBridge::reset_editor(&initial_text))),
-            }
-            parts.push(guard(WebBridge::notify_app_ready()));
-            let script = parts.join("\n");
-            Ok((Value::Null, Some(script)))
+            let extensions = doc_mgr.extensions().extension_bootstrap();
+            crate::diagnostics::log(&format!(
+                "window {window_label} loaded: document {:?} ({} chars), {} extension script(s), {} style(s)",
+                path,
+                initial_text.chars().count(),
+                extensions.scripts.len(),
+                extensions.styles.len()
+            ));
+
+            // The editor loads the document from this reply (src/hostDocument.ts). Nothing is
+            // injected with eval, so the size of installed extensions cannot get in the way.
+            Ok((
+                json!({
+                    "text": initial_text,
+                    "restoreText": pending_restore,
+                    "extensions": extensions,
+                }),
+                None,
+            ))
         }
         "notifyViewDidUpdate" => {
             if let Ok(update) = serde_json::from_value::<ViewDidUpdateParams>(params.clone()) {
@@ -357,18 +354,37 @@ fn handle_api_module(
                 .collect();
             Ok((json!(files), None))
         }
-        "getFileContent" | "getFileObject" => {
-            let Some(path_str) = params.get("path").and_then(|v| v.as_str()) else {
+        // For the file APIs a missing path means the window's current document (markedit-api).
+        "getFileContent" => {
+            let Some(path) = api_path_or_current(params, window_label, doc_mgr) else {
                 return Ok((Value::Null, None));
             };
-            let content = fs::read_to_string(path_str).ok();
-            Ok((json!(content), None))
+            Ok((json!(fs::read_to_string(path).ok()), None))
+        }
+        "getFileObject" => {
+            // The editor expects a JSON string of `FileObject { data (base64), mimeType, … }`.
+            let Some(path) = api_path_or_current(params, window_label, doc_mgr) else {
+                return Ok((Value::Null, None));
+            };
+            let Ok(bytes) = fs::read(&path) else {
+                return Ok((Value::Null, None));
+            };
+            let extension = path
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .map(|ext| ext.to_ascii_lowercase());
+            let object = json!({
+                "data": base64_encode(&bytes),
+                "mimeType": mime_type_for(extension.as_deref().unwrap_or("")),
+                "filenameExtension": extension,
+            });
+            Ok((json!(object.to_string()), None))
         }
         "getFileInfo" => {
-            let Some(path_str) = params.get("path").and_then(|v| v.as_str()) else {
+            let Some(path) = api_path_or_current(params, window_label, doc_mgr) else {
                 return Ok((Value::Null, None));
             };
-            let path = Path::new(path_str);
+            let path = path.as_path();
             let Ok(meta) = fs::metadata(path) else {
                 return Ok((Value::Null, None));
             };
@@ -468,6 +484,46 @@ fn byte_to_utf16_index(text: &str, byte_index: usize) -> usize {
 /// `pos` the caret's UTF-16 index inside that line and `offset` the line's document position.
 /// `tokenize` returns a line-relative `{ from, to }`; the move methods return an absolute
 /// document position (see `modules/tokenizer/index.ts`).
+/// `params.path`, or the current document of the window when no path is given.
+fn api_path_or_current(params: &Value, window_label: &str, doc_mgr: &DocumentManager) -> Option<PathBuf> {
+    match params.get("path").and_then(|v| v.as_str()) {
+        Some(path) if !path.is_empty() => Some(PathBuf::from(path)),
+        _ => doc_mgr.with_session(window_label, |s| s.file_path.clone()),
+    }
+}
+
+fn base64_encode(bytes: &[u8]) -> String {
+    const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let b = [chunk[0], *chunk.get(1).unwrap_or(&0), *chunk.get(2).unwrap_or(&0)];
+        let n = (u32::from(b[0]) << 16) | (u32::from(b[1]) << 8) | u32::from(b[2]);
+        out.push(TABLE[(n >> 18) as usize & 63] as char);
+        out.push(TABLE[(n >> 12) as usize & 63] as char);
+        out.push(if chunk.len() > 1 { TABLE[(n >> 6) as usize & 63] as char } else { '=' });
+        out.push(if chunk.len() > 2 { TABLE[n as usize & 63] as char } else { '=' });
+    }
+    out
+}
+
+fn mime_type_for(extension: &str) -> &'static str {
+    match extension {
+        "md" | "markdown" | "mdown" | "mkd" => "text/markdown",
+        "txt" => "text/plain",
+        "html" | "htm" => "text/html",
+        "css" => "text/css",
+        "js" => "text/javascript",
+        "json" => "application/json",
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "svg" => "image/svg+xml",
+        "pdf" => "application/pdf",
+        _ => "application/octet-stream",
+    }
+}
+
 fn handle_tokenizer_module(
     method: &str,
     params: &Value,
@@ -598,6 +654,37 @@ fn handle_foundation_models_module(method: &str) -> Result<(Value, Option<String
 #[cfg(test)]
 mod tests {
     #[test]
+    fn file_apis_fall_back_to_the_current_document() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let doc_mgr = DocumentManager::with_data_dir(tmp.path().join("data"));
+        let doc = tmp.path().join("note.md");
+        fs::write(&doc, "# Hi").unwrap();
+        doc_mgr.with_session("main", |s| s.load_from_path(&doc)).unwrap();
+
+        let call = |method: &str, params: Value| {
+            let msg = BridgeMessage { module_name: "api".into(), method_name: method.into(), parameters: params.to_string() };
+            dispatch_bridge_message("main", &msg, &doc_mgr).expect("dispatch").0
+        };
+
+        // No path: the current document (the Preview extension calls getFileInfo() this way).
+        let info: Value = serde_json::from_str(call("getFileInfo", json!({})).as_str().expect("json string")).unwrap();
+        assert_eq!(info["filePath"], doc.to_string_lossy().as_ref());
+        assert_eq!(info["parentPath"], tmp.path().to_string_lossy().as_ref());
+        assert_eq!(call("getFileContent", json!({})), json!("# Hi"));
+
+        let object: Value = serde_json::from_str(call("getFileObject", json!({ "path": doc })).as_str().expect("json string")).unwrap();
+        assert_eq!(object["data"], "IyBIaQ==");
+        assert_eq!(object["mimeType"], "text/markdown");
+        assert_eq!(object["filenameExtension"], "md");
+
+        // Untitled window: nothing to report.
+        let msg = BridgeMessage { module_name: "api".into(), method_name: "getFileInfo".into(), parameters: "{}".into() };
+        assert!(dispatch_bridge_message("doc-2", &msg, &doc_mgr).expect("dispatch").0.is_null());
+        assert_eq!(base64_encode(b"ab"), "YWI=");
+        assert_eq!(base64_encode(b""), "");
+    }
+
+    #[test]
     fn tokenizer_reads_anchor_and_returns_utf16_positions() {
         let anchor = |text: &str, pos: u64, offset: u64| {
             json!({ "anchor": { "text": text, "pos": pos, "offset": offset } })
@@ -665,7 +752,7 @@ mod tests {
     }
 
     #[test]
-    fn returns_reset_editor_and_user_extensions_on_notify_window_did_load() {
+    fn replies_with_document_and_extensions_on_notify_window_did_load() {
         let tmp = tempfile::tempdir().expect("tempdir");
         let doc_mgr = DocumentManager::with_data_dir(tmp.path().to_path_buf());
         doc_mgr.extensions().ensure_directories().unwrap();
@@ -685,13 +772,30 @@ mod tests {
             parameters: "{}".to_string(),
         };
 
-        let (_, followup_js) =
+        // A multi-megabyte extension (like markedit-preview.js) must not travel as an eval'd script.
+        fs::write(
+            doc_mgr.extensions().scripts_dir().join("big.js"),
+            format!("/* {} */", "x".repeat(6 * 1024 * 1024)),
+        )
+        .unwrap();
+
+        let (reply, followup_js) =
             dispatch_bridge_message("main", &msg, &doc_mgr).expect("dispatch window load");
-        let script = followup_js.expect("followup script expected");
-        assert!(script.contains("__prepareScriptContexts__"));
-        assert!(script.contains("window.webModules?.core?.resetEditor"));
-        assert!(script.contains("# Welcome to MarkEdit-Win"));
-        assert!(script.contains("window.webModules?.api?.notifyAppReady"));
+        // The document and extensions come back as data; nothing is injected with eval.
+        assert!(followup_js.is_none());
+        assert_eq!(reply["text"], "# Welcome to MarkEdit-Win");
+        assert!(reply["restoreText"].is_null());
+        let scripts = reply["extensions"]["scripts"].as_array().expect("scripts");
+        assert_eq!(scripts.len(), 2);
+        assert!(scripts.iter().any(|script| script["capability"] == "ext.js"
+            && script["source"] == "MarkEdit.onAppReady(() => {});"));
+
+        // Unsaved text recovered from a backup is delivered once.
+        doc_mgr.with_session("main", |s| s.pending_restore_text = Some("draft".to_string()));
+        let (reply, _) = dispatch_bridge_message("main", &msg, &doc_mgr).expect("dispatch");
+        assert_eq!(reply["restoreText"], "draft");
+        let (reply, _) = dispatch_bridge_message("main", &msg, &doc_mgr).expect("dispatch");
+        assert!(reply["restoreText"].is_null());
     }
 
     #[test]

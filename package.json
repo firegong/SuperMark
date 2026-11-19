@@ -8,6 +8,7 @@
     "build:editor": "yarn --cwd packages/core-editor build",
     "test:editor": "yarn --cwd packages/core-editor test",
     "check:tauri": "cargo check --manifest-path src-tauri/Cargo.toml",
+    "build:app": "yarn build:editor && cargo build --release --features tauri/custom-protocol --manifest-path src-tauri/Cargo.toml",
     "test:tauri": "cargo test --manifest-path src-tauri/Cargo.toml",
     "test": "yarn build:editor && yarn test:editor && yarn test:tauri"
   },

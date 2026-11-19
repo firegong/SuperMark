@@ -47,6 +47,13 @@ export interface MarkdownRendererEngine {
   readonly name: string;
   readonly standard: MarkdownSyntaxStandard;
   render(markdown: string, options?: MarkdownRenderOptions): string;
+  /** Asynchronous HTML fragment rendering (e.g. renderers provided by extensions). */
+  renderAsync?(markdown: string): Promise<string>;
+  /**
+   * A complete, self-styled HTML document. When present, the preview shows it in an isolated
+   * frame instead of inserting fragments into the app's document.
+   */
+  renderDocument?(markdown: string): Promise<string>;
   renderInline?(markdown: string, options?: MarkdownRenderOptions): string;
   renderMath?(latex: string, displayMode: boolean): string;
   renderMermaid?(code: string): string;

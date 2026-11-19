@@ -86,6 +86,8 @@ declare global {
     setMarkdownRenderer(id: string): void;
     setDiagramServer(url: string): void;
     setDiagramRendering(mode: string): void;
+    togglePreviewSyncScroll(): void;
+    copyPreviewHtml(): void;
     closeAll(): void;
   }
 }

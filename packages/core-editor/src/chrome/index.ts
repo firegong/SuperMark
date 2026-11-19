@@ -21,7 +21,9 @@ import {
   registerMarkdownRenderer,
   setMarkdownRenderer,
   refreshMarkdownPreview,
-  ensureChromeUIModeSwitcher,
+  publishViewState,
+  togglePreviewSyncScroll,
+  copyPreviewHtml,
   MarkdownPreviewMode,
 } from './markdownPreview';
 import type { MarkdownRendererEngine, DiagramPlugin, MathPlugin } from '../modules/markdown-renderer';
@@ -39,6 +41,8 @@ import {
 
 const rootId = 'markedit-chrome-root';
 
+let chromeKeydownHandler: ((event: KeyboardEvent) => void) | undefined;
+
 export function initChromeUI(): void {
   if (document.getElementById(rootId) !== null) {
     return;
@@ -55,7 +59,7 @@ export function initChromeUI(): void {
   root.id = rootId;
   root.className = 'markedit-chrome-root';
   document.body.appendChild(root);
-  ensureChromeUIModeSwitcher();
+  publishViewState();
 
   let activePanel: HTMLElement | null = null;
   let activeFindBar: FindBarApi | null = null;
@@ -213,6 +217,12 @@ export function initChromeUI(): void {
       setDiagramServer(url);
       refreshMarkdownPreview();
     },
+    togglePreviewSyncScroll() {
+      togglePreviewSyncScroll();
+    },
+    copyPreviewHtml() {
+      void copyPreviewHtml();
+    },
     setDiagramRendering(mode) {
       setDiagramRendering(mode);
       refreshMarkdownPreview();
@@ -259,7 +269,12 @@ export function initChromeUI(): void {
   markEdit.markDiagramFailed = markDiagramFailed;
   markEdit.setMarkdownRenderer = (id: string) => chromeUI.setMarkdownRenderer(id);
 
-  window.addEventListener('keydown', event => {
+  // Re-initialising (tests, editor resets) must not stack listeners: a toggle shortcut handled
+  // twice would cancel itself.
+  if (chromeKeydownHandler !== undefined) {
+    window.removeEventListener('keydown', chromeKeydownHandler, true);
+  }
+  chromeKeydownHandler = (event: KeyboardEvent) => {
     if (event.key === 'Escape') {
       chromeUI.closeAll();
       webModules.core.restoreFocus();
@@ -295,5 +310,6 @@ export function initChromeUI(): void {
       chromeUI.toggleMarkdownPreview('preview');
       event.preventDefault();
     }
-  }, true);
+  };
+  window.addEventListener('keydown', chromeKeydownHandler, true);
 }

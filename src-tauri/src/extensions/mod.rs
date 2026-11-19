@@ -10,6 +10,66 @@ use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+/// Extensions that ship with the app. They are listed in Extensions → Installed like
+/// default-installed extensions and can be turned off, but not uninstalled.
+/// (id, name, description)
+pub const BUILTIN_EXTENSIONS: &[(&str, &str, &str)] = &[(
+    "supermarkdown",
+    "SuperMarkdown",
+    "Markdown parser: MultiMarkdown 6 with Pandoc, GFM and Obsidian syntax, merged table cells, cross references, run/render chunks, includes and more. Choose it in View → Markdown Parser.",
+)];
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct BuiltinExtension {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub version: String,
+    pub enabled: bool,
+}
+
+/// The built-in extension that provides a Markdown parser (renderer id → extension id).
+pub fn builtin_for_parser(parser_id: &str) -> Option<&'static str> {
+    match parser_id {
+        "super" => Some("supermarkdown"),
+        _ => None,
+    }
+}
+
+pub fn is_builtin_extension(id: &str) -> bool {
+    BUILTIN_EXTENSIONS.iter().any(|(builtin, _, _)| *builtin == id)
+}
+
+/// A user stylesheet (`styles/*.css`).
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ExtensionStyle {
+    pub name: String,
+    pub css: String,
+}
+
+/// An enabled user script with its source, in `installed[]` order.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ExtensionScript {
+    pub path: String,
+    pub capability: String,
+    pub source: String,
+}
+
+/// Extensions sent to the editor as data (IPC reply) rather than as one injected script:
+/// a single multi-megabyte `eval` is fragile in WebView2, and each script can then run on its
+/// own, so one broken or huge extension cannot keep the document from loading.
+#[derive(Debug, Clone, Serialize, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ExtensionBootstrap {
+    pub styles: Vec<ExtensionStyle>,
+    pub scripts: Vec<ExtensionScript>,
+    /// Built-in extensions that are turned off (e.g. `supermarkdown`).
+    pub disabled_builtins: Vec<String>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct ScriptDescriptor {
     pub path: String,
@@ -29,6 +89,7 @@ pub struct ExtensionUpdateInfo {
 #[serde(rename_all = "camelCase")]
 pub struct ExtensionsManagerState {
     pub catalog: Vec<IndexEntry>,
+    pub builtins: Vec<BuiltinExtension>,
     pub installed: Vec<config::Installed>,
     pub updates: Vec<ExtensionUpdateInfo>,
     pub update_behavior: UpdateBehavior,
@@ -134,6 +195,54 @@ impl ExtensionManager {
     /// - extensions.json `installed` array is the source of truth for order;
     /// - records with `enabled: false` are skipped;
     /// - leftover untracked files are adopted by `reconcile_installed` first.
+    /// Installed stylesheets and enabled scripts, with the same order and theme patching as
+    /// `build_extension_bootstrap_js`.
+    pub fn extension_bootstrap(&self) -> ExtensionBootstrap {
+        let _ = self.ensure_directories();
+        let config = self.config();
+        let _ = config.reconcile_installed(&self.scripts_dir());
+        let current = config.read();
+        let installed = current.installed;
+        let mut bootstrap = ExtensionBootstrap {
+            disabled_builtins: current.disabled_builtins,
+            ..ExtensionBootstrap::default()
+        };
+
+        for css_path in Self::list_sorted_files(&self.styles_dir(), "css") {
+            let Some(name) = css_path.file_name().and_then(|n| n.to_str()) else {
+                continue;
+            };
+            if let Ok(css) = fs::read_to_string(&css_path) {
+                bootstrap.styles.push(ExtensionStyle { name: name.to_string(), css });
+            }
+        }
+
+        for record in &installed {
+            if !record.is_enabled() {
+                continue;
+            }
+            let script_path = self.scripts_dir().join(&record.file);
+            let Some(file_name) = script_path.file_name().and_then(|n| n.to_str()) else {
+                continue;
+            };
+            let Ok(source) = fs::read_to_string(&script_path) else {
+                continue;
+            };
+            let source = if is_theme_script(file_name) {
+                apply_theme_patch(&source)
+            } else {
+                source
+            };
+            bootstrap.scripts.push(ExtensionScript {
+                path: script_path.to_string_lossy().into_owned(),
+                capability: file_name.to_string(),
+                source,
+            });
+        }
+
+        bootstrap
+    }
+
     pub fn build_extension_bootstrap_js(&self) -> String {
         let _ = self.ensure_directories();
         let config = self.config();
@@ -270,6 +379,7 @@ impl ExtensionManager {
         let current_cfg = config.read();
         ExtensionsManagerState {
             catalog,
+            builtins: self.builtin_extensions(app_version),
             installed: current_cfg.installed.clone(),
             updates,
             update_behavior: current_cfg.update_behavior(),
@@ -339,6 +449,24 @@ impl ExtensionManager {
         Ok(self.get_manager_state(false, app_version))
     }
 
+    pub fn builtin_extensions(&self, app_version: &str) -> Vec<BuiltinExtension> {
+        let disabled = self.config().read().disabled_builtins;
+        BUILTIN_EXTENSIONS
+            .iter()
+            .map(|(id, name, description)| BuiltinExtension {
+                id: (*id).to_string(),
+                name: (*name).to_string(),
+                description: (*description).to_string(),
+                version: app_version.to_string(),
+                enabled: !disabled.iter().any(|item| item == id),
+            })
+            .collect()
+    }
+
+    pub fn is_builtin_enabled(&self, id: &str) -> bool {
+        !self.config().read().disabled_builtins.iter().any(|item| item == id)
+    }
+
     pub fn set_extension_enabled(
         &self,
         id: &str,
@@ -347,6 +475,15 @@ impl ExtensionManager {
     ) -> Result<ExtensionsManagerState, String> {
         let _ = self.ensure_directories();
         let config = self.config();
+        if is_builtin_extension(id) {
+            config.update(|cfg| {
+                cfg.disabled_builtins.retain(|item| item != id);
+                if !enabled {
+                    cfg.disabled_builtins.push(id.to_string());
+                }
+            })?;
+            return Ok(self.get_manager_state(false, app_version));
+        }
         let _ = config.reconcile_installed(&self.scripts_dir());
         config.update(|cfg| {
             if let Some(record) = cfg.installed.iter_mut().find(|item| item.id == id) {
@@ -455,6 +592,32 @@ mod tests {
         assert!(bootstrap.contains("__runScriptWithContext__"));
         assert!(bootstrap.contains("hello-plugin.js"));
         assert!(bootstrap.contains("MarkEdit.onAppReady"));
+    }
+
+    #[test]
+    fn builtin_extensions_can_be_turned_off_but_are_always_listed() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let mgr = ExtensionManager::new(tmp.path());
+        mgr.ensure_directories().expect("ensure dirs");
+
+        let state = mgr.get_manager_state(false, "1.0.0");
+        assert_eq!(state.builtins.len(), 1);
+        assert_eq!(state.builtins[0].id, "supermarkdown");
+        assert!(state.builtins[0].enabled);
+        assert!(mgr.extension_bootstrap().disabled_builtins.is_empty());
+
+        let off = mgr.set_extension_enabled("supermarkdown", false, "1.0.0").expect("disable");
+        assert!(!off.builtins[0].enabled);
+        assert!(off.installed.is_empty(), "built-ins are not installed[] records");
+        assert_eq!(mgr.extension_bootstrap().disabled_builtins, vec!["supermarkdown".to_string()]);
+        assert!(!mgr.is_builtin_enabled("supermarkdown"));
+
+        // Idempotent and reversible.
+        mgr.set_extension_enabled("supermarkdown", false, "1.0.0").expect("disable again");
+        assert_eq!(mgr.config().read().disabled_builtins.len(), 1);
+        let on = mgr.set_extension_enabled("supermarkdown", true, "1.0.0").expect("enable");
+        assert!(on.builtins[0].enabled);
+        assert!(mgr.is_builtin_enabled("supermarkdown"));
     }
 
     #[test]

@@ -1,7 +1,9 @@
-import { createButton, createElement } from './utils';
+import { createElement } from './utils';
+import { clearIncludeCache, includeOptions } from './includeLoader';
 import { globalState } from '../common/store';
 import {
   renderMarkdown,
+  renderMarkdownAsync,
   getActiveMarkdownRenderer,
   setActiveMarkdownRenderer,
   getMarkdownSyntaxStandard,
@@ -17,7 +19,6 @@ export type MarkdownPreviewMode = 'editor' | 'split' | 'preview';
 const previewState: {
   mode: MarkdownPreviewMode;
   pane: HTMLElement | null;
-  toolbar: HTMLElement | null;
   body: HTMLElement | null;
   syncScroll: boolean;
   splitRatio: number;
@@ -27,7 +28,6 @@ const previewState: {
 } = {
   mode: 'editor',
   pane: null,
-  toolbar: null,
   body: null,
   syncScroll: true,
   splitRatio: 0.5,
@@ -72,29 +72,6 @@ function getEditorLineRange(line: number): { from: number; to: number } {
   return { from: lineObj.from, to: lineObj.to };
 }
 
-function updateSummary(): void {
-  if (previewState.toolbar === null) {
-    return;
-  }
-
-  const text = getEditorText();
-  const words = countWords(text);
-  const badge = previewState.toolbar.querySelector('.markedit-preview-summary') as HTMLElement | null;
-  if (badge !== null) {
-    badge.textContent = `${words} words · ${readingTime(words)}`;
-  }
-}
-
-function countWords(text: string): number {
-  const matches = text.match(/[\p{L}\p{N}]+/gu);
-  return matches?.length ?? 0;
-}
-
-function readingTime(words: number): string {
-  const minutes = Math.max(1, Math.round(words / 200));
-  return `${minutes} min read`;
-}
-
 function updateContent(force = false): void {
   const body = previewState.body;
   if (body === null || previewState.mode === 'editor') {
@@ -108,11 +85,18 @@ function updateContent(force = false): void {
     }
 
     previewState.lastContent = text;
-    body.innerHTML = renderMarkdown(text);
+    const engine = getActiveMarkdownRenderer();
+    if (engine.renderDocument !== undefined) {
+      void renderDocumentInFrame(body, engine.renderDocument.bind(engine), text);
+      return;
+    }
+
+    removePreviewFrame(body);
+    // SuperMarkdown @include: files are read ahead and the preview re-renders when they arrive.
+    body.innerHTML = renderMarkdown(text, includeOptions(text, () => updateContent(true)));
     attachPreviewInteractions();
     // Async diagram plugins (PlantUML, D2, compressed draw.io, …) finish rendering here.
     void hydrateDiagrams(body);
-    updateSummary();
   };
 
   if (force) {
@@ -130,6 +114,86 @@ function updateContent(force = false): void {
   }
 
   previewState.updateTimeout = setTimeout(() => render(false), 50);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Self-styled documents (e.g. markdown-it from the MarkEdit Preview extension) are shown in a
+// sandboxed frame: their CSS cannot reach the app and their inline scripts do not run
+// (`allow-same-origin` without `allow-scripts` lets the preview update and scroll the frame).
+// ---------------------------------------------------------------------------------------------
+
+let frameRenderToken = 0;
+
+function previewFrame(body: HTMLElement): HTMLIFrameElement | null {
+  return body.querySelector<HTMLIFrameElement>(':scope > iframe.markedit-preview-frame');
+}
+
+function removePreviewFrame(body: HTMLElement): void {
+  previewFrame(body)?.remove();
+  body.classList.remove('has-frame');
+}
+
+async function renderDocumentInFrame(body: HTMLElement, renderDocument: (markdown: string) => Promise<string>, text: string): Promise<void> {
+  const token = ++frameRenderToken;
+  let html: string;
+  try {
+    html = await renderDocument(text);
+  } catch (error) {
+    console.error('[MarkEdit] Preview rendering failed:', error);
+    return;
+  }
+
+  // A newer render started, or the preview switched to another parser.
+  if (token !== frameRenderToken || getActiveMarkdownRenderer().renderDocument === undefined) {
+    return;
+  }
+
+  const parsed = new DOMParser().parseFromString(html, 'text/html');
+  let frame = previewFrame(body);
+  const frameDocument = frame?.contentDocument ?? null;
+  const headSignature = parsed.head.innerHTML.length.toString();
+
+  // Same styles as before: swap the body in place so scroll position and styles stay put.
+  if (frame !== null && frameDocument !== null && frame.dataset.head === headSignature) {
+    frameDocument.body.innerHTML = parsed.body.innerHTML;
+    return;
+  }
+
+  if (frame === null) {
+    body.replaceChildren();
+    frame = document.createElement('iframe');
+    frame.className = 'markedit-preview-frame';
+    frame.setAttribute('sandbox', 'allow-same-origin');
+    frame.title = 'Markdown preview';
+    body.appendChild(frame);
+    body.classList.add('has-frame');
+  }
+
+  frame.dataset.head = headSignature;
+  const scrollTop = frame.contentDocument?.scrollingElement?.scrollTop ?? 0;
+  frame.addEventListener('load', () => {
+    const loaded = frame.contentDocument;
+    if (loaded === null) {
+      return;
+    }
+    if (loaded.scrollingElement !== null) {
+      loaded.scrollingElement.scrollTop = scrollTop;
+    }
+    // Links: same-document anchors scroll; nothing navigates the frame away.
+    loaded.addEventListener('click', event => {
+      const anchor = (event.target as Element | null)?.closest('a');
+      if (anchor === null || anchor === undefined) {
+        return;
+      }
+      event.preventDefault();
+      const href = anchor.getAttribute('href') ?? '';
+      if (href.startsWith('#')) {
+        loaded.getElementById(decodeURIComponent(href.slice(1)))?.scrollIntoView();
+      }
+    });
+    syncScroll();
+  }, { once: true });
+  frame.srcdoc = html;
 }
 
 function attachPreviewInteractions(): void {
@@ -324,6 +388,14 @@ export function syncScroll(): void {
 
   const body = previewState.body;
 
+  // Framed documents have no line anchors: keep the same relative position.
+  const frameScroller = previewFrame(body)?.contentDocument?.scrollingElement ?? null;
+  if (frameScroller !== null) {
+    const ratio = scroller.scrollTop / Math.max(1, scroller.scrollHeight - scroller.clientHeight);
+    frameScroller.scrollTop = ratio * Math.max(0, frameScroller.scrollHeight - frameScroller.clientHeight);
+    return;
+  }
+
   if (scroller.scrollTop <= 2) {
     body.scrollTop = 0;
     return;
@@ -352,102 +424,16 @@ function createPreviewPane(): HTMLElement {
   }
 
   previewState.pane = null;
-  previewState.toolbar = null;
   previewState.body = null;
 
   const pane = createElement('div', 'markedit-markdown-preview-pane');
   document.body.appendChild(pane);
-
-  const toolbar = createElement('div', 'markedit-preview-toolbar', pane);
-  previewState.toolbar = toolbar;
-
-  const left = createElement('div', 'markedit-preview-toolbar-left', toolbar);
-  const modeGroup = createElement('div', 'markedit-preview-mode-group', left);
-
-  const editorButton = createButton('Editor', () => setMarkdownPreviewMode('editor'), 'markedit-preview-mode-button');
-  editorButton.dataset.mode = 'editor';
-  modeGroup.appendChild(editorButton);
-
-  const splitButton = createButton('Split', () => setMarkdownPreviewMode('split'), 'markedit-preview-mode-button');
-  splitButton.dataset.mode = 'split';
-  modeGroup.appendChild(splitButton);
-
-  const previewButton = createButton('Preview', () => setMarkdownPreviewMode('preview'), 'markedit-preview-mode-button');
-  previewButton.dataset.mode = 'preview';
-  modeGroup.appendChild(previewButton);
-
-  const rendererSelect = createSyntaxStandardSelect();
-  modeGroup.appendChild(rendererSelect);
-
-  const summary = createElement('span', 'markedit-preview-summary', left, '0 words · 1 min read');
-  summary.title = 'Document summary';
-
-  const right = createElement('div', 'markedit-preview-toolbar-right', toolbar);
-
-  const syncButton = createButton('Sync Scroll', () => {
-    previewState.syncScroll = !previewState.syncScroll;
-    syncButton.classList.toggle('is-active', previewState.syncScroll);
-    if (previewState.syncScroll) {
-      syncScroll();
-    }
-  }, 'markedit-preview-toolbar-button');
-  syncButton.classList.add('is-active');
-  syncButton.title = 'Sync editor scroll to preview';
-  right.appendChild(syncButton);
-
-  const copyButton = createButton('Copy HTML', () => {
-    const html = previewState.body?.innerHTML ?? '';
-    void copyToClipboard(html, copyButton, 'Copied!');
-  }, 'markedit-preview-toolbar-button');
-  right.appendChild(copyButton);
-
-  const closeButton = createButton('×', () => setMarkdownPreviewMode('editor'), 'markedit-chrome-button markedit-chrome-icon-button markedit-chrome-close-button');
-  right.appendChild(closeButton);
 
   const body = createElement('div', 'markedit-preview-body', pane);
   previewState.body = body;
 
   previewState.pane = pane;
   return pane;
-}
-
-function createSyntaxStandardSelect(): HTMLSelectElement {
-  const select = document.createElement('select');
-  select.className = 'markedit-preview-standard-select';
-  select.title = 'Markdown syntax standard';
-
-  const standards: { value: MarkdownSyntaxStandard; label: string }[] = [
-    { value: 'extended', label: 'Extended' },
-    { value: 'super', label: 'SuperMarkdown' },
-    { value: 'gfm', label: 'GFM' },
-    { value: 'commonmark', label: 'CommonMark' },
-  ];
-
-  for (const { value, label } of standards) {
-    const option = document.createElement('option');
-    option.value = value;
-    option.textContent = label;
-    select.appendChild(option);
-  }
-
-  for (const engine of listMarkdownRenderers()) {
-    if (standards.some(standard => standard.value === engine.id)) {
-      continue;
-    }
-    const option = document.createElement('option');
-    option.value = engine.id;
-    option.textContent = engine.name;
-    select.appendChild(option);
-  }
-
-  select.value = getActiveMarkdownRenderer().id;
-
-  select.addEventListener('change', () => {
-    setMarkdownRenderer(select.value);
-    void persistMarkdownRenderer(select.value);
-  });
-
-  return select;
 }
 
 function ensureResizer(): HTMLElement | null {
@@ -490,7 +476,6 @@ function applyLayout(): void {
 
   body.classList.remove('markedit-mode-split', 'markedit-mode-preview');
   removeResizer();
-  ensureModeSwitcher();
 
   if (previewState.mode === 'editor') {
     if (editor !== null) {
@@ -502,7 +487,6 @@ function applyLayout(): void {
       previewState.pane.style.display = 'none';
     }
 
-    updateModeSwitcher();
     return;
   }
 
@@ -528,11 +512,6 @@ function applyLayout(): void {
     editor.style.display = '';
   }
 
-  previewState.toolbar?.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach(button => {
-    button.classList.toggle('is-active', button.dataset.mode === previewState.mode);
-  });
-
-  updateModeSwitcher();
   syncEditorStyles();
   updateContent(true);
 }
@@ -585,7 +564,15 @@ function setupGlobalListeners(): void {
     syncEditorStyles();
   });
 
+  // The View menu is shared by all windows; show this window's state when it is focused.
+  window.addEventListener('focus', () => {
+    // Included files may have been edited in another window or app.
+    clearIncludeCache();
+    publishViewState();
+  });
+
   window.addEventListener('markedit-editor-reset', () => {
+    clearIncludeCache(true);
     previewState.lastContent = '';
     updateContent(true);
   });
@@ -606,45 +593,6 @@ function syncEditorStyles(): void {
   pane.style.setProperty('--preview-bg', background);
   pane.style.setProperty('--preview-fg', foreground);
   pane.style.setProperty('--preview-accent', accent);
-}
-
-function ensureModeSwitcher(): void {
-  const root = document.getElementById('markedit-chrome-root');
-  if (root?.querySelector('#markedit-mode-switcher') !== null) {
-    return;
-  }
-
-  const pill = createElement('div', 'markedit-mode-switcher', root);
-  pill.id = 'markedit-mode-switcher';
-
-  const modes: MarkdownPreviewMode[] = ['editor', 'split', 'preview'];
-  for (const mode of modes) {
-    const label = mode.charAt(0).toUpperCase() + mode.slice(1);
-    const button = createButton(label, () => setMarkdownPreviewMode(mode), 'markedit-mode-switcher-button');
-    button.dataset.mode = mode;
-    pill.appendChild(button);
-  }
-
-  const rendererSelect = createSyntaxStandardSelect();
-  pill.appendChild(rendererSelect);
-}
-
-function updateModeSwitcher(): void {
-  const pill = document.getElementById('markedit-mode-switcher');
-  if (pill === null) {
-    return;
-  }
-
-  pill.style.display = previewState.mode === 'editor' ? '' : 'none';
-
-  pill.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach(button => {
-    button.classList.toggle('is-active', button.dataset.mode === previewState.mode);
-  });
-
-  const select = pill.querySelector<HTMLSelectElement>('.markedit-preview-standard-select');
-  if (select !== null) {
-    select.value = getActiveMarkdownRenderer().id;
-  }
 }
 
 export function getMarkdownPreviewMode(): MarkdownPreviewMode {
@@ -669,6 +617,8 @@ export function setMarkdownPreviewMode(mode: MarkdownPreviewMode): void {
     stopLiveSync();
     getEditorView()?.focus();
   }
+
+  publishViewState();
 }
 
 export function toggleMarkdownPreview(preferredMode?: 'split' | 'preview'): void {
@@ -690,6 +640,7 @@ export function toggleMarkdownPreview(preferredMode?: 'split' | 'preview'): void
 export function setMarkdownStandard(standard: MarkdownSyntaxStandard): void {
   setMarkdownSyntaxStandard(standard);
   updateContent(true);
+  publishViewState();
 }
 
 export function getMarkdownStandard(): MarkdownSyntaxStandard {
@@ -706,25 +657,9 @@ export function setMarkdownRenderer(id: string): void {
 
   const changed = getActiveMarkdownRenderer().id !== id;
   setActiveMarkdownRenderer(id);
-  document.querySelectorAll<HTMLSelectElement>('.markedit-preview-standard-select').forEach(select => {
-    select.value = id;
-  });
   if (changed) {
     updateContent(true);
-  }
-}
-
-/** Saves the parser choice as the `preview.markdownRenderer` user setting. */
-async function persistMarkdownRenderer(id: string): Promise<void> {
-  const invoke = window.__TAURI_INTERNALS__?.invoke;
-  if (invoke === undefined) {
-    return;
-  }
-
-  try {
-    await invoke('settings_update', { patch: { markdownRenderer: id } });
-  } catch (error) {
-    console.error('Failed to save markdown renderer:', error);
+    publishViewState();
   }
 }
 
@@ -733,9 +668,55 @@ export function refreshMarkdownPreview(): void {
   updateContent(true);
 }
 
-export function ensureChromeUIModeSwitcher(): void {
-  ensureModeSwitcher();
-  updateModeSwitcher();
+export function isPreviewSyncScroll(): boolean {
+  return previewState.syncScroll;
+}
+
+/** View → Sync Preview Scroll. */
+export function togglePreviewSyncScroll(): void {
+  previewState.syncScroll = !previewState.syncScroll;
+  if (previewState.syncScroll) {
+    syncScroll();
+  }
+  publishViewState();
+}
+
+/** View → Copy Preview HTML: the rendered HTML of the document, in any view mode. */
+export async function copyPreviewHtml(): Promise<void> {
+  const framed = previewState.body !== null && previewFrame(previewState.body) !== null;
+  const html = previewState.mode !== 'editor' && previewState.body !== null && !framed
+    ? previewState.body.innerHTML
+    : await renderMarkdownAsync(getEditorText());
+  try {
+    await navigator.clipboard.writeText(html);
+  } catch (error) {
+    console.error('Failed to copy preview HTML:', error);
+  }
+}
+
+/**
+ * Reports the view mode, Markdown parser and scroll sync to the desktop host, which shows them
+ * as checkmarks in the native View menu (the page has no view buttons of its own).
+ */
+export function publishViewState(): void {
+  void reportViewState();
+}
+
+async function reportViewState(): Promise<void> {
+  const invoke = window.__TAURI_INTERNALS__?.invoke;
+  if (invoke === undefined) {
+    return;
+  }
+
+  try {
+    await invoke('view_state_changed', {
+      mode: previewState.mode,
+      renderer: getActiveMarkdownRenderer().id,
+      syncScroll: previewState.syncScroll,
+    });
+  } catch (error) {
+    console.error('Failed to report view state:', error);
+  }
 }
 
 setupGlobalListeners();
