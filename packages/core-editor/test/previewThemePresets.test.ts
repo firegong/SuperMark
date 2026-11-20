@@ -34,6 +34,16 @@ describe('Preview theme presets', () => {
     expect(variables('minimal-light')['--pv-font-body']).toContain('serif');
     expect(buildPreviewPresetCss(previewThemePreset('rose-pine'), '.pane')).toContain('border-left: none');
     expect(buildPreviewPresetCss(previewThemePreset('github-dark'), '.pane')).not.toContain('border-left: none');
+    // GitHub tables: as wide as their content, body-size text, 6px 13px cells, tabular digits.
+    expect(variables('github-light')).toMatchObject({
+      '--pv-table-display': 'block',
+      '--pv-table-width': 'max-content',
+      '--pv-table-font-size': '1em',
+      '--pv-table-cell-padding': '6px 13px',
+      '--pv-table-numbers': 'tabular-nums',
+    });
+    expect(variables('github-dark')['--pv-table-width']).toBe('max-content');
+    expect(variables('dracula')['--pv-table-width']).toBeUndefined();
     expect(previewThemePreset('toString')).toBeUndefined();
     expect(buildPreviewPresetCss(undefined, '.pane')).toBe('');
   });

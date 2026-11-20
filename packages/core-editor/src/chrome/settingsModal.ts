@@ -267,6 +267,208 @@ function presetColor(preset: PreviewThemePreset | undefined, element: PreviewSty
   return byElement[element];
 }
 
+/** Placeholder swatches for theme extensions (their colors are only known once applied). */
+const extensionLightSwatch = '#fafafa,#383a42,#eef0f3,#a626a4,#4078f2,#50a14f';
+const extensionDarkSwatch = '#282c34,#abb2bf,#2c313a,#c678dd,#61afef,#98c379';
+
+interface ThemePickerItem {
+  value: string;
+  label: string;
+  detail?: string;
+  /** Comma-separated: background, text, line highlight, then token colors. */
+  colors: string;
+}
+
+interface ThemePickerGroup {
+  label?: string;
+  items: ThemePickerItem[];
+}
+
+/** A small picture of the editor in the theme's colors: a few lines of colored tokens. */
+function createThemeSwatch(colors: string): HTMLElement {
+  const palette = colors.split(',').map(color => color.trim());
+  const swatch = createElement('span', 'markedit-theme-swatch');
+  swatch.style.backgroundColor = palette[0] ?? '#ffffff';
+  swatch.style.borderColor = palette[2] ?? 'transparent';
+  swatch.setAttribute('aria-hidden', 'true');
+
+  const rows = [[3, 1], [4, 1, 5], [1, 3]];
+  for (const columns of rows) {
+    const row = createElement('span', 'markedit-theme-swatch-row', swatch);
+    for (const index of columns) {
+      const token = createElement('span', 'markedit-theme-swatch-token', row);
+      token.style.backgroundColor = palette[index] ?? '#000000';
+    }
+  }
+  return swatch;
+}
+
+let themePickerCount = 0;
+
+/**
+ * A drop-down (listbox) whose button and options show each theme's colors, which a native
+ * <select> cannot. Keyboard: arrows / Home / End move, Enter or Space picks, Escape closes.
+ */
+function createThemePicker(
+  label: string,
+  groups: ThemePickerGroup[],
+  value: string,
+  onChange: (value: string) => void,
+): HTMLElement {
+  const listId = `markedit-theme-picker-list-${++themePickerCount}`;
+  const items = groups.flatMap(group => group.items);
+  const selected = items.find(item => item.value === value) ?? items[0];
+
+  const wrapper = createElement('div', 'markedit-settings-field markedit-theme-picker');
+  const labelElement = createElement('label', 'markedit-settings-field-label', wrapper, label);
+  labelElement.id = `${listId}-label`;
+
+  const button = createElement('button', 'markedit-chrome-input markedit-theme-picker-button', wrapper);
+  button.type = 'button';
+  button.setAttribute('aria-haspopup', 'listbox');
+  button.setAttribute('aria-expanded', 'false');
+  button.setAttribute('aria-controls', listId);
+  button.setAttribute('aria-labelledby', `${labelElement.id} ${listId}-value`);
+  button.dataset.value = selected.value;
+  button.appendChild(createThemeSwatch(selected.colors));
+  const valueLabel = createElement('span', 'markedit-theme-picker-label', button, selected.label);
+  valueLabel.id = `${listId}-value`;
+  if (selected.detail !== undefined) {
+    createElement('span', 'markedit-theme-picker-detail', button, selected.detail);
+  }
+  createElement('span', 'markedit-theme-picker-chevron', button).setAttribute('aria-hidden', 'true');
+
+  const list = createElement('div', 'markedit-theme-picker-list', wrapper);
+  list.id = listId;
+  list.setAttribute('role', 'listbox');
+  list.setAttribute('aria-labelledby', labelElement.id);
+  list.tabIndex = -1;
+  list.hidden = true;
+
+  const options: HTMLElement[] = [];
+  for (const group of groups) {
+    const container = group.label !== undefined ? createElement('div', 'markedit-theme-picker-group', list) : list;
+    if (group.label !== undefined) {
+      container.setAttribute('role', 'group');
+      const heading = createElement('div', 'markedit-theme-picker-group-label', container, group.label);
+      heading.id = `${listId}-group-${options.length}`;
+      container.setAttribute('aria-labelledby', heading.id);
+    }
+    for (const item of group.items) {
+      const option = createElement('div', 'markedit-theme-picker-option', container);
+      option.id = `${listId}-option-${options.length}`;
+      option.setAttribute('role', 'option');
+      option.setAttribute('aria-selected', String(item.value === selected.value));
+      option.dataset.value = item.value;
+      option.appendChild(createThemeSwatch(item.colors));
+      createElement('span', 'markedit-theme-picker-label', option, item.label);
+      if (item.detail !== undefined) {
+        createElement('span', 'markedit-theme-picker-detail', option, item.detail);
+      }
+      option.addEventListener('mousemove', () => setActive(options.indexOf(option)));
+      option.addEventListener('click', () => choose(option));
+      options.push(option);
+    }
+  }
+
+  let activeIndex = -1;
+  let isOpen = false;
+  function setActive(index: number): void {
+    if (index < 0 || index >= options.length) {
+      return;
+    }
+    options[activeIndex]?.classList.remove('is-active');
+    activeIndex = index;
+    const option = options[index];
+    option.classList.add('is-active');
+    list.setAttribute('aria-activedescendant', option.id);
+    // Not implemented by every DOM (e.g. jsdom).
+    (option as Partial<HTMLElement>).scrollIntoView?.({ block: 'nearest' });
+  }
+
+  function onOutsidePointer(event: Event): void {
+    if (!wrapper.contains(event.target as Node)) {
+      close(false);
+    }
+  }
+
+  function open(): void {
+    if (isOpen) {
+      return;
+    }
+    isOpen = true;
+    list.hidden = false;
+    wrapper.classList.add('is-open');
+    button.setAttribute('aria-expanded', 'true');
+    setActive(Math.max(0, options.findIndex(option => option.dataset.value === selected.value)));
+    list.focus();
+    document.addEventListener('mousedown', onOutsidePointer, true);
+  }
+
+  function close(restoreFocus: boolean): void {
+    if (!isOpen) {
+      return;
+    }
+    isOpen = false;
+    list.hidden = true;
+    wrapper.classList.remove('is-open');
+    button.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('mousedown', onOutsidePointer, true);
+    if (restoreFocus) {
+      button.focus();
+    }
+  }
+
+  function choose(option: HTMLElement): void {
+    close(true);
+    const next = option.dataset.value ?? '';
+    if (next !== selected.value) {
+      onChange(next);
+    }
+  }
+
+  button.addEventListener('click', () => {
+    if (!isOpen) {
+      open();
+    } else {
+      close(true);
+    }
+  });
+  button.addEventListener('keydown', event => {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      open();
+    }
+  });
+
+  list.addEventListener('keydown', event => {
+    const moves: Record<string, number> = {
+      ArrowDown: activeIndex + 1,
+      ArrowUp: activeIndex - 1,
+      Home: 0,
+      End: options.length - 1,
+      PageDown: Math.min(options.length - 1, activeIndex + 5),
+      PageUp: Math.max(0, activeIndex - 5),
+    };
+    if (event.key in moves) {
+      event.preventDefault();
+      setActive(moves[event.key]);
+    } else if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      const option = options[activeIndex] as HTMLElement | undefined;
+      if (option !== undefined) {
+        choose(option);
+      }
+    } else if (event.key === 'Tab') {
+      close(false);
+    }
+  });
+  // Escape closes the list rather than Settings (see the global Escape handler in chrome/index.ts).
+  wrapper.addEventListener('markedit-close-popup', () => close(true));
+
+  return wrapper;
+}
+
 const fontFamilies: { value: string; label: string }[] = [
   { value: 'ui-monospace', label: 'System Mono' },
   { value: 'system-ui', label: 'System UI' },
@@ -751,45 +953,39 @@ export function createSettingsModal(
   }
 
   /** Theme drop-down: built-in themes, then installed theme extensions (as in MarkEdit's Theme pop-up). */
+  /** Theme drop-down with a color preview of each theme: built-in themes, then installed theme extensions. */
   function createThemeSelect(): HTMLElement {
     const extensionPrefix = 'extension:';
-    const wrapper = createElement('div', 'markedit-settings-field');
-    createElement('label', 'markedit-settings-field-label', wrapper, 'Theme');
-    const select = createElement('select', 'markedit-chrome-input markedit-settings-select markedit-settings-theme-select') as HTMLSelectElement;
-
     const current = settings.themeExtension !== ''
       ? `${extensionPrefix}${settings.themeExtension}`
       : settings.theme;
 
-    const builtInGroup = createElement('optgroup', '', select);
-    builtInGroup.label = 'Built-in';
-    for (const theme of builtInThemes) {
-      const option = createElement('option', '', builtInGroup, theme.label);
-      option.value = theme.id;
-    }
-
+    const groups: ThemePickerGroup[] = [{
+      label: 'Built-in',
+      items: builtInThemes.map(theme => ({ value: theme.id, label: theme.label, colors: theme.colors })),
+    }];
     const extensions = listThemeExtensions();
     if (extensions.length > 0) {
-      const extensionGroup = createElement('optgroup', '', select);
-      extensionGroup.label = 'Extensions';
-      for (const extension of extensions) {
-        const modes = extension.light && extension.dark ? 'Light & Dark' : extension.dark ? 'Dark only' : 'Light only';
-        const option = createElement('option', '', extensionGroup, `${extension.label} (${modes})`);
-        option.value = `${extensionPrefix}${extension.capability}`;
-        option.title = extension.capability;
-      }
+      groups.push({
+        label: 'Extensions',
+        items: extensions.map(extension => {
+          const modes = extension.light && extension.dark ? 'Light & Dark' : extension.dark ? 'Dark only' : 'Light only';
+          return {
+            value: `${extensionPrefix}${extension.capability}`,
+            label: extension.label,
+            detail: modes,
+            colors: extension.dark && !extension.light ? extensionDarkSwatch : extensionLightSwatch,
+          };
+        }),
+      });
     }
 
     // Keep an unknown saved value (e.g. an uninstalled extension) visible instead of silently showing another theme.
-    if (!Array.from(select.options).some(option => option.value === current)) {
-      const option = createElement('option', undefined, undefined, settings.themeExtension || settings.theme);
-      option.value = current;
-      select.insertBefore(option, select.firstChild);
+    if (!groups.some(group => group.items.some(item => item.value === current))) {
+      groups.unshift({ items: [{ value: current, label: settings.themeExtension || settings.theme, colors: extensionLightSwatch }] });
     }
 
-    select.value = current;
-    select.addEventListener('change', () => {
-      const value = select.value;
+    return createThemePicker('Theme', groups, current, value => {
       if (value.startsWith(extensionPrefix)) {
         void updateSetting('themeExtension', value.slice(extensionPrefix.length));
         return;
@@ -801,9 +997,6 @@ export function createSettingsModal(
       }
       void updateSetting('theme', value);
     });
-
-    wrapper.appendChild(select);
-    return wrapper;
   }
 
   function renderEditorTab(): void {

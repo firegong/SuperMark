@@ -239,10 +239,12 @@ body.markedit-reduce-transparency .markedit-chrome-panel {
 }
 
 .markedit-traffic-light {
+  /* Same outer size for the close <button> and the <span> lights (buttons default to border-box). */
+  box-sizing: border-box;
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  border: 1px solid transparent;
+  border: 1px solid rgba(0, 0, 0, 0.12);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1721,15 +1723,20 @@ body.markedit-mode-preview #editor {
 }
 
 .markedit-preview-table {
-  width: 100%;
+  display: var(--pv-table-display, table);
+  width: var(--pv-table-width, 100%);
+  max-width: 100%;
+  overflow: auto;
   border-collapse: collapse;
+  border-spacing: 0;
   margin: 16px 0;
-  font-size: 14px;
+  font-size: var(--pv-table-font-size, 14px);
+  font-variant-numeric: var(--pv-table-numbers, normal);
 }
 
 .markedit-preview-table th,
 .markedit-preview-table td {
-  padding: 8px 12px;
+  padding: var(--pv-table-cell-padding, 8px 12px);
   border: 1px solid var(--pv-table-border, var(--chrome-border));
 }
 
@@ -2510,12 +2517,6 @@ li.markedit-preview-task-item > p {
 
 .markedit-settings-preview-sample .markedit-preview-table {
   margin: 8px 0 0;
-  font-size: 13px;
-}
-
-.markedit-settings-preview-sample .markedit-preview-table th,
-.markedit-settings-preview-sample .markedit-preview-table td {
-  padding: 4px 10px;
 }
 
 .markedit-settings-preview-styles {
@@ -2562,4 +2563,135 @@ li.markedit-preview-task-item > p {
   height: 26px;
   padding: 0;
   justify-content: center;
+}
+
+/* Settings: theme picker (a drop-down that shows each theme's colors) */
+
+.markedit-theme-picker {
+  position: relative;
+}
+
+.markedit-theme-picker-button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 260px;
+  max-width: 100%;
+  padding: 4px 30px 4px 6px;
+  text-align: left;
+  cursor: pointer;
+  position: relative;
+}
+
+.markedit-theme-picker-button:focus-visible,
+.markedit-theme-picker.is-open .markedit-theme-picker-button {
+  border-color: var(--chrome-accent);
+}
+
+.markedit-theme-picker-chevron {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  margin-top: -5px;
+  border-right: 1.5px solid var(--chrome-text-secondary);
+  border-bottom: 1.5px solid var(--chrome-text-secondary);
+  transform: rotate(45deg);
+}
+
+.markedit-theme-picker-label {
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.markedit-theme-picker-detail {
+  font-size: 11px;
+  color: var(--chrome-text-secondary);
+  white-space: nowrap;
+}
+
+.markedit-theme-picker-list {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 300px;
+  max-height: 340px;
+  overflow-y: auto;
+  padding: 4px;
+  background: var(--chrome-bg-solid);
+  border: 1px solid var(--chrome-border);
+  border-radius: 8px;
+  box-shadow: var(--chrome-shadow);
+  outline: none;
+}
+
+.markedit-theme-picker-list[hidden] {
+  display: none;
+}
+
+.markedit-theme-picker-group-label {
+  padding: 6px 8px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--chrome-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.markedit-theme-picker-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 8px 4px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.markedit-theme-picker-option.is-active {
+  background: var(--chrome-active);
+}
+
+.markedit-theme-picker-option[aria-selected="true"] .markedit-theme-picker-label {
+  font-weight: 600;
+}
+
+.markedit-theme-picker-option[aria-selected="true"]::after {
+  content: '';
+  margin-left: auto;
+  width: 4px;
+  height: 8px;
+  border-right: 2px solid var(--chrome-accent);
+  border-bottom: 2px solid var(--chrome-accent);
+  transform: translateY(-2px) rotate(45deg);
+  flex-shrink: 0;
+}
+
+.markedit-theme-swatch {
+  display: inline-flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  width: 48px;
+  height: 30px;
+  padding: 0 6px;
+  box-sizing: border-box;
+  border: 1px solid;
+  border-radius: 5px;
+  box-shadow: inset 0 0 0 1px rgba(127, 127, 127, 0.18);
+  flex-shrink: 0;
+}
+
+.markedit-theme-swatch-row {
+  display: flex;
+  gap: 3px;
+  height: 4px;
+}
+
+.markedit-theme-swatch-token {
+  flex: 1;
+  border-radius: 2px;
 }

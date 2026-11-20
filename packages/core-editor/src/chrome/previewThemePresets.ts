@@ -27,6 +27,16 @@ export interface PreviewThemePreset {
   headingRule: boolean;
   /** `grid`: every cell bordered; `lines`: horizontal rules only. */
   tableStyle: 'grid' | 'lines';
+  /** Table layout; omitted: full width, 14px text, 8px 12px cells. */
+  tableLayout?: {
+    /** `content`: as wide as the content (scrolls when wider than the column), `full`: full width. */
+    width: 'content' | 'full';
+    /** Pixels; omitted: the body text size. */
+    fontSize?: number;
+    cellPadding: string;
+    /** Tabular (same-width) digits, so numbers line up in columns. */
+    tabularNumbers?: boolean;
+  };
   colors: {
     text: string;
     secondaryText: string;
@@ -70,6 +80,13 @@ const githubSizes = { body: 16, h1: 32, h2: 24, h3: 20, h4: 16, h5: 14, h6: 13.6
 const balancedSizes = { body: 15, h1: 28, h2: 23, h3: 19, h4: 16, h5: 15, h6: 14 };
 const readingSizes = { body: 17, h1: 30, h2: 24, h3: 20, h4: 17, h5: 16, h6: 15 };
 
+/** github-markdown-css: content-width tables at body size, 6px 13px cells, tabular digits. */
+const githubTableLayout: PreviewThemePreset['tableLayout'] = {
+  width: 'content',
+  cellPadding: '6px 13px',
+  tabularNumbers: true,
+};
+
 /**
  * Ids match the built-in themes. Colors come from each theme's palette: MarkEdit's theme files
  * (styling/themes) for text, accent, link, bold, italic, quote and code, and the themes' upstream
@@ -87,6 +104,7 @@ export const previewThemePresets: Record<string, PreviewThemePreset> = {
     headingWeight: 600,
     headingRule: true,
     tableStyle: 'grid',
+    tableLayout: githubTableLayout,
     colors: {
       text: '#1f2328',
       secondaryText: '#656d76',
@@ -122,6 +140,7 @@ export const previewThemePresets: Record<string, PreviewThemePreset> = {
     headingWeight: 600,
     headingRule: true,
     tableStyle: 'grid',
+    tableLayout: githubTableLayout,
     colors: {
       text: '#e6edf3',
       secondaryText: '#848d97',
@@ -679,6 +698,16 @@ export function previewPresetVariables(preset: PreviewThemePreset): Record<strin
     variables[`--pv-size-${level}`] = `${sizes[level]}px`;
   }
   variables['--pv-size-body'] = `${sizes.body}px`;
+
+  const layout = preset.tableLayout;
+  if (layout !== undefined) {
+    variables['--pv-table-display'] = layout.width === 'content' ? 'block' : 'table';
+    variables['--pv-table-width'] = layout.width === 'content' ? 'max-content' : '100%';
+    // Not `inherit`: as a custom property value it makes the variable itself inherit.
+    variables['--pv-table-font-size'] = layout.fontSize !== undefined ? `${layout.fontSize}px` : '1em';
+    variables['--pv-table-cell-padding'] = layout.cellPadding;
+    variables['--pv-table-numbers'] = layout.tabularNumbers === true ? 'tabular-nums' : 'normal';
+  }
   return variables;
 }
 

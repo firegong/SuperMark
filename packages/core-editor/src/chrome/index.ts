@@ -308,6 +308,13 @@ export function initChromeUI(): void {
   }
   chromeKeydownHandler = (event: KeyboardEvent) => {
     if (event.key === 'Escape') {
+      // An open drop-down inside a dialog closes first; the dialog stays.
+      const popup = document.querySelector('.markedit-theme-picker.is-open');
+      if (popup !== null) {
+        popup.dispatchEvent(new Event('markedit-close-popup'));
+        event.preventDefault();
+        return;
+      }
       chromeUI.closeAll();
       webModules.core.restoreFocus();
       event.preventDefault();

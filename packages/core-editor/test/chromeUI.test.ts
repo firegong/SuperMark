@@ -655,10 +655,13 @@ describe('Settings Modal', () => {
   };
 
   const tick = () => new Promise(resolve => { setTimeout(resolve, 0); });
+  const themeButton = () => document.querySelector('.markedit-theme-picker-button') as HTMLButtonElement;
+  const themeOptions = () => Array.from(document.querySelectorAll<HTMLElement>('.markedit-theme-picker-option'));
   const selectTheme = (value: string) => {
-    const select = document.querySelector('.markedit-settings-theme-select') as HTMLSelectElement;
-    select.value = value;
-    select.dispatchEvent(new Event('change'));
+    themeButton().click();
+    const option = themeOptions().find(element => element.dataset.value === value);
+    expect(option).toBeDefined();
+    option?.click();
   };
 
   beforeEach(() => {
@@ -717,12 +720,34 @@ describe('Settings Modal', () => {
     expect(tabs.length).toBe(5);
     expect(Array.from(tabs).map(tab => tab.textContent)).toEqual(['Editor', 'Preview', 'Assistant', 'General', 'Window']);
 
-    const themeSelect = document.querySelector('.markedit-settings-theme-select') as HTMLSelectElement;
-    expect(themeSelect).not.toBeNull();
-    expect(themeSelect.options.length).toBe(16);
-    expect(themeSelect.value).toBe(sampleSettings.theme);
+    // A drop-down whose button and options show each theme's colors.
+    expect(themeButton().dataset.value).toBe(sampleSettings.theme);
+    expect(themeButton().querySelector('.markedit-theme-swatch')).not.toBeNull();
+    expect(themeOptions().length).toBe(16);
+    expect(themeOptions().every(option => option.querySelector('.markedit-theme-swatch') !== null)).toBe(true);
+    expect(themeOptions().find(option => option.getAttribute('aria-selected') === 'true')?.dataset.value).toBe(sampleSettings.theme);
 
     expect(document.querySelector('.markedit-settings-more-themes')).not.toBeNull();
+  });
+
+  test('theme drop-down works with the keyboard, and Escape closes only the list', async () => {
+    (window.chromeUI as ChromeUI).openSettings('editor');
+    await tick();
+
+    themeButton().dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    expect(themeButton().getAttribute('aria-expanded')).toBe('true');
+    const list = document.querySelector('.markedit-theme-picker-list') as HTMLElement;
+    expect(list.getAttribute('aria-activedescendant')).toBe(themeOptions()[0].id);
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(themeButton().getAttribute('aria-expanded')).toBe('false');
+    expect(document.querySelector('.markedit-chrome-settings-backdrop')).not.toBeNull();
+
+    themeButton().click();
+    list.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    list.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await tick();
+    expect(settingsInvokeMock).toHaveBeenCalledWith('settings_update', { patch: { theme: 'github-dark' } });
   });
 
   test('selecting a theme invokes settings_update and config.setTheme', async () => {
@@ -759,12 +784,12 @@ describe('Settings Modal', () => {
       (window.chromeUI as ChromeUI).openSettings('editor');
       await tick();
 
-      const option = Array.from((document.querySelector('.markedit-settings-theme-select') as HTMLSelectElement).options)
-        .find(element => element.parentElement?.getAttribute('label') === 'Extensions' && element.textContent.includes('One Dark'));
+      const option = themeOptions()
+        .find(element => element.closest('[role="group"]')?.textContent.startsWith('Extensions') === true && element.textContent.includes('One Dark'));
       expect(option).toBeDefined();
-      selectTheme(option?.value ?? '');
+      selectTheme(option?.dataset.value ?? '');
       await tick();
-      expect((document.querySelector('.markedit-settings-theme-select') as HTMLSelectElement).value).toBe('extension:markedit-theme-one-dark.js');
+      expect(themeButton().dataset.value).toBe('extension:markedit-theme-one-dark.js');
 
       expect(settingsInvokeMock).toHaveBeenCalledWith('settings_update', { patch: { themeExtension: 'markedit-theme-one-dark.js' } });
       expect(theming.__markeditTheming__.customThemes).toEqual({ dark: 'one-dark' });
