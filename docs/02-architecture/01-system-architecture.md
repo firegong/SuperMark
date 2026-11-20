@@ -27,6 +27,7 @@
 |   ├─ extensions/    확장 레지스트리·다운로드(sha256)·설정·내장 확장                    |
 |   ├─ diagrams/      로컬 PlantUML·D2·Graphviz 실행                                    |
 |   ├─ links.rs       링크 대상 판정(외부/문서/표시만/무시)                              |
+|   ├─ updates.rs     앱 자체 업데이트(tauri-plugin-updater, 공개 릴리스 저장소)          |
 |   └─ diagnostics.rs 로그 (logs/markedit.log)                                        |
 |                                                                                   |
 |        ▲ invoke('handle_bridge_message' 등)        │ window.eval(스크립트)           |
@@ -82,6 +83,7 @@
    5. 명령줄 파일: 첫 파일은 메인 창, 나머지는 새 창. 그 뒤 비정상 종료로 남은 미저장 내용 복구 제안.
    6. 명령줄 파일이 없으면: 시작 동작이 `lastSession`이면 지난 세션 복원, 아니면(기본) 미저장 내용 복구 제안.
    7. 확장 업데이트 확인 스레드(업데이트 동작: Never / Quiet(기본) / Notify / Automatic).
+   8. 앱 업데이트 확인(릴리스 빌드, `general.checkForUpdates`가 켜져 있을 때 5초 뒤 한 번, §8.1).
 2. **부트스트랩 스크립트**(각 창의 초기화 스크립트): `window.config`(EditorConfig), `window.config.runtimeInfo`, `window.MarkEdit.userSettings`, `<html data-appearance data-reduce-transparency>`, 브리지 폴리필.
 3. **에디터 로드**: CoreEditor가 `core.notifyWindowDidLoad`를 호출 → 호스트는 `{ text, restoreText, extensions }`를 반환 → `hostDocument.ts`가 문서를 넣고, 복구 텍스트를 편집으로 적용(되돌리기 가능, 수정됨 표시)하고, 확장을 하나씩 실행(한 확장의 오류가 문서 로드를 막지 않음).
 4. **에디터·앱 UI 초기화**: `index.ts`가 번들 폰트(`@font-face`)를 등록하고 편집기를 만든 뒤, `initChromeUI()`가 `window.chromeUI`를 만들고 저장된 파서·다이어그램 설정·프리뷰 스타일을 복원하며 `<html data-platform>`을 설정한다.
@@ -110,6 +112,7 @@
 | 확장 설치 | https만, sha256 고정·검증, 확장 홈페이지는 http(s)만 |
 | 버전 기록 ID | `v-<ms>-<seq>` 형식만 허용(경로 탈출 방지), 선택한 ID만 삭제 |
 | 다이어그램 서버 출력 | `<img>`로만 표시 |
+| 앱 업데이트 | https로 받은 파일의 minisign 서명을 앱에 내장된 공개 키(`tauri.conf.json` `plugins.updater.pubkey`)로 검증한 뒤에만 설치. 개인 키는 GitHub Secrets에만 둠 |
 | 비밀 저장소 | **미흡**: `secrets.json` 평문 (Credential Manager 연동 예정) |
 
 ---
@@ -139,6 +142,19 @@ Windows `%APPDATA%\MarkEdit`, macOS `~/Library/Application Support/MarkEdit`. �
 | 호스트 | `cargo build --release --features tauri/custom-protocol` → `target/release/supermark` (`frontendDist`의 `dist/`를 실행 파일에 포함) |
 | 설치 파일 | 릴리스 워크플로의 `tauri build`. 실행 파일 이름 `SuperMark.exe`(`mainBinaryName`), NSIS 사용자 설치, WebView2 부트스트래퍼 |
 | 단일 인스턴스 | `tauri-plugin-single-instance` |
+
+### 8.1 릴리스와 앱 자체 업데이트
+
+소스 저장소(`firegong/SuperMark`)는 비공개이고, 설치 파일과 업데이트 파일은 공개 저장소 **`firegong/SuperMark-releases`**의 릴리스로 올린다. 앱은 인증 없이 그 릴리스를 받는다.
+
+| 항목 | 내용 |
+| --- | --- |
+| 릴리스 워크플로 | `.github/workflows/release.yml`: `v*` 태그 또는 수동 실행 → Windows·macOS에서 `tauri-action`이 빌드하고, `owner`/`repo`로 공개 저장소에 **초안** 릴리스를 만든다(태그는 그 저장소의 `main`에). 두 작업이 끝나면 사람이 초안을 게시 |
+| 업데이트 파일 | `bundle.createUpdaterArtifacts: true` → Windows NSIS 설치 파일, macOS `.app.tar.gz`와 각각의 `.sig`. `includeUpdaterJson: true` → 두 플랫폼 항목을 담은 `latest.json` |
+| 확인 주소 | `https://github.com/firegong/SuperMark-releases/releases/latest/download/latest.json` (초안·사전 릴리스는 제외됨) |
+| 비밀 값 | `RELEASES_TOKEN`(공개 저장소 Contents 읽기·쓰기 토큰), `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` — 소스 저장소의 Actions secrets |
+| 앱 동작 (`updates.rs`) | 메뉴 *Check for Updates…*: 결과를 항상 알림. 시작 시 확인: 새 버전이 있을 때만, 건너뛴 버전(`general.skippedUpdateVersion`)은 제외. 대화상자 예=설치, 아니요=나중에, 취소=이 버전 건너뛰기. 미저장 문서가 있으면 저장을 먼저 요청. Windows는 설치 프로그램(passive)이 이어받고, macOS는 앱을 교체한 뒤 재시작 |
+| 버전 | 릴리스마다 `tauri.conf.json`과 `Cargo.toml`의 `version`을 올린다. 앱은 실행 중인 버전보다 높은 버전만 제안 |
 
 ---
 

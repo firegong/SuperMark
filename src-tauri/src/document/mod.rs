@@ -499,6 +499,12 @@ impl DocumentManager {
             .collect()
     }
 
+    /// Whether any open document has unsaved changes.
+    pub fn has_unsaved_changes(&self) -> bool {
+        let guard = self.sessions.lock().expect("DocumentManager lock");
+        guard.values().any(|session| session.is_dirty)
+    }
+
     pub fn next_window_label(&self) -> String {
         let guard = self.sessions.lock().expect("DocumentManager lock");
         for idx in 2..=1000 {

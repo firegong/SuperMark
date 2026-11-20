@@ -50,12 +50,26 @@ jobs:
       - name: Bundle installers and publish release
         uses: tauri-apps/tauri-action@v0
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Releases are published to the public firegong/SuperMark-releases repository (the source
+          # stays private), so in-app updates can download them without credentials.
+          # RELEASES_TOKEN: a fine-grained token with "Contents: Read and write" on that repository.
+          GITHUB_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          # Signs the update files; the matching public key is plugins.updater.pubkey in
+          # src-tauri/tauri.conf.json.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: src-tauri
+          owner: firegong
+          repo: SuperMark-releases
+          # The tag is created in the releases repository, on its default branch.
+          releaseCommitish: main
           tagName: ${{ github.event_name == 'workflow_dispatch' && 'v__VERSION__' || github.ref_name }}
           releaseName: 'SuperMark v__VERSION__'
-          releaseBody: 'See the assets to download and install this version of SuperMark.'
+          releaseBody: 'See the assets to download and install this version of SuperMark. Installed copies update themselves (SuperMark → Check for Updates).'
+          # Both platform jobs add to the same draft; publish it once both have finished, and
+          # the app's update check (releases/latest) sees it.
           releaseDraft: true
           prerelease: false
-          includeUpdaterJson: false
+          # latest.json, the update manifest read by the app, with both platforms' entries.
+          includeUpdaterJson: true

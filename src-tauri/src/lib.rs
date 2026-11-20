@@ -6,6 +6,7 @@ pub mod extensions;
 pub mod menu;
 pub mod links;
 pub mod settings;
+pub mod updates;
 
 use bridge::{dispatch_bridge_message, BridgeMessage, WebBridge};
 use document::DocumentManager;
@@ -855,6 +856,8 @@ pub fn run() {
                 menu::open_document_path(app, path);
             }
         }))
+        // In-app updates from the public releases repository (updates.rs).
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(DocumentManager::new())
         .setup(move |app| {
             let app_handle = app.handle();
@@ -922,6 +925,15 @@ pub fn run() {
                 recover_unsaved_work(app_handle, true);
             }
             persist_last_session(app_handle, None);
+
+            // Look for a new release a little after startup (release builds; Settings → General).
+            if !cfg!(debug_assertions) && SettingsManager::new().load_user_settings().check_for_updates {
+                let app_for_updates = app_handle.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_secs(5));
+                    updates::check_for_updates(app_for_updates, false);
+                });
+            }
 
             // Background extension update check (upstream ExtensionRegistry semantics).
             // Quiet (default): refresh + cache only. Notify: prompt once/day.

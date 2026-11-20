@@ -152,6 +152,12 @@ pub struct UserSettings {
     /// document, `lastSession` reopens the windows (and unsaved changes) of the last session.
     #[serde(rename = "general.startupBehavior")]
     pub startup_behavior: String,
+    /// Look for a new release at startup (see `updates.rs`).
+    #[serde(rename = "general.checkForUpdates")]
+    pub check_for_updates: bool,
+    /// A version the user chose to skip; the automatic check does not offer it again.
+    #[serde(rename = "general.skippedUpdateVersion")]
+    pub skipped_update_version: String,
 
     /// Opaque panels (no frosted glass). On by default: on Windows, text over translucent,
     /// blurred layers loses ClearType and looks rough.
@@ -243,6 +249,8 @@ impl Default for UserSettings {
             default_text_encoding: "UTF-8".to_string(),
             default_line_break: "\r\n".to_string(),
             startup_behavior: "newDocument".to_string(),
+            check_for_updates: true,
+            skipped_update_version: String::new(),
             reduce_transparency: true,
             markdown_renderer: "extended".to_string(),
             diagram_server: "https://kroki.io".to_string(),
@@ -422,6 +430,8 @@ fn canonical_setting_key(key: &str) -> Option<&'static str> {
         }
         "general.defaultLineBreak" | "defaultLineBreak" => Some("general.defaultLineBreak"),
         "general.startupBehavior" | "startupBehavior" => Some("general.startupBehavior"),
+        "general.checkForUpdates" | "checkForUpdates" => Some("general.checkForUpdates"),
+        "general.skippedUpdateVersion" | "skippedUpdateVersion" => Some("general.skippedUpdateVersion"),
         "window.reduceTransparency" | "reduceTransparency" => Some("window.reduceTransparency"),
         "preview.markdownRenderer" | "markdownRenderer" => Some("preview.markdownRenderer"),
         "preview.diagramServer" | "diagramServer" => Some("preview.diagramServer"),

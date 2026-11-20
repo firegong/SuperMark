@@ -47,6 +47,8 @@ export interface UserSettings {
   defaultTextEncoding: string;
   defaultLineBreak: string;
   startupBehavior: 'newDocument' | 'lastSession';
+  /** Look for a new release at startup (desktop app, see src-tauri/src/updates.rs). */
+  checkForUpdates: boolean;
   reduceTransparency: boolean;
   markdownRenderer: string;
   diagramServer: string;
@@ -119,6 +121,7 @@ export function normalizeUserSettings(
     defaultTextEncoding: 'UTF-8',
     defaultLineBreak: '\n',
     startupBehavior: 'newDocument',
+    checkForUpdates: true,
     reduceTransparency: true,
     markdownRenderer: 'extended',
     diagramServer: 'https://kroki.io',
@@ -186,6 +189,7 @@ export function normalizeUserSettings(
     startupBehavior: pickValue(raw, ['startupBehavior', 'general.startupBehavior'], base.startupBehavior) === 'lastSession'
       ? 'lastSession'
       : 'newDocument',
+    checkForUpdates: Boolean(pickValue(raw, ['checkForUpdates', 'general.checkForUpdates'], base.checkForUpdates)),
     reduceTransparency: Boolean(
       pickValue(raw, ['reduceTransparency', 'window.reduceTransparency'], base.reduceTransparency),
     ),
@@ -917,6 +921,7 @@ export function createSettingsModal(
         window.chromeUI?.setDiagramRendering(settings.diagramRendering);
         break;
       case 'startupBehavior':
+      case 'checkForUpdates':
       case 'defaultTextEncoding':
       case 'insertFinalNewline':
       case 'newFilenameExtension':
@@ -1096,6 +1101,9 @@ export function createSettingsModal(
     const section = createSection('General');
     section.appendChild(createSelect('On Startup', startupOptions, settings.startupBehavior, value => {
       void updateSetting('startupBehavior', value);
+    }));
+    section.appendChild(createToggle('Check for Updates Automatically', settings.checkForUpdates, value => {
+      void updateSetting('checkForUpdates', value);
     }));
     section.appendChild(createSelect('Appearance', appearanceOptions, settings.appearance, value => {
       void updateSetting('appearance', value);

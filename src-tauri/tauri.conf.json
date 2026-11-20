@@ -58,6 +58,18 @@
       "nsis": {
         "installMode": "currentUser"
       }
+    },
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDgwNTVDOEU3NkI2MERFRjAKUldUdzNtQnI1OGhWZ0tjOW1LdUlHaDlNZ1g2c3J3bS9CZXhHWHVGSDFjbUFMVEJVdEt5SjM2S2oK",
+      "endpoints": [
+        "https://github.com/firegong/SuperMark-releases/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
     }
   }
 }

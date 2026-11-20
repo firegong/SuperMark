@@ -1463,8 +1463,13 @@ pub fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, menu_id: &str) {
         return;
     }
 
-    if menu_id == "app.updates" || menu_id == "help.releases" {
-        open_in_shell("https://github.com/firegong/SuperMark/releases");
+    if menu_id == "app.updates" {
+        crate::updates::check_for_updates(app.clone(), true);
+        return;
+    }
+
+    if menu_id == "help.releases" {
+        open_in_shell(crate::updates::RELEASES_PAGE);
         return;
     }
 

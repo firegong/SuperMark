@@ -54,6 +54,7 @@
 - [x] **M4.7 신뢰성**: 기본 설정에서도 충돌 복구, 단일 인스턴스, 열린 파일 창 포커스, 버전 선택 삭제·ID 검증
 - [x] **M4.8 강건성**: 깨진·적대적·무작위 입력 테스트, 중첩 한도, 선형 시간 문단, 손상된 설정 허용
 - [x] **M4.9 리브랜딩**: 앱 SuperMark, 문법 Markdown Super Set, 실행 파일 `SuperMark.exe`, 저장소 `firegong/SuperMark`
+- [x] **M4.10 앱 자체 업데이트**: `tauri-plugin-updater`, 공개 릴리스 저장소 `firegong/SuperMark-releases`, 서명된 업데이트 파일과 `latest.json`, 메뉴·시작 시 확인, 버전 건너뛰기 (`ARCH-001` §8.1)
 
 ---
 
@@ -67,6 +68,7 @@
 | M5.2 | Windows 실기기 검증: 글꼴 렌더링, 불투명 패널, 창 크기, 단일 인스턴스, 파일 연결, `SuperMark.exe` 설치·업데이트(기존 설치 위 덮어쓰기) | FR-07, M4.9 | S |
 | M5.3 | 비밀 저장소를 Windows Credential Manager(`keyring` 또는 DPAPI)로, 기존 `secrets.json` 이전 | FR-04.5 | M |
 | M5.4 | 설치 파일 크기 측정과 NFR-01 목표 재설정(예: Mermaid 지연 다운로드, 폰트 부분 집합 검토) | NFR-01 | S |
+| M5.5 | 업데이트 서명 키·토큰을 Secrets에 등록하고 공개 키를 `tauri.conf.json`에 넣은 뒤, 두 버전을 연속 릴리스해 Windows·macOS에서 실제 업데이트 확인 | FR-03.7 | S |
 
 ### Phase 6 (P1): 기능 완성
 

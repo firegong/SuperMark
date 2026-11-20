@@ -27,7 +27,7 @@
 | --- | --- |
 | `editor.*` | `fontFamily`, `fontSize`, `lightTheme`, `darkTheme`, `themeExtension`, `showLineNumbers`, `showActiveLineIndicator`, `invisiblesBehavior`, `typewriterMode`, `focusMode`, `livePreview`, `lineWrapping`, `lineHeight`, `tabKeyBehavior`, `indentUnit` |
 | `assistant.*` | `insertFinalNewline`, `trimTrailingWhitespace`, `wordsInDocument`, `autoCharacterPairs`, `smartQuotes` |
-| `general.*` | `appearance`, `newFilenameExtension`, `defaultTextEncoding`, `defaultLineBreak`, `startupBehavior` |
+| `general.*` | `appearance`, `newFilenameExtension`, `defaultTextEncoding`, `defaultLineBreak`, `startupBehavior`, `checkForUpdates`(기본 켜짐), `skippedUpdateVersion`(업데이트 대화상자에서 건너뛴 버전) |
 | `window.*` | `reduceTransparency` |
 | `preview.*` | `markdownRenderer`, `diagramServer`, `diagramRendering`, `plantumlCommand`, `d2Command`, `themeStyles` |
 | `meta.*` | `settingsRevision` |
@@ -62,7 +62,7 @@
 | Editor | Font / Theme / Display / Edit Behavior / Indentation | 폰트(기본 D2Coding), 크기, **테마 드롭다운(색상 미리보기)**, Get More Themes, 줄 번호, 현재 줄 표시, 공백 문자 표시, 에디터 내 라이브 프리뷰, 줄 바꿈, 타자기 모드, 포커스 모드, 줄 간격, Tab 키 동작, 들여쓰기 단위 |
 | Preview | Theme / Typography | 테마별 프리뷰 스타일 편집 대상, 샘플, 요소별 글꼴·크기·굵기·색 |
 | Assistant | Format Files / Words & Characters | 마지막 줄바꿈 추가, 줄 끝 공백 제거, 입력 중 단어 제안, 괄호 자동 쌍, 스마트 따옴표 |
-| General | General / Diagrams | 시작 동작, 모양(시스템/밝게/어둡게), 새 파일 확장자, 기본 인코딩, 기본 줄바꿈, 마크다운 파서, 다이어그램 렌더링·서버·PlantUML·D2 명령 |
+| General | General / Diagrams | 시작 동작, 자동 업데이트 확인, 모양(시스템/밝게/어둡게), 새 파일 확장자, 기본 인코딩, 기본 줄바꿈, 마크다운 파서, 다이어그램 렌더링·서버·PlantUML·D2 명령 |
 | Window | Window | 투명도 줄이기(기본 켬) |
 
 - 테마 드롭다운은 각 테마의 색상 견본을 보여 주는 커스텀 listbox이며 키보드(↑↓, Home/End, Enter/Space, Esc)와 스크린리더를 지원한다. Esc는 목록만 닫는다.
