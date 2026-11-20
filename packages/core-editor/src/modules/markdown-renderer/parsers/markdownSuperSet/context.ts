@@ -1,4 +1,4 @@
-import type { MarkdownBlockPlugin, MarkdownRenderOptions } from '../types';
+import type { MarkdownBlockPlugin, MarkdownRenderOptions } from '../../types';
 
 /** Source line with its absolute (0-based) line number in the editor document. */
 export interface SourceLine {

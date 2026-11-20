@@ -2,7 +2,7 @@ import { describe, expect, test } from '@jest/globals';
 import { readdirSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { classHighlighter } from '@lezer/highlight';
-import { commonmarkEngine, extendedEngine, gfmEngine, superMarkdownEngine } from '../src/modules/markdown-renderer/presets';
+import { commonmarkEngine, extendedEngine, gfmEngine, superMarkdownEngine } from '../src/modules/markdown-renderer/parsers';
 import type { MarkdownRendererEngine } from '../src/modules/markdown-renderer';
 import { highlightCode } from '../src/modules/markdown-renderer/plugins/codeHighlightPlugin';
 import { highlightWithParser } from '../src/modules/markdown-renderer/plugins/syntaxHighlight';

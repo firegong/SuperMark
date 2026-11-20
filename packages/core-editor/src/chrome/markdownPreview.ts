@@ -1,6 +1,6 @@
 import { createElement } from './utils';
 import { isEditorLivePreview } from './liveEditorPreview';
-import { clearIncludeCache, includeOptions } from './includeLoader';
+import { clearSuperSetIncludes, previewFor, previewFrame, type PreviewHost } from './preview';
 import {
   buildAnchors,
   lineToOffset,
@@ -13,7 +13,6 @@ import {
 } from './scrollSync';
 import { globalState } from '../common/store';
 import {
-  renderMarkdown,
   renderMarkdownAsync,
   getActiveMarkdownRenderer,
   setActiveMarkdownRenderer,
@@ -96,20 +95,9 @@ function updateContent(force = false): void {
     }
 
     previewState.lastContent = text;
+    // Each parser's output is shown by its own preview (src/chrome/preview/).
     const engine = getActiveMarkdownRenderer();
-    if (engine.renderDocument !== undefined) {
-      void renderDocumentInFrame(body, engine.renderDocument.bind(engine), text);
-      return;
-    }
-
-    removePreviewFrame(body);
-    // SuperMarkdown @include: files are read ahead and the preview re-renders when they arrive.
-    body.innerHTML = renderMarkdown(text, includeOptions(text, () => updateContent(true)));
-    attachPreviewInteractions();
-    realignAfterRender();
-    // Async diagram plugins (PlantUML, D2, compressed draw.io, …) finish rendering here; their
-    // final size moves everything below them.
-    void hydrateAndRealign(body);
+    previewFor(engine).render(body, text, engine, previewHost);
   };
 
   if (force) {
@@ -129,77 +117,29 @@ function updateContent(force = false): void {
   previewState.updateTimeout = setTimeout(() => render(false), 50);
 }
 
-// ---------------------------------------------------------------------------------------------
-// Self-styled documents (e.g. markdown-it from the MarkEdit Preview extension) are shown in a
-// sandboxed frame: their CSS cannot reach the app and their inline scripts do not run
-// (`allow-same-origin` without `allow-scripts` lets the preview update and scroll the frame).
-// ---------------------------------------------------------------------------------------------
-
-let frameRenderToken = 0;
-
-function previewFrame(body: HTMLElement): HTMLIFrameElement | null {
-  return body.querySelector<HTMLIFrameElement>(':scope > iframe.markedit-preview-frame');
-}
-
-function removePreviewFrame(body: HTMLElement): void {
-  previewFrame(body)?.remove();
-  body.classList.remove('has-frame');
-}
-
-async function renderDocumentInFrame(body: HTMLElement, renderDocument: (markdown: string) => Promise<string>, text: string): Promise<void> {
-  const token = ++frameRenderToken;
-  let html: string;
-  try {
-    html = await renderDocument(text);
-  } catch (error) {
-    console.error('[MarkEdit] Preview rendering failed:', error);
-    return;
-  }
-
-  // A newer render started, or the preview switched to another parser.
-  if (token !== frameRenderToken || getActiveMarkdownRenderer().renderDocument === undefined) {
-    return;
-  }
-
-  const parsed = new DOMParser().parseFromString(html, 'text/html');
-  let frame = previewFrame(body);
-  const frameDocument = frame?.contentDocument ?? null;
-  const headSignature = parsed.head.innerHTML.length.toString();
-
-  // Same styles as before: swap the body in place so scroll position and styles stay put.
-  if (frame !== null && frameDocument !== null && frame.dataset.head === headSignature) {
-    frameDocument.body.innerHTML = parsed.body.innerHTML;
+/** What the per-parser previews (src/chrome/preview/) call back into. */
+const previewHost: PreviewHost = {
+  rerender() {
+    updateContent(true);
+  },
+  didRenderHtml(body) {
+    attachPreviewInteractions();
     realignAfterRender();
-    return;
-  }
-
-  if (frame === null) {
-    body.replaceChildren();
-    frame = document.createElement('iframe');
-    frame.className = 'markedit-preview-frame';
-    frame.setAttribute('sandbox', 'allow-same-origin');
-    frame.title = 'Markdown preview';
-    body.appendChild(frame);
-    body.classList.add('has-frame');
-  }
-
-  frame.dataset.head = headSignature;
-  const scrollTop = frame.contentDocument?.scrollingElement?.scrollTop ?? 0;
-  frame.addEventListener('load', () => {
-    const loaded = frame.contentDocument;
-    if (loaded === null) {
-      return;
-    }
-    if (loaded.scrollingElement !== null) {
-      loaded.scrollingElement.scrollTop = scrollTop;
-    }
+    // Async diagram plugins (PlantUML, D2, compressed draw.io, …) finish rendering here; their
+    // final size moves everything below them.
+    void hydrateAndRealign(body);
+  },
+  didLoadFrame(frameDocument) {
     // Links: same-document anchors scroll, others open outside the preview (open_link).
-    loaded.addEventListener('click', event => handlePreviewLinkClick(event, loaded));
-    attachFrameScrollSync(loaded);
+    frameDocument.addEventListener('click', event => handlePreviewLinkClick(event, frameDocument));
+    attachFrameScrollSync(frameDocument);
     realignAfterRender();
-  }, { once: true });
-  frame.srcdoc = html;
-}
+  },
+  didChangeLayout() {
+    invalidateScrollAnchors();
+    realignAfterRender();
+  },
+};
 
 /**
  * Clicking a link must never navigate the app's own page (or the preview frame) away from the
@@ -288,22 +228,6 @@ function attachPreviewInteractions(): void {
     button.addEventListener('click', () => {
       const code = button.parentElement?.querySelector('code')?.textContent ?? '';
       void copyToClipboard(code, button, 'Copied!');
-    });
-  });
-
-  // SuperMarkdown tab sets
-  previewState.body.querySelectorAll<HTMLButtonElement>('.msm-tab-button').forEach(button => {
-    button.addEventListener('click', () => {
-      const tabset = button.closest('.msm-tabset');
-      if (tabset === null) {
-        return;
-      }
-
-      const index = button.dataset.tab;
-      tabset.querySelectorAll<HTMLElement>(':scope > .msm-tab-list > .msm-tab-button, :scope > .msm-tab-panel').forEach(element => {
-        element.classList.toggle('is-active', element.dataset.tab === index);
-      });
-      invalidateScrollAnchors();
     });
   });
 
@@ -928,7 +852,7 @@ function setupGlobalListeners(): void {
   // The View menu is shared by all windows; show this window's state when it is focused.
   window.addEventListener('focus', () => {
     // Included files may have been edited in another window or app.
-    clearIncludeCache();
+    clearSuperSetIncludes();
     publishViewState();
   });
 
@@ -936,7 +860,7 @@ function setupGlobalListeners(): void {
 
   window.addEventListener('markedit-editor-reset', () => {
     resetSyncPause();
-    clearIncludeCache(true);
+    clearSuperSetIncludes(true);
     previewState.lastContent = '';
     updateContent(true);
   });

@@ -7,7 +7,7 @@ import {
   listMarkdownRenderers,
   setActiveMarkdownRenderer,
 } from '../src/modules/markdown-renderer';
-import { markdownItEngine } from '../src/modules/markdown-renderer/markdownIt';
+import { markdownItEngine } from '../src/modules/markdown-renderer/parsers/markdownIt';
 import type { MenuItem } from 'markedit-api';
 import { setMarkdownPreviewMode } from '../src/chrome/markdownPreview';
 

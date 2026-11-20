@@ -1,4 +1,4 @@
-import type { SuperMarkdownOptions } from '../modules/markdown-renderer/super/context';
+import type { SuperMarkdownOptions } from '../modules/markdown-renderer/parsers/markdownSuperSet';
 
 /**
  * Files for SuperMarkdown `@include path` (§27) in the preview.

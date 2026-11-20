@@ -1,4 +1,4 @@
-import { escapeHtml } from '../utils';
+import { escapeHtml } from '../../utils';
 import { filterHtmlTag, htmlTagPattern, isSafeUrl } from './html';
 import { parseAttributes, safeClassNames, sanitizeSize } from './attributes';
 import { normalizeLabel, placeholderEnd, placeholderStart, slugifyUnicode, type SuperContext } from './context';

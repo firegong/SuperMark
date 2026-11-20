@@ -14,7 +14,7 @@ import {
   setActiveMarkdownRenderer,
   setMarkdownRendererAvailable,
 } from './modules/markdown-renderer';
-import { isMarkdownItAvailable, markdownItEngine, markdownItEngineId } from './modules/markdown-renderer/markdownIt';
+import { isMarkdownItAvailable, markdownItEngine, markdownItEngineId } from './modules/markdown-renderer/parsers/markdownIt';
 
 /**
  * Loads the document and installed extensions that the desktop host returns from

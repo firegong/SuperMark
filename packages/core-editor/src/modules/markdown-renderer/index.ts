@@ -1,14 +1,10 @@
-import { commonmarkEngine, gfmEngine, extendedEngine, superMarkdownEngine } from './presets';
+import { builtInParsers, defaultParser, commonmarkEngine, gfmEngine, extendedEngine, superMarkdownEngine } from './parsers';
 import type { MarkdownRendererEngine, MarkdownRenderOptions, MarkdownSyntaxStandard, MarkdownBlockPlugin, MarkdownInlinePlugin } from './types';
 
-const engines = new Map<string, MarkdownRendererEngine>([
-  [commonmarkEngine.id, commonmarkEngine],
-  [gfmEngine.id, gfmEngine],
-  [extendedEngine.id, extendedEngine],
-  [superMarkdownEngine.id, superMarkdownEngine],
-]);
+// Parsers live in parsers/, one file each; this module only keeps the list and the active one.
+const engines = new Map<string, MarkdownRendererEngine>(builtInParsers.map(engine => [engine.id, engine]));
 
-let activeEngine: MarkdownRendererEngine = extendedEngine;
+let activeEngine: MarkdownRendererEngine = defaultParser;
 
 /** Renderers provided by built-in extensions that the user turned off. */
 const unavailableEngines = new Set<string>();
@@ -60,8 +56,8 @@ export function setMarkdownSyntaxStandard(standard: MarkdownSyntaxStandard): voi
   }
 
   // Fallback: switch the active default engine to the requested standard
-  if ([commonmarkEngine.id, gfmEngine.id, extendedEngine.id, superMarkdownEngine.id].includes(activeEngine.id)) {
-    activeEngine = engines.get(standard) ?? extendedEngine;
+  if (builtInParsers.some(engine => engine.id === activeEngine.id)) {
+    activeEngine = engines.get(standard) ?? defaultParser;
   }
 }
 
@@ -112,7 +108,9 @@ export function renderMermaid(code: string): string {
 }
 
 export { commonmarkEngine, gfmEngine, extendedEngine, superMarkdownEngine };
-export { SuperMarkdownEngine } from './super/engine';
+export { SuperMarkdownEngine } from './parsers/markdownSuperSet';
+export { builtInParsers, defaultParser } from './parsers';
+export { markdownItEngine, markdownItEngineId, isMarkdownItAvailable } from './parsers/markdownIt';
 export {
   registerDiagramPlugin,
   unregisterDiagramPlugin,
@@ -132,7 +130,7 @@ export {
 export type { DiagramPlugin, MathPlugin, DiagramRenderContext, DiagramRendering } from './plugins/registry';
 export { clearDiagramCache, renderDiagramSources, RendererUnavailableError } from './plugins/strategy';
 export { registerBuiltinRendererPlugins } from './plugins/builtin';
-export type { SuperMarkdownOptions } from './super/context';
+export type { SuperMarkdownOptions } from './parsers/markdownSuperSet';
 export type { MarkdownRendererEngine, MarkdownRenderOptions, MarkdownSyntaxStandard };
 
 // Convenience alias for backward compatibility

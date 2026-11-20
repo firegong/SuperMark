@@ -1,7 +1,7 @@
-import { escapeHtml } from '../utils';
+import { escapeHtml } from '../../utils';
 import { sanitizeHtml } from './html';
-import { hasDiagramPlugin, renderDiagramWithPlugin } from '../plugins/registry';
-import { diagramBlockHtml } from '../plugins/builtin';
+import { hasDiagramPlugin, renderDiagramWithPlugin } from '../../plugins/registry';
+import { diagramBlockHtml } from '../../plugins/builtin';
 import { parseInline } from './inline';
 import {
   extractChunkOptions,
@@ -11,7 +11,7 @@ import {
   safeClassNames,
   sanitizeSize,
 } from './attributes';
-import type { MarkdownBlockPlugin } from '../types';
+import type { MarkdownBlockPlugin } from '../../types';
 import {
   group,
   labelKind,

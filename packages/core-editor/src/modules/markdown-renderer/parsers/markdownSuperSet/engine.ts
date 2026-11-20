@@ -1,9 +1,9 @@
-import { escapeHtml } from '../utils';
-import { renderMathWithPlugin } from '../plugins/registry';
-import { registerBuiltinRendererPlugins } from '../plugins/builtin';
-import { renderMermaidToSvg } from '../plugins/mermaidPlugin';
-import { highlightCode } from '../plugins/codeHighlightPlugin';
-import type { MarkdownBlockPlugin, MarkdownRendererEngine, MarkdownRenderOptions } from '../types';
+import { escapeHtml } from '../../utils';
+import { renderMathWithPlugin } from '../../plugins/registry';
+import { registerBuiltinRendererPlugins } from '../../plugins/builtin';
+import { renderMermaidToSvg } from '../../plugins/mermaidPlugin';
+import { highlightCode } from '../../plugins/codeHighlightPlugin';
+import type { MarkdownBlockPlugin, MarkdownRendererEngine, MarkdownRenderOptions } from '../../types';
 import { blockAttributes, isFenceOpen, isBlank, renderBlocks, leadingSpaces } from './blocks';
 import { parseInline } from './inline';
 import {
@@ -374,7 +374,7 @@ function resolvePlaceholders(html: string, context: SuperContext): string {
 
 export class SuperMarkdownEngine implements MarkdownRendererEngine {
   readonly id = 'super';
-  readonly name = 'SuperMarkdown';
+  readonly name = 'Markdown Super Set';
   readonly standard = 'super';
   private readonly blockPlugins: MarkdownBlockPlugin[] = [];
 

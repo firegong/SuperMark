@@ -1,9 +1,9 @@
-import { escapeHtml, isUnsafeUrl, slugify, parseLinkDestination } from './utils';
-import { renderMermaidToSvg } from './plugins/mermaidPlugin';
-import { hasDiagramPlugin, renderDiagramWithPlugin, renderMathWithPlugin } from './plugins/registry';
-import { diagramBlockHtml, registerBuiltinRendererPlugins } from './plugins/builtin';
-import { highlightCode } from './plugins/codeHighlightPlugin';
-import type { Line, MarkdownRenderOptions, MarkdownRendererEngine, MarkdownBlockPlugin, MarkdownInlinePlugin, MarkdownSyntaxStandard, RenderContext } from './types';
+import { escapeHtml, isUnsafeUrl, slugify, parseLinkDestination } from '../utils';
+import { renderMermaidToSvg } from '../plugins/mermaidPlugin';
+import { hasDiagramPlugin, renderDiagramWithPlugin, renderMathWithPlugin } from '../plugins/registry';
+import { diagramBlockHtml, registerBuiltinRendererPlugins } from '../plugins/builtin';
+import { highlightCode } from '../plugins/codeHighlightPlugin';
+import type { Line, MarkdownRenderOptions, MarkdownRendererEngine, MarkdownBlockPlugin, MarkdownInlinePlugin, MarkdownSyntaxStandard, RenderContext } from '../types';
 
 registerBuiltinRendererPlugins();
 
@@ -638,59 +638,21 @@ function renderBlocksAtDepth(lines: Line[], context: RenderContext): string {
   return html;
 }
 
-function fillOptions(standard: MarkdownSyntaxStandard, overrides?: MarkdownRenderOptions): Required<MarkdownRenderOptions> {
-  const defaults: Record<'commonmark' | 'gfm' | 'extended', Required<MarkdownRenderOptions>> = {
-    commonmark: {
-      standard: 'commonmark',
-      enableFrontmatter: false,
-      enableTables: false,
-      enableTaskLists: false,
-      enableStrikethrough: false,
-      enableAutolinks: false,
-      enableFootnotes: false,
-      enableMath: false,
-      enableMermaid: false,
-      enableCallouts: false,
-      enableCodeHighlight: false,
-      blockPlugins: [],
-      inlinePlugins: [],
-    },
-    gfm: {
-      standard: 'gfm',
-      enableFrontmatter: false,
-      enableTables: true,
-      enableTaskLists: true,
-      enableStrikethrough: true,
-      enableAutolinks: true,
-      enableFootnotes: true,
-      enableMath: false,
-      enableMermaid: false,
-      enableCallouts: false,
-      enableCodeHighlight: true,
-      blockPlugins: [],
-      inlinePlugins: [],
-    },
-    extended: {
-      standard: 'extended',
-      enableFrontmatter: true,
-      enableTables: true,
-      enableTaskLists: true,
-      enableStrikethrough: true,
-      enableAutolinks: true,
-      enableFootnotes: true,
-      enableMath: true,
-      enableMermaid: true,
-      enableCallouts: true,
-      enableCodeHighlight: true,
-      blockPlugins: [],
-      inlinePlugins: [],
-    },
-  };
+/**
+ * The syntax a parser built on this engine understands (see parsers/commonmark.ts, gfm.ts and
+ * extended.ts, which each define their own).
+ */
+export type SyntaxFeatures = Omit<Required<MarkdownRenderOptions>, 'standard' | 'blockPlugins' | 'inlinePlugins'>;
 
-  const base = (defaults as Record<string, Required<MarkdownRenderOptions>>)[standard] ?? defaults.extended;
-  return { ...base, ...overrides, standard: overrides?.standard ?? standard };
+function fillOptions(standard: MarkdownSyntaxStandard, features: SyntaxFeatures, overrides?: MarkdownRenderOptions): Required<MarkdownRenderOptions> {
+  return { ...features, blockPlugins: [], inlinePlugins: [], ...overrides, standard: overrides?.standard ?? standard };
 }
 
+/**
+ * The shared block/inline Markdown engine. A parser is an instance with its own id, name and
+ * syntax features; a parser that needs different rules can be replaced by any other
+ * MarkdownRendererEngine in its file under parsers/.
+ */
 export class DefaultMarkdownEngine implements MarkdownRendererEngine {
   readonly id: string;
   readonly name: string;
@@ -698,10 +660,13 @@ export class DefaultMarkdownEngine implements MarkdownRendererEngine {
   private readonly blockPlugins: MarkdownBlockPlugin[] = [];
   private readonly inlinePlugins: MarkdownInlinePlugin[] = [];
 
-  constructor(id: string, name: string, standard: MarkdownSyntaxStandard) {
+  readonly features: SyntaxFeatures;
+
+  constructor(id: string, name: string, standard: MarkdownSyntaxStandard, features: SyntaxFeatures) {
     this.id = id;
     this.name = name;
     this.standard = standard;
+    this.features = features;
   }
 
   registerBlockPlugin(plugin: MarkdownBlockPlugin): void {
@@ -716,7 +681,7 @@ export class DefaultMarkdownEngine implements MarkdownRendererEngine {
     const normalized = markdown.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
     const rawLines = normalized.split('\n').map((raw, index) => classifyLine(raw, index));
 
-    const opts = fillOptions(this.standard, options);
+    const opts = fillOptions(this.standard, this.features, options);
     const context: RenderContext = {
       options: { ...opts, blockPlugins: this.blockPlugins, inlinePlugins: this.inlinePlugins },
       parseInline: text => parseInline(text, context),
@@ -741,7 +706,7 @@ export class DefaultMarkdownEngine implements MarkdownRendererEngine {
   }
 
   renderInline(markdown: string, options?: MarkdownRenderOptions): string {
-    const opts = fillOptions(this.standard, options);
+    const opts = fillOptions(this.standard, this.features, options);
     const context: RenderContext = {
       options: { ...opts, blockPlugins: this.blockPlugins, inlinePlugins: this.inlinePlugins },
       parseInline: text => parseInline(text, context),

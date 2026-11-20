@@ -1,5 +1,5 @@
-import { extendedEngine } from './presets';
-import type { MarkdownRendererEngine } from './types';
+import { extendedEngine } from './extended';
+import type { MarkdownRendererEngine } from '../types';
 
 /**
  * markdown-it, as bundled by the MarkEdit Preview extension (`markedit-preview.js`), offered as

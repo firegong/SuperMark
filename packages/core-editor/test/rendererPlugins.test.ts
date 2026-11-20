@@ -20,8 +20,8 @@ import {
 import { registerBuiltinRendererPlugins } from '../src/modules/markdown-renderer/plugins/builtin';
 import { renderLatexToMathML } from '../src/modules/markdown-renderer/plugins/mathPlugin';
 import { renderDrawioToSvg, compressedDiagramPayload } from '../src/modules/markdown-renderer/plugins/drawio';
-import { SuperMarkdownEngine } from '../src/modules/markdown-renderer/super/engine';
-import { extendedEngine } from '../src/modules/markdown-renderer/presets';
+import { SuperMarkdownEngine } from '../src/modules/markdown-renderer/parsers/markdownSuperSet';
+import { extendedEngine } from '../src/modules/markdown-renderer/parsers';
 
 registerBuiltinRendererPlugins();
 

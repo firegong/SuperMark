@@ -1,4 +1,4 @@
-import { escapeHtml } from '../utils';
+import { escapeHtml } from '../../utils';
 
 /**
  * Minimal, DOM-free HTML filter for raw HTML written inside SuperMarkdown documents.

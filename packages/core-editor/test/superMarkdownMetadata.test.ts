@@ -1,5 +1,5 @@
 import { describe, expect, test } from '@jest/globals';
-import { superMarkdownEngine } from '../src/modules/markdown-renderer/presets';
+import { superMarkdownEngine } from '../src/modules/markdown-renderer/parsers';
 
 describe('SuperMarkdown metadata keys in any script', () => {
   test('YAML front matter with Korean keys is shown and its variables are substituted', () => {
