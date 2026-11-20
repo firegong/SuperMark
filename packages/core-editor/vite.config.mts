@@ -44,7 +44,7 @@ function vendorMermaid(): Plugin {
 }
 
 /**
- * Ships the bundled font (Pretendard, OFL-1.1) next to index.html as dist/fonts/, like Mermaid:
+ * Ships the bundled fonts (Pretendard and D2Coding, OFL-1.1) next to index.html as dist/fonts/, like Mermaid:
  * inlining 2 MB into the single-file bundle would slow every window, and the browser only loads
  * the font when text needs it (Hangul on Windows, see src/styling/fonts.ts).
  */
@@ -52,6 +52,10 @@ function vendorFonts(): Plugin {
   const files: Record<string, string> = {
     'fonts/PretendardVariable.woff2': './node_modules/pretendard/dist/web/variable/woff2/PretendardVariable.woff2',
     'fonts/Pretendard-LICENSE.txt': './node_modules/pretendard/dist/LICENSE.txt',
+    // The default editor font: monospace with Hangul exactly two columns wide.
+    'fonts/D2Coding-Regular.woff2': './node_modules/d2coding/fonts/d2coding-full.woff2',
+    'fonts/D2Coding-Bold.woff2': './node_modules/d2coding/fonts/d2coding-bold-full.woff2',
+    'fonts/D2Coding-LICENSE.txt': './src/@vendor/fonts/D2Coding-LICENSE.txt',
   };
   const source = (path: string) => readFileSync(fileURLToPath(new URL(path, import.meta.url)));
   return {

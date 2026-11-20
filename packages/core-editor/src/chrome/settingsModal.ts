@@ -97,7 +97,7 @@ export function normalizeUserSettings(
   const base: UserSettings = fallback ?? {
     theme: 'github-light',
     themeExtension: '',
-    fontFamily: 'ui-monospace',
+    fontFamily: 'D2Coding',
     fontSize: 16,
     showLineNumbers: true,
     showActiveLineIndicator: true,
@@ -481,6 +481,7 @@ function createThemePicker(
 }
 
 const fontFamilies: { value: string; label: string }[] = [
+  { value: 'D2Coding', label: 'D2Coding (Default)' },
   { value: 'ui-monospace', label: 'System Mono' },
   { value: 'system-ui', label: 'System UI' },
   { value: "'Cascadia Code', monospace", label: 'Cascadia Code' },

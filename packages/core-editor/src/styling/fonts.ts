@@ -12,13 +12,19 @@
 export const bundledFontFamily = 'Pretendard Variable';
 export const bundledFontUrl = 'fonts/PretendardVariable.woff2';
 
+/**
+ * The default editor font (bundled, OFL-1.1, by NAVER): monospace in which a Hangul syllable is
+ * exactly two columns wide, so Korean text lines up in tables and aligned text.
+ */
+export const editorFontFamily = 'D2Coding';
+
 export const hangulFallbacks = `'Apple SD Gothic Neo', '${bundledFontFamily}', 'Malgun Gothic'`;
 
 /** Latin monospace fonts: SF Mono / Menlo on macOS, Cascadia Mono / Consolas on Windows. */
 export const monospaceFallbacks = ["'SF Mono'", 'Menlo', "'Cascadia Mono'", 'Consolas'];
 
-/** Monospace with Hangul. */
-export const monospaceStack = `ui-monospace, ${monospaceFallbacks.join(', ')}, ${hangulFallbacks}, monospace`;
+/** Monospace with Hangul; the editor's own code styling uses it too. */
+export const monospaceStack = `${editorFontFamily}, ui-monospace, ${monospaceFallbacks.join(', ')}, ${hangulFallbacks}, monospace`;
 
 /** Interface text: San Francisco on macOS, Segoe UI Variable on Windows. */
 export const sansStack = `-apple-system, BlinkMacSystemFont, 'Segoe UI Variable Text', 'Segoe UI', ${hangulFallbacks}, system-ui, sans-serif`;
@@ -46,10 +52,25 @@ export function installBundledFonts(): void {
 
   const style = document.createElement('style');
   style.id = 'markedit-bundled-fonts';
+  // `local()` first: an installed copy needs no loading.
   style.textContent = `@font-face {
   font-family: '${bundledFontFamily}';
   src: url('${bundledFontUrl}') format('woff2-variations'), url('${bundledFontUrl}') format('woff2');
   font-weight: 45 920;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '${editorFontFamily}';
+  src: local('D2Coding'), local('D2Coding Regular'), url('fonts/D2Coding-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '${editorFontFamily}';
+  src: local('D2Coding Bold'), url('fonts/D2Coding-Bold.woff2') format('woff2');
+  font-weight: 700;
   font-style: normal;
   font-display: swap;
 }`;

@@ -2944,6 +2944,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"d2coding@npm:1.3.2":
+  version: 1.3.2
+  resolution: "d2coding@npm:1.3.2"
+  checksum: 10c0/46233496d70cfdc99a8ca635260f4d6d82daab7529f9e3be3645e6e18e5e1a704e3e028208eb14f6d9f6946f0969143121a5cb41e0488a43375bc63e66bfc2bc
+  languageName: node
+  linkType: hard
+
 "d3-array@npm:1 - 2":
   version: 2.12.1
   resolution: "d3-array@npm:2.12.1"
@@ -5172,6 +5179,7 @@ __metadata:
     "@stylistic/eslint-plugin": "npm:^5.5.0"
     "@types/jest": "npm:^29.5.4"
     "@typescript-eslint/parser": "npm:^8.67.0"
+    d2coding: "npm:1.3.2"
     eslint: "npm:^9.39.0"
     eslint-plugin-compat: "npm:^6.0.2"
     eslint-plugin-promise: "npm:^7.2.1"

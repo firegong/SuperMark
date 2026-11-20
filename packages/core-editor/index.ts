@@ -43,7 +43,7 @@ const defaultConfig = {
   host: Host.mainApp,
   text: pseudoDocument,
   theme: 'github-light',
-  fontFace: { family: 'ui-monospace' },
+  fontFace: { family: 'D2Coding' },
   fontSize: 17,
   showLineNumbers: true,
   showActiveLineIndicator: true,

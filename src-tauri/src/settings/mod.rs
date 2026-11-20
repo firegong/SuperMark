@@ -189,7 +189,15 @@ pub struct UserSettings {
 /// Current settings file revision.
 /// 2: `window.reduceTransparency` defaults to on; files from before keep `false` written out
 ///    only because every field is saved, so they are switched once.
-pub const SETTINGS_REVISION: u32 = 2;
+/// 3: the editor font defaults to D2Coding; the old default (never offered in Settings, so never
+///    chosen by hand) is switched once.
+pub const SETTINGS_REVISION: u32 = 3;
+
+/// Default editor font, bundled with the editor.
+pub const DEFAULT_FONT_FAMILY: &str = "D2Coding";
+
+/// The default editor font before revision 3.
+const PREVIOUS_DEFAULT_FONT_FAMILY: &str = "Cascadia Mono, Consolas, ui-monospace, monospace";
 
 /// Brings settings loaded from an older file (`stored` holds its raw keys) up to date.
 fn migrate_settings(settings: &mut UserSettings, stored: &serde_json::Map<String, Value>) {
@@ -200,13 +208,17 @@ fn migrate_settings(settings: &mut UserSettings, stored: &serde_json::Map<String
     if revision < 2 {
         settings.reduce_transparency = true;
     }
+    if revision < 3 && settings.font_family == PREVIOUS_DEFAULT_FONT_FAMILY {
+        settings.font_family = DEFAULT_FONT_FAMILY.to_string();
+    }
     settings.settings_revision = SETTINGS_REVISION;
 }
 
 impl Default for UserSettings {
     fn default() -> Self {
         Self {
-            font_family: "Cascadia Mono, Consolas, ui-monospace, monospace".to_string(),
+            // Bundled with the editor (dist/fonts): Hangul is exactly two columns wide.
+            font_family: DEFAULT_FONT_FAMILY.to_string(),
             font_size: 15.0,
             light_theme: "github-light".to_string(),
             dark_theme: "github-dark".to_string(),
@@ -819,5 +831,27 @@ mod tests {
             .expect("turn transparency back on");
         assert!(!chosen.reduce_transparency);
         assert!(!mgr.load_user_settings().reduce_transparency);
+    }
+
+    #[test]
+    fn the_editor_font_defaults_to_d2coding_and_only_the_old_default_is_migrated() {
+        assert_eq!(UserSettings::default().font_family, "D2Coding");
+
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let mgr = SettingsManager::with_dir(tmp.path());
+        fs::write(
+            mgr.settings_file_path(),
+            r#"{ "editor.fontFamily": "Cascadia Mono, Consolas, ui-monospace, monospace", "meta.settingsRevision": 2 }"#,
+        )
+        .unwrap();
+        assert_eq!(mgr.load_user_settings().font_family, "D2Coding");
+
+        // A font the user picked stays.
+        fs::write(
+            mgr.settings_file_path(),
+            r#"{ "editor.fontFamily": "'JetBrains Mono', monospace", "meta.settingsRevision": 2 }"#,
+        )
+        .unwrap();
+        assert_eq!(mgr.load_user_settings().font_family, "'JetBrains Mono', monospace");
     }
 }
