@@ -191,10 +191,6 @@ const builtInThemes: { id: string; label: string; colors: string }[] = [
   { id: 'solarized-dark', label: 'Solarized (Dark)', colors: '#002b36,#839496,#053542,#859900,#d33682,#268bd2' },
 ];
 
-/** Placeholder swatches for theme extensions (their colors are only known once applied). */
-const extensionLightSwatch = '#fafafa,#383a42,#eef0f3,#a626a4,#4078f2,#50a14f';
-const extensionDarkSwatch = '#282c34,#abb2bf,#2c313a,#c678dd,#61afef,#98c379';
-
 const fontFamilies: { value: string; label: string }[] = [
   { value: 'ui-monospace', label: 'System Mono' },
   { value: 'system-ui', label: 'System UI' },
@@ -282,24 +278,6 @@ async function invokeTauri<T>(cmd: string, args?: Record<string, unknown>): Prom
   }
 
   return await invoke(cmd, args) as T;
-}
-
-function createThemeSwatch(colors: string): HTMLElement {
-  const palette = colors.split(',').map(color => color.trim());
-  const container = createElement('div', 'markedit-settings-theme-swatch');
-  container.style.backgroundColor = palette[0] ?? '#ffffff';
-
-  const rows = [[2, 3], [4, 1], [3, 5], [5], [2, 1]];
-  const content = createElement('div', 'markedit-settings-theme-swatch-content', container);
-  for (const columns of rows) {
-    const row = createElement('div', 'markedit-settings-theme-swatch-row', content);
-    for (const index of columns) {
-      const token = createElement('span', 'markedit-settings-theme-swatch-token', row);
-      token.style.backgroundColor = palette[index] ?? '#000000';
-    }
-  }
-
-  return container;
 }
 
 function createToggle(
@@ -688,6 +666,62 @@ export function createSettingsModal(
     return section;
   }
 
+  /** Theme drop-down: built-in themes, then installed theme extensions (as in MarkEdit's Theme pop-up). */
+  function createThemeSelect(): HTMLElement {
+    const extensionPrefix = 'extension:';
+    const wrapper = createElement('div', 'markedit-settings-field');
+    createElement('label', 'markedit-settings-field-label', wrapper, 'Theme');
+    const select = createElement('select', 'markedit-chrome-input markedit-settings-select markedit-settings-theme-select') as HTMLSelectElement;
+
+    const current = settings.themeExtension !== ''
+      ? `${extensionPrefix}${settings.themeExtension}`
+      : settings.theme;
+
+    const builtInGroup = createElement('optgroup', '', select);
+    builtInGroup.label = 'Built-in';
+    for (const theme of builtInThemes) {
+      const option = createElement('option', '', builtInGroup, theme.label);
+      option.value = theme.id;
+    }
+
+    const extensions = listThemeExtensions();
+    if (extensions.length > 0) {
+      const extensionGroup = createElement('optgroup', '', select);
+      extensionGroup.label = 'Extensions';
+      for (const extension of extensions) {
+        const modes = extension.light && extension.dark ? 'Light & Dark' : extension.dark ? 'Dark only' : 'Light only';
+        const option = createElement('option', '', extensionGroup, `${extension.label} (${modes})`);
+        option.value = `${extensionPrefix}${extension.capability}`;
+        option.title = extension.capability;
+      }
+    }
+
+    // Keep an unknown saved value (e.g. an uninstalled extension) visible instead of silently showing another theme.
+    if (!Array.from(select.options).some(option => option.value === current)) {
+      const option = createElement('option', undefined, undefined, settings.themeExtension || settings.theme);
+      option.value = current;
+      select.insertBefore(option, select.firstChild);
+    }
+
+    select.value = current;
+    select.addEventListener('change', () => {
+      const value = select.value;
+      if (value.startsWith(extensionPrefix)) {
+        void updateSetting('themeExtension', value.slice(extensionPrefix.length));
+        return;
+      }
+
+      // A built-in theme replaces any theme extension.
+      if (settings.themeExtension !== '') {
+        void updateSetting('themeExtension', '');
+      }
+      void updateSetting('theme', value);
+    });
+
+    wrapper.appendChild(select);
+    return wrapper;
+  }
+
   function renderEditorTab(): void {
     const fontSection = createSection('Font');
     const fontFamilyField = createSelect('Font Family', fontFamilies, settings.fontFamily, value => {
@@ -700,37 +734,7 @@ export function createSettingsModal(
     fontSection.appendChild(fontSizeField);
 
     const themeSection = createSection('Theme');
-    const themeGrid = createElement('div', 'markedit-settings-theme-grid', themeSection);
-    for (const theme of builtInThemes) {
-      const card = createElement('button', 'markedit-settings-theme-card');
-      card.type = 'button';
-      card.classList.toggle('is-selected', settings.theme === theme.id && settings.themeExtension === '');
-      card.appendChild(createThemeSwatch(theme.colors));
-      createElement('div', 'markedit-settings-theme-label', card, theme.label);
-      card.addEventListener('click', () => {
-        // A built-in theme replaces any theme extension.
-        if (settings.themeExtension !== '') {
-          void updateSetting('themeExtension', '');
-        }
-        void updateSetting('theme', theme.id);
-      });
-      themeGrid.appendChild(card);
-    }
-
-    // Installed theme extensions: choosing one applies its colors over the editor.
-    for (const extension of listThemeExtensions()) {
-      const card = createElement('button', 'markedit-settings-theme-card is-extension');
-      card.type = 'button';
-      card.classList.toggle('is-selected', settings.themeExtension === extension.capability);
-      card.appendChild(createThemeSwatch(extension.dark && !extension.light ? extensionDarkSwatch : extensionLightSwatch));
-      const modes = extension.light && extension.dark ? 'Light & Dark' : extension.dark ? 'Dark only' : 'Light only';
-      createElement('div', 'markedit-settings-theme-label', card, `${extension.label} (Extension)`);
-      card.title = `${extension.capability} — ${modes}`;
-      card.addEventListener('click', () => {
-        void updateSetting('themeExtension', extension.capability);
-      });
-      themeGrid.appendChild(card);
-    }
+    themeSection.appendChild(createThemeSelect());
 
     const moreThemesButton = createButton('Get More Themes...', () => {
       window.chromeUI?.openExtensionsManager('discover');

@@ -654,6 +654,11 @@ describe('Settings Modal', () => {
   };
 
   const tick = () => new Promise(resolve => { setTimeout(resolve, 0); });
+  const selectTheme = (value: string) => {
+    const select = document.querySelector('.markedit-settings-theme-select') as HTMLSelectElement;
+    select.value = value;
+    select.dispatchEvent(new Event('change'));
+  };
 
   beforeEach(() => {
     document.body.innerHTML = '';
@@ -700,7 +705,7 @@ describe('Settings Modal', () => {
     initChromeUI();
   });
 
-  test('openSettings renders tabs and theme grid', async () => {
+  test('openSettings renders tabs and theme drop-down', async () => {
     (window.chromeUI as ChromeUI).openSettings('editor');
     await tick();
 
@@ -711,8 +716,10 @@ describe('Settings Modal', () => {
     expect(tabs.length).toBe(4);
     expect(Array.from(tabs).map(tab => tab.textContent)).toEqual(['Editor', 'Assistant', 'General', 'Window']);
 
-    const themeCards = document.querySelectorAll('.markedit-settings-theme-card');
-    expect(themeCards.length).toBe(16);
+    const themeSelect = document.querySelector('.markedit-settings-theme-select') as HTMLSelectElement;
+    expect(themeSelect).not.toBeNull();
+    expect(themeSelect.options.length).toBe(16);
+    expect(themeSelect.value).toBe(sampleSettings.theme);
 
     expect(document.querySelector('.markedit-settings-more-themes')).not.toBeNull();
   });
@@ -721,10 +728,7 @@ describe('Settings Modal', () => {
     (window.chromeUI as ChromeUI).openSettings('editor');
     await tick();
 
-    const themeCards = document.querySelectorAll('.markedit-settings-theme-card');
-    const darkCard = Array.from(themeCards).find(card => card.textContent.includes('GitHub (Dark)'));
-    expect(darkCard).toBeDefined();
-    (darkCard as HTMLButtonElement).click();
+    selectTheme('github-dark');
 
     await tick();
 
@@ -754,19 +758,18 @@ describe('Settings Modal', () => {
       (window.chromeUI as ChromeUI).openSettings('editor');
       await tick();
 
-      const card = Array.from(document.querySelectorAll('.markedit-settings-theme-card.is-extension'))
-        .find(element => element.textContent.includes('One Dark (Extension)'));
-      expect(card).toBeDefined();
-      (card as HTMLButtonElement).click();
+      const option = Array.from((document.querySelector('.markedit-settings-theme-select') as HTMLSelectElement).options)
+        .find(element => element.parentElement?.getAttribute('label') === 'Extensions' && element.textContent.includes('One Dark'));
+      expect(option).toBeDefined();
+      selectTheme(option?.value ?? '');
       await tick();
+      expect((document.querySelector('.markedit-settings-theme-select') as HTMLSelectElement).value).toBe('extension:markedit-theme-one-dark.js');
 
       expect(settingsInvokeMock).toHaveBeenCalledWith('settings_update', { patch: { themeExtension: 'markedit-theme-one-dark.js' } });
       expect(theming.__markeditTheming__.customThemes).toEqual({ dark: 'one-dark' });
 
       // Back to a built-in theme: the extension's colors are removed.
-      const builtIn = Array.from(document.querySelectorAll('.markedit-settings-theme-card'))
-        .find(element => element.textContent.includes('GitHub (Light)'));
-      (builtIn as HTMLButtonElement).click();
+      selectTheme('github-light');
       await tick();
       expect(settingsInvokeMock).toHaveBeenCalledWith('settings_update', { patch: { themeExtension: '' } });
       expect(theming.__markeditTheming__.customThemes).toEqual({});
