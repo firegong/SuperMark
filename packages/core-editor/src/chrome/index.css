@@ -233,16 +233,17 @@ body.markedit-reduce-transparency .markedit-chrome-panel {
   flex-shrink: 0;
 }
 
+/* Same metrics as the native macOS window buttons (macOS 26: 14pt buttons, 23pt apart). */
 .markedit-window-controls.is-macos {
-  gap: 8px;
-  width: 52px;
+  gap: 9px;
+  width: 60px;
 }
 
 .markedit-traffic-light {
   /* Same outer size for the close <button> and the <span> lights (buttons default to border-box). */
   box-sizing: border-box;
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
   border: 1px solid rgba(0, 0, 0, 0.12);
   display: flex;
@@ -264,6 +265,7 @@ body.markedit-reduce-transparency .markedit-chrome-panel {
   display: none;
   width: 8px;
   height: 8px;
+  stroke-width: 1.8;
 }
 
 .markedit-window-controls.is-macos:hover .markedit-traffic-light.is-close svg {
@@ -311,7 +313,7 @@ body.markedit-reduce-transparency .markedit-chrome-panel {
 }
 
 .markedit-window-controls-spacer {
-  width: 52px;
+  width: 60px;
   flex-shrink: 0;
 }
 
@@ -1895,50 +1897,30 @@ li.markedit-preview-task-item > p {
   display: none;
 }
 
-/* Syntax highlighting tokens */
+/* Syntax highlighting tokens: only used without an editor (e.g. Quick Look); with one, code in
+   the preview gets the active theme's own highlight classes (plugins/syntaxHighlight.ts). */
 
-.tok-keyword {
-  color: #cf222e;
-  font-weight: 600;
-}
-
-.tok-string {
-  color: #0a3069;
-}
-
-.tok-comment {
-  color: #6e7781;
-  font-style: italic;
-}
-
-.tok-number {
-  color: #0550ae;
-}
-
-.tok-type {
-  color: #953800;
-}
+.markedit-preview-body .tok-keyword { color: #cf222e; }
+.markedit-preview-body .tok-string, .markedit-preview-body .tok-string2 { color: #0a3069; }
+.markedit-preview-body .tok-comment, .markedit-preview-body .tok-meta { color: #6e7781; font-style: italic; }
+.markedit-preview-body .tok-number, .markedit-preview-body .tok-bool, .markedit-preview-body .tok-atom { color: #0550ae; }
+.markedit-preview-body .tok-typeName, .markedit-preview-body .tok-className, .markedit-preview-body .tok-namespace { color: #953800; }
+.markedit-preview-body .tok-propertyName, .markedit-preview-body .tok-attributeName { color: #0550ae; }
+.markedit-preview-body .tok-variableName.tok-definition { color: #8250df; }
+.markedit-preview-body .tok-tagName { color: #116329; }
+.markedit-preview-body .tok-inserted { color: #116329; }
+.markedit-preview-body .tok-deleted, .markedit-preview-body .tok-invalid { color: #82071e; }
 
 @media (prefers-color-scheme: dark) {
-  .tok-keyword {
-    color: #ff7b72;
-  }
-
-  .tok-string {
-    color: #a5d6ff;
-  }
-
-  .tok-comment {
-    color: #8b949e;
-  }
-
-  .tok-number {
-    color: #79c0ff;
-  }
-
-  .tok-type {
-    color: #ffa657;
-  }
+  .markedit-preview-body .tok-keyword { color: #ff7b72; }
+  .markedit-preview-body .tok-string, .markedit-preview-body .tok-string2 { color: #a5d6ff; }
+  .markedit-preview-body .tok-comment, .markedit-preview-body .tok-meta { color: #8b949e; }
+  .markedit-preview-body .tok-number, .markedit-preview-body .tok-bool, .markedit-preview-body .tok-atom { color: #79c0ff; }
+  .markedit-preview-body .tok-typeName, .markedit-preview-body .tok-className, .markedit-preview-body .tok-namespace { color: #ffa657; }
+  .markedit-preview-body .tok-propertyName, .markedit-preview-body .tok-attributeName { color: #79c0ff; }
+  .markedit-preview-body .tok-variableName.tok-definition { color: #d2a8ff; }
+  .markedit-preview-body .tok-tagName, .markedit-preview-body .tok-inserted { color: #7ee787; }
+  .markedit-preview-body .tok-deleted, .markedit-preview-body .tok-invalid { color: #ffa198; }
 }
 
 /* Live editor preview widgets */

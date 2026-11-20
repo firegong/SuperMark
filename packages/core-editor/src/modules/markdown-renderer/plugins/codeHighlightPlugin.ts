@@ -1,9 +1,26 @@
+import { tags, Tag } from '@lezer/highlight';
 import { escapeHtml } from '../utils';
+import { activeHighlighter, highlightWithParser } from './syntaxHighlight';
 
+/**
+ * Highlighted HTML for fenced code: the language's own parser when one is known (see
+ * syntaxHighlight.ts), else a generic tokenizer; either way in the active theme's colors.
+ */
 export function highlightCode(code: string, lang: string): string {
   if (lang.toLowerCase() === 'mermaid') {
     return escapeHtml(code);
   }
+
+  const highlighter = activeHighlighter();
+  const parsed = highlightWithParser(code, lang, highlighter);
+  if (parsed !== undefined) {
+    return parsed;
+  }
+
+  const span = (tag: Tag, text: string) => {
+    const classes = highlighter.style([tag]);
+    return classes === null ? escapeHtml(text) : `<span class="${escapeHtml(classes)}">${escapeHtml(text)}</span>`;
+  };
 
   const keywordSet = new Set([
     'break', 'case', 'catch', 'class', 'const', 'continue', 'debugger', 'default', 'delete', 'do', 'else',
@@ -92,34 +109,34 @@ export function highlightCode(code: string, lang: string): string {
 
     if (char === '/' && code[i + 1] === '/') {
       const comment = readCommentSlash();
-      result += `<span class="tok-comment">${escapeHtml(comment)}</span>`;
+      result += span(tags.comment, comment);
       continue;
     }
 
     if (char === '/' && code[i + 1] === '*') {
       const comment = readCommentBlock();
-      result += `<span class="tok-comment">${escapeHtml(comment)}</span>`;
+      result += span(tags.comment, comment);
       continue;
     }
 
     if (char === '"' || char === "'" || char === '`') {
       const string = readString(char);
-      result += `<span class="tok-string">${escapeHtml(string)}</span>`;
+      result += span(tags.string, string);
       continue;
     }
 
     if (/\d/.test(char) || (char === '.' && /\d/.test(code[i + 1] ?? ''))) {
       const number = readNumber();
-      result += `<span class="tok-number">${escapeHtml(number)}</span>`;
+      result += span(tags.number, number);
       continue;
     }
 
     if (/[a-zA-Z_$]/.test(char)) {
       const word = readWord();
       if (keywordSet.has(word)) {
-        result += `<span class="tok-keyword">${escapeHtml(word)}</span>`;
+        result += span(tags.keyword, word);
       } else if (typeSet.has(word)) {
-        result += `<span class="tok-type">${escapeHtml(word)}</span>`;
+        result += span(tags.typeName, word);
       } else {
         result += escapeHtml(word);
       }

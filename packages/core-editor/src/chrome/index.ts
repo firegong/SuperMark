@@ -29,6 +29,8 @@ import {
 import { isEditorLivePreview, setEditorLivePreview } from './liveEditorPreview';
 import { setThemeExtension } from './themeExtensions';
 import { applyPreviewThemeStyles, initPreviewThemeStyles, setPreviewThemeStyles } from './previewThemeStyles';
+import { setUserCodeLanguages } from '../modules/markdown-renderer/plugins/syntaxHighlight';
+import { userCodeLanguages } from '../api/methods';
 
 async function saveLivePreview(enabled: boolean): Promise<void> {
   try {
@@ -277,6 +279,8 @@ export function initChromeUI(): void {
     setMarkdownRenderer(savedRenderer);
   }
   initPreviewThemeStyles(savedSettings?.previewThemeStyles ?? savedSettings?.['preview.themeStyles']);
+  // Preview code blocks use the code languages extensions add to the editor.
+  setUserCodeLanguages(userCodeLanguages);
 
   const markEdit = MarkEdit as unknown as Record<string, unknown>;
   markEdit.setMarkdownStandard = (standard: string) => chromeUI.setMarkdownStandard(standard);

@@ -887,6 +887,8 @@ function setupGlobalListeners(): void {
 
   window.addEventListener('editor-colors-changed', () => {
     syncEditorStyles();
+    // Code is highlighted with the theme's own classes: render it again for the new theme.
+    updateContent(true);
   });
 
   // The View menu is shared by all windows; show this window's state when it is focused.
