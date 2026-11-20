@@ -1610,7 +1610,19 @@ pub fn open_in_shell(target: &str) {
     }
 }
 
-fn open_document_path<R: Runtime>(app: &AppHandle<R>, path: PathBuf) {
+pub fn open_document_path<R: Runtime>(app: &AppHandle<R>, path: PathBuf) {
+    // Already open: bring that window forward instead of opening the file twice.
+    let doc_mgr = app.state::<DocumentManager>();
+    if let Some(window) = doc_mgr
+        .windows_for_path(&path)
+        .into_iter()
+        .find_map(|label| app.get_webview_window(&label))
+    {
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+        return;
+    }
+
     if !path.exists() {
         let _ = MessageDialog::new()
             .set_title("SuperMarkdownEdit")

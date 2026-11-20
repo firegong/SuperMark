@@ -54,6 +54,11 @@ export function runtimeInfo(): RuntimeInfo {
     throw new Error('MarkEdit.runtimeInfo() is not implemented in this context.');
   }
 
+  // The host does not know the web engine's version: Chromium (WebView2) or WebKit.
+  if (runtimeInfo.webkitVersion === '') {
+    const engine = /(?:Chrome|AppleWebKit)\/([\d.]+)/.exec(navigator.userAgent);
+    return { ...runtimeInfo, webkitVersion: engine?.[1] ?? '' };
+  }
   return runtimeInfo;
 }
 

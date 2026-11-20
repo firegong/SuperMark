@@ -28,6 +28,7 @@ import { resetEditor } from './src/core';
 import { loadHostDocument, reloadDocumentFromHost, reloadExtensionsFromHost } from './src/hostDocument';
 import { initThemeExtractors, initMarkEditModules } from './src/api/modules';
 import { setUp, applyReducedMotion } from './src/styling/config';
+import { installBundledFonts } from './src/styling/fonts';
 import { loadTheme } from './src/styling/themes';
 import { startObserving } from './src/modules/events';
 import { createScriptRunner } from './src/scriptContext';
@@ -176,6 +177,7 @@ function setUpMainApp(config: Config) {
   Object.defineProperty(window, '__markeditReloadDocument__', { value: reloadDocumentFromHost });
   Object.defineProperty(window, '__markeditReloadExtensions__', { value: reloadExtensionsFromHost });
 
+  installBundledFonts();
   setUp(config, loadTheme(config.theme).colors);
   startObserving();
   initChromeUI();

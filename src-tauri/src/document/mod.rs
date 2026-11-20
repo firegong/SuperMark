@@ -478,6 +478,27 @@ impl DocumentManager {
         f(session)
     }
 
+    /// Windows (labels) whose document is `path`, compared after resolving `.`/`..`, links and,
+    /// on Windows, letter case.
+    pub fn windows_for_path(&self, path: &Path) -> Vec<String> {
+        let wanted = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+        let guard = self.sessions.lock().expect("DocumentManager lock");
+        guard
+            .iter()
+            .filter(|(_, session)| {
+                session.file_path.as_ref().is_some_and(|open| {
+                    let open = std::fs::canonicalize(open).unwrap_or_else(|_| open.clone());
+                    if cfg!(windows) {
+                        open.to_string_lossy().to_lowercase() == wanted.to_string_lossy().to_lowercase()
+                    } else {
+                        open == wanted
+                    }
+                })
+            })
+            .map(|(label, _)| label.clone())
+            .collect()
+    }
+
     pub fn next_window_label(&self) -> String {
         let guard = self.sessions.lock().expect("DocumentManager lock");
         for idx in 2..=1000 {
@@ -639,6 +660,36 @@ impl DocumentManager {
         items
     }
 
+    /// Unsaved work left by a crash: backups only exist while a document has unsaved changes
+    /// (they are removed on save or when changes are discarded), so any found at startup were
+    /// never saved.
+    pub fn plan_unsaved_recovery(&self) -> Vec<RestoreItem> {
+        self.plan_session_restore()
+            .into_iter()
+            .filter(|item| item.backup_text.is_some())
+            .collect()
+    }
+
+    /// Moves the backups of `labels` out of the way (Backups/Discarded/<time>/) instead of
+    /// deleting them, so declining recovery never loses text. Returns the folder.
+    pub fn archive_backups(&self, labels: &[String]) -> Result<PathBuf, String> {
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0);
+        let target = self.backups_dir().join("Discarded").join(stamp.to_string());
+        fs::create_dir_all(&target).map_err(|e| e.to_string())?;
+        for label in labels {
+            for extension in ["md", "json"] {
+                let file = self.backups_dir().join(format!("{label}.{extension}"));
+                if file.exists() {
+                    fs::rename(&file, target.join(format!("{label}.{extension}"))).map_err(|e| e.to_string())?;
+                }
+            }
+        }
+        Ok(target)
+    }
+
     /// Loads a planned item into the session of `label` (a freshly created window).
     /// The backup is moved to the new label so a later save clears the right file.
     pub fn apply_restore_item(&self, label: &str, item: &RestoreItem) -> String {
@@ -768,6 +819,29 @@ mod tests {
     }
 
     use super::*;
+
+    #[test]
+    fn unsaved_work_from_a_crash_is_offered_and_kept_when_declined() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let mgr = DocumentManager::with_data_dir(tmp.path().to_path_buf());
+        // A crash left the unsaved text of an untitled window; another window had none.
+        mgr.save_backup_snapshot("doc-3", "unsaved draft").expect("backup");
+        let saved = tmp.path().join("saved.md");
+        fs::write(&saved, "saved").unwrap();
+        mgr.with_session("main", |s| s.file_path = Some(saved.clone()));
+        mgr.write_last_session(&["main".to_string(), "doc-3".to_string()]).expect("session");
+
+        let plan = mgr.plan_unsaved_recovery();
+        assert_eq!(plan.len(), 1);
+        assert_eq!(plan[0].previous_label, "doc-3");
+        assert_eq!(plan[0].backup_text.as_deref(), Some("unsaved draft"));
+
+        // Declined: moved aside, not deleted, and not offered again.
+        let folder = mgr.archive_backups(&["doc-3".to_string()]).expect("archive");
+        assert_eq!(fs::read_to_string(folder.join("doc-3.md")).unwrap(), "unsaved draft");
+        assert!(mgr.plan_unsaved_recovery().is_empty());
+        assert!(mgr.list_backup_labels().is_empty());
+    }
 
     #[test]
     fn detects_and_preserves_crlf_and_utf8_bom() {

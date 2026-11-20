@@ -1,4 +1,5 @@
 import { RendererUnavailableError } from './strategy';
+import { sansStack } from '../../../styling/fonts';
 
 /**
  * Local diagram renderers:
@@ -70,7 +71,7 @@ function loadMermaid(): Promise<MermaidApi> {
         htmlLabels: false,
         flowchart: { htmlLabels: false },
         theme: 'default',
-        fontFamily: 'system-ui, sans-serif',
+        fontFamily: sansStack,
         // Do not draw Mermaid's error graphic into the page; errors are shown by the plugin.
         suppressErrorRendering: true,
         // Gantt charts size themselves to their (off-screen) container; give them a real width.

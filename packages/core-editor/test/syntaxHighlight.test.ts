@@ -1,9 +1,11 @@
 import { describe, expect, test, afterEach } from '@jest/globals';
 import { EditorState } from '@codemirror/state';
-import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
+import { HighlightStyle, LanguageDescription, syntaxHighlighting } from '@codemirror/language';
 import { classHighlighter, tags } from '@lezer/highlight';
 import { codeParser, highlightWithParser } from '../src/modules/markdown-renderer/plugins/syntaxHighlight';
 import { highlightCode } from '../src/modules/markdown-renderer/plugins/codeHighlightPlugin';
+import { streamCodeLanguages } from '../src/codeLanguages';
+import { renderMarkdownToHtml } from '../src/modules/markdown-renderer';
 
 type EditorHolder = { editor?: { state: EditorState } };
 
@@ -21,6 +23,9 @@ describe('Preview syntax highlighting', () => {
     expect(codeParser('no-such-language')).toBeUndefined();
     expect(codeParser('')).toBeUndefined();
     expect(codeParser('constructor')).toBeUndefined();
+    // Fence info in attribute forms.
+    expect(codeParser('{python run label=calc}')).toBeDefined();
+    expect(codeParser('{.rust}')).toBeDefined();
   });
 
   test('each language is tokenized by its own rules', () => {
@@ -55,5 +60,32 @@ describe('Preview syntax highlighting', () => {
     // Unknown languages use the generic tokenizer, in the same theme classes.
     expect(highlightCode('return 1', 'some-language')).toContain(`<span class="${keywordClass ?? ''}">return</span>`);
     expect(highlightCode('graph TD', 'mermaid')).toBe('graph TD');
+  });
+
+  test('the editor gets the same languages for code inside fences', async () => {
+    const languages = streamCodeLanguages();
+    for (const name of ['python', 'py', 'rust', 'sql', 'c++', 'bash', 'yaml', 'dockerfile']) {
+      const description = LanguageDescription.matchLanguageName(languages, name, true);
+      expect(`${name}: ${description === null ? 'missing' : 'ok'}`).toBe(`${name}: ok`);
+    }
+    const python = LanguageDescription.matchLanguageName(languages, 'py', true);
+    const support = await python?.load();
+    expect(support?.language.name).toBe('python');
+    // Shared with the preview: one language object per mode.
+    expect(support?.language.parser).toBe(codeParser('python'));
+  });
+
+  test('a longer fence holds shorter ones, and the language is read without the extra backtick', () => {
+    const html = renderMarkdownToHtml('````markdown\n```python\nprint(1)\n```\n````\n\nafter');
+    expect(html).toContain('data-language="markdown"');
+    expect(html).not.toContain('data-language="`markdown"');
+    // The inner fence is code, not the end of the block.
+    expect(html).toContain('python');
+    expect(html.indexOf('after')).toBeGreaterThan(html.indexOf('print'));
+    expect((html.match(/markedit-preview-code-block/g) ?? []).length).toBe(1);
+
+    // A closing fence has nothing after it; ``` js does not close a block.
+    const two = renderMarkdownToHtml('```js\nconst a = 1;\n```js\nconst b = 2;\n```');
+    expect((two.match(/markedit-preview-code-block/g) ?? []).length).toBe(1);
   });
 });

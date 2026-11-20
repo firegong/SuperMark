@@ -1,4 +1,5 @@
 import { escapeHtml } from '../utils';
+import { monospaceStack } from '../../../styling/fonts';
 
 interface MermaidNode {
   id: string;
@@ -397,5 +398,5 @@ export function renderMermaidToSvg(source: string): string {
   }
 
   const escaped = escapeHtml(source.trim());
-  return `<div class="markedit-mermaid-svg" style="padding: 16px; white-space: pre-wrap; font-family: monospace;">${escaped}</div>`;
+  return `<div class="markedit-mermaid-svg" style="padding: 16px; white-space: pre-wrap; font-family: ${monospaceStack.replace(/'/g, '&quot;').replace(/"/g, '&quot;')};">${escaped}</div>`;
 }

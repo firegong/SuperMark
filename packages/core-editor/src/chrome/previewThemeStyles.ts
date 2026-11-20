@@ -64,7 +64,8 @@ function sanitizeFontFamily(value: unknown): string | undefined {
   if (typeof value !== 'string') {
     return undefined;
   }
-  const cleaned = value.replace(/[;{}<>\\]/g, '').trim();
+  // Nothing that can end the value, the rule or the style sheet; font names have no colons.
+  const cleaned = value.replace(/[;:{}<>\\]/g, '').trim();
   return cleaned.length > 0 ? cleaned.slice(0, 200) : undefined;
 }
 

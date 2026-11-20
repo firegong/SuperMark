@@ -1,3 +1,4 @@
+import { detectWindowControlsPlatform } from './utils';
 import type { WebModuleCore } from '../bridge/web/core';
 import type { WebModuleSelection } from '../bridge/web/selection';
 import type { WebModuleSearch } from '../bridge/web/search';
@@ -60,6 +61,9 @@ export function initChromeUI(): void {
   if (document.getElementById(rootId) !== null) {
     return;
   }
+
+  // Platform-specific styling (scrollbars and such on Windows), see index.css.
+  document.documentElement.dataset.platform = detectWindowControlsPlatform();
 
   const webModules = window.webModules as unknown as {
     core: WebModuleCore;

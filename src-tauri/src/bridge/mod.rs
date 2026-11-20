@@ -2,6 +2,7 @@ pub mod generated;
 pub mod secret_storage;
 
 use crate::document::DocumentManager;
+use crate::document::versions::VersionManager;
 use generated::{AlertConfiguration, FileInfo, LineColumnInfo, MenuItem};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -97,7 +98,11 @@ pub fn dispatch_bridge_message(
         "tokenizer" => handle_tokenizer_module(&msg.method_name, &params),
         "completion" => Ok((Value::Null, None)),
         "secretStorage" => handle_secret_storage_module(&msg.method_name, &params, doc_mgr),
-        "translation" => Ok((json!({ "succeeded": false, "text": "" }), None)),
+        // The editor parses this as JSON text (api/translation.ts); there is no system translator.
+        "translation" => Ok((
+            json!(json!({ "error": "Translation is not available on this platform." }).to_string()),
+            None,
+        )),
         "foundationModels" => handle_foundation_models_module(&msg.method_name),
         other => Err(format!("Unknown native module: {other}")),
     }
@@ -165,6 +170,14 @@ fn handle_core_module(
     }
 }
 
+/// A version ID from the editor API (`id`), or `version` as older callers send it.
+fn version_id_param(params: &Value) -> Option<&str> {
+    params
+        .get("id")
+        .or_else(|| params.get("version"))
+        .and_then(Value::as_str)
+}
+
 fn handle_api_module(
     window_label: &str,
     method: &str,
@@ -205,10 +218,21 @@ fn handle_api_module(
                 .as_deref()
                 .map(|p| doc_mgr.versions().list_versions(p))
                 .unwrap_or_default();
-            Ok((json!(versions), None))
+            // The editor expects JSON text of [{ id, modificationDate (seconds), isLocal }].
+            let entries: Vec<Value> = versions
+                .iter()
+                .map(|id| {
+                    json!({
+                        "id": id,
+                        "modificationDate": VersionManager::version_timestamp(id).unwrap_or(0.0),
+                        "isLocal": true,
+                    })
+                })
+                .collect();
+            Ok((json!(Value::Array(entries).to_string()), None))
         }
         "getFileVersionContent" => {
-            let Some(version) = params.get("version").and_then(|v| v.as_str()) else {
+            let Some(version) = version_id_param(params) else {
                 return Ok((Value::Null, None));
             };
             let target = params
@@ -222,7 +246,7 @@ fn handle_api_module(
             Ok((json!(content), None))
         }
         "restoreFileVersion" => {
-            let Some(version) = params.get("version").and_then(|v| v.as_str()) else {
+            let Some(version) = version_id_param(params) else {
                 return Ok((json!(false), None));
             };
             let target = params
@@ -247,10 +271,17 @@ fn handle_api_module(
                 .and_then(|v| v.as_str())
                 .map(PathBuf::from)
                 .or_else(|| doc_mgr.with_session(window_label, |s| s.file_path.clone()));
-            let ok = target
-                .as_deref()
-                .and_then(|p| doc_mgr.versions().delete_local_versions(p).ok())
-                .unwrap_or(false);
+            // Only the versions asked for; without IDs nothing is deleted (it used to delete all).
+            let ids: Vec<String> = params
+                .get("ids")
+                .and_then(Value::as_array)
+                .map(|ids| ids.iter().filter_map(|id| id.as_str().map(str::to_string)).collect())
+                .unwrap_or_default();
+            let ok = !ids.is_empty()
+                && target
+                    .as_deref()
+                    .and_then(|p| doc_mgr.versions().delete_versions(p, &ids).ok())
+                    .is_some_and(|removed| removed > 0);
             Ok((json!(ok), None))
         }
         "getPasteboardString" => {
@@ -872,6 +903,34 @@ mod tests {
                 .unwrap(),
         };
         let (vers, _) = dispatch_bridge_message("main", &list_ver, &doc_mgr).expect("list vers");
-        assert_eq!(vers.as_array().unwrap().len(), 1);
+        // JSON text of [{ id, modificationDate, isLocal }], as api/fileVersion.ts parses it.
+        let listed: Value = serde_json::from_str(vers.as_str().expect("JSON text")).expect("JSON");
+        let listed = listed.as_array().expect("array");
+        assert_eq!(listed.len(), 1);
+        let id = listed[0]["id"].as_str().expect("id").to_string();
+        assert!(listed[0]["modificationDate"].as_f64().unwrap() > 1_600_000_000.0);
+        assert_eq!(listed[0]["isLocal"], json!(true));
+
+        let content = BridgeMessage {
+            module_name: "api".to_string(),
+            method_name: "getFileVersionContent".to_string(),
+            parameters: serde_json::to_string(&json!({ "id": id, "path": target_file.to_string_lossy() })).unwrap(),
+        };
+        let (text, _) = dispatch_bridge_message("main", &content, &doc_mgr).expect("content");
+        assert_eq!(text, json!("# v1"));
+
+        // Deleting needs the IDs: without them nothing is removed.
+        let delete = |params: Value| BridgeMessage {
+            module_name: "api".to_string(),
+            method_name: "deleteLocalFileVersions".to_string(),
+            parameters: serde_json::to_string(&params).unwrap(),
+        };
+        let path = target_file.to_string_lossy().to_string();
+        let (none, _) = dispatch_bridge_message("main", &delete(json!({ "path": path })), &doc_mgr).expect("delete none");
+        assert_eq!(none, json!(false));
+        assert_eq!(doc_mgr.versions().list_versions(&target_file).len(), 1);
+        let (deleted, _) = dispatch_bridge_message("main", &delete(json!({ "path": path, "ids": [id] })), &doc_mgr).expect("delete");
+        assert_eq!(deleted, json!(true));
+        assert!(doc_mgr.versions().list_versions(&target_file).is_empty());
     }
 }

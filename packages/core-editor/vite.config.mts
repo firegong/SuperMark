@@ -43,6 +43,35 @@ function vendorMermaid(): Plugin {
   };
 }
 
+/**
+ * Ships the bundled font (Pretendard, OFL-1.1) next to index.html as dist/fonts/, like Mermaid:
+ * inlining 2 MB into the single-file bundle would slow every window, and the browser only loads
+ * the font when text needs it (Hangul on Windows, see src/styling/fonts.ts).
+ */
+function vendorFonts(): Plugin {
+  const files: Record<string, string> = {
+    'fonts/PretendardVariable.woff2': './node_modules/pretendard/dist/web/variable/woff2/PretendardVariable.woff2',
+    'fonts/Pretendard-LICENSE.txt': './node_modules/pretendard/dist/LICENSE.txt',
+  };
+  const source = (path: string) => readFileSync(fileURLToPath(new URL(path, import.meta.url)));
+  return {
+    name: 'markedit-vendor-fonts',
+    configureServer(server) {
+      for (const [fileName, path] of Object.entries(files)) {
+        server.middlewares.use(`/${fileName}`, (_req, res) => {
+          res.setHeader('Content-Type', fileName.endsWith('.woff2') ? 'font/woff2' : 'text/plain; charset=utf-8');
+          res.end(source(path));
+        });
+      }
+    },
+    generateBundle() {
+      for (const [fileName, path] of Object.entries(files)) {
+        this.emitFile({ type: 'asset', fileName, source: source(path) });
+      }
+    },
+  };
+}
+
 export default defineConfig({
   resolve: {
     alias: {
@@ -50,5 +79,5 @@ export default defineConfig({
       '@codemirror/lang-markdown': fileURLToPath(new URL('./src/@vendor/lang-markdown', import.meta.url)),
     },
   },
-  plugins: [replaceHostPlaceholders(), vendorMermaid(), viteSingleFile()],
+  plugins: [replaceHostPlaceholders(), vendorMermaid(), vendorFonts(), viteSingleFile()],
 });

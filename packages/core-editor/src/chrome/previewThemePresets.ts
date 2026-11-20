@@ -6,6 +6,8 @@
  * index.css); the user's own overrides (previewThemeStyles.ts) apply on top of them.
  */
 
+import { withHangulFallbacks } from '../styling/fonts';
+
 export interface PreviewThemePreset {
   fonts: {
     body: string;
@@ -64,16 +66,16 @@ export interface PreviewThemePreset {
   };
 }
 
-// Font stacks: the theme's own font first, then Windows equivalents.
-const githubSans = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji'";
-const githubMono = "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace";
-const appleSans = "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI Variable Text', 'Segoe UI', sans-serif";
-const appleMono = "'SF Mono', ui-monospace, Menlo, 'Cascadia Mono', Consolas, monospace";
-const uiSans = "'Segoe UI Variable Text', 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', Arial, sans-serif";
-const codingMono = "'Cascadia Code', 'Fira Code', 'JetBrains Mono', ui-monospace, Consolas, monospace";
-const italicMono = "'Operator Mono', 'Dank Mono', 'Cascadia Code', 'Fira Code', Consolas, monospace";
-const readingSerif = "Charter, 'Iowan Old Style', 'Sitka Text', Georgia, Cambria, 'Times New Roman', serif";
-const minimalMono = "ui-monospace, 'SF Mono', 'Cascadia Mono', Consolas, monospace";
+// Font stacks: the theme's own font first, then Windows equivalents, then Hangul fonts (fonts.ts).
+const githubSans = withHangulFallbacks("-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji'");
+const githubMono = withHangulFallbacks("ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace");
+const appleSans = withHangulFallbacks("-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI Variable Text', 'Segoe UI', sans-serif");
+const appleMono = withHangulFallbacks("'SF Mono', ui-monospace, Menlo, 'Cascadia Mono', Consolas, monospace");
+const uiSans = withHangulFallbacks("'Segoe UI Variable Text', 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', Arial, sans-serif");
+const codingMono = withHangulFallbacks("'Cascadia Code', 'Fira Code', 'JetBrains Mono', ui-monospace, Consolas, monospace");
+const italicMono = withHangulFallbacks("'Operator Mono', 'Dank Mono', 'Cascadia Code', 'Fira Code', Consolas, monospace");
+const readingSerif = withHangulFallbacks("Charter, 'Iowan Old Style', 'Sitka Text', Georgia, Cambria, 'Times New Roman', serif");
+const minimalMono = withHangulFallbacks("ui-monospace, 'SF Mono', 'Cascadia Mono', Consolas, monospace");
 
 /** GitHub's Markdown sizes (2em, 1.5em, 1.25em, 1em, 0.875em, 0.85em of 16px). */
 const githubSizes = { body: 16, h1: 32, h2: 24, h3: 20, h4: 16, h5: 14, h6: 13.6 };

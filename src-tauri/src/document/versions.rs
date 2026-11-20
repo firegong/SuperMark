@@ -66,7 +66,42 @@ impl VersionManager {
         versions
     }
 
+    /// Version IDs look like `v-<millis>-<seq>`; anything else (e.g. `../x`) could reach files
+    /// outside the versions folder, so it is rejected.
+    pub fn is_valid_id(version_id: &str) -> bool {
+        let mut parts = version_id.split('-');
+        parts.next() == Some("v")
+            && parts.next().is_some_and(|millis| !millis.is_empty() && millis.bytes().all(|b| b.is_ascii_digit()))
+            && parts.next().is_some_and(|seq| !seq.is_empty() && seq.bytes().all(|b| b.is_ascii_digit()))
+            && parts.next().is_none()
+    }
+
+    /// When a version was saved, in seconds since 1970 (from its ID).
+    pub fn version_timestamp(version_id: &str) -> Option<f64> {
+        if !Self::is_valid_id(version_id) {
+            return None;
+        }
+        version_id.split('-').nth(1)?.parse::<u64>().ok().map(|millis| millis as f64 / 1000.0)
+    }
+
+    /// Deletes the given versions of `file_path` (only those), returning how many were removed.
+    pub fn delete_versions(&self, file_path: &Path, version_ids: &[String]) -> Result<usize, String> {
+        let dir = self.bucket_dir_for(file_path);
+        let mut removed = 0;
+        for id in version_ids.iter().filter(|id| Self::is_valid_id(id)) {
+            let snap_path = dir.join(format!("{id}.md"));
+            if snap_path.exists() {
+                fs::remove_file(&snap_path).map_err(|e| e.to_string())?;
+                removed += 1;
+            }
+        }
+        Ok(removed)
+    }
+
     pub fn get_version_content(&self, file_path: &Path, version_id: &str) -> Option<String> {
+        if !Self::is_valid_id(version_id) {
+            return None;
+        }
         let snap_path = self
             .bucket_dir_for(file_path)
             .join(format!("{version_id}.md"));
@@ -85,6 +120,30 @@ impl VersionManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn deletes_only_the_requested_versions_and_rejects_odd_ids() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let mgr = VersionManager::new(tmp.path());
+        let doc_path = tmp.path().join("doc.md");
+        let v1 = mgr.record_version(&doc_path, "# v1").expect("v1");
+        let v2 = mgr.record_version(&doc_path, "# v2").expect("v2");
+        let v3 = mgr.record_version(&doc_path, "# v3").expect("v3");
+
+        let removed = mgr
+            .delete_versions(&doc_path, &[v2.clone(), "../../doc".to_string(), "v-1-x".to_string()])
+            .expect("delete");
+        assert_eq!(removed, 1);
+        let left = mgr.list_versions(&doc_path);
+        assert!(left.contains(&v1) && left.contains(&v3) && !left.contains(&v2));
+
+        assert!(VersionManager::is_valid_id(&v1));
+        for id in ["", "v-", "v-12", "v-12-", "x-1-2", "v-1-2-3", "v-1/2-3", "../v-1-2"] {
+            assert!(!VersionManager::is_valid_id(id), "{id}");
+        }
+        assert_eq!(mgr.get_version_content(&doc_path, "../doc"), None);
+        assert!(VersionManager::version_timestamp(&v1).unwrap() > 1_600_000_000.0);
+    }
 
     #[test]
     fn records_lists_restores_and_deletes_file_versions() {

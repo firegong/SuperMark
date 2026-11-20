@@ -153,6 +153,8 @@ pub struct UserSettings {
     #[serde(rename = "general.startupBehavior")]
     pub startup_behavior: String,
 
+    /// Opaque panels (no frosted glass). On by default: on Windows, text over translucent,
+    /// blurred layers loses ClearType and looks rough.
     #[serde(rename = "window.reduceTransparency")]
     pub reduce_transparency: bool,
 
@@ -178,6 +180,27 @@ pub struct UserSettings {
     /// links, code and blockquotes), keyed by theme id or `extension:<script file name>`.
     #[serde(rename = "preview.themeStyles")]
     pub preview_theme_styles: Value,
+
+    /// Version of the settings file format, for one-time migrations (see `migrate_settings`).
+    #[serde(rename = "meta.settingsRevision")]
+    pub settings_revision: u32,
+}
+
+/// Current settings file revision.
+/// 2: `window.reduceTransparency` defaults to on; files from before keep `false` written out
+///    only because every field is saved, so they are switched once.
+pub const SETTINGS_REVISION: u32 = 2;
+
+/// Brings settings loaded from an older file (`stored` holds its raw keys) up to date.
+fn migrate_settings(settings: &mut UserSettings, stored: &serde_json::Map<String, Value>) {
+    let revision = stored
+        .get("meta.settingsRevision")
+        .and_then(Value::as_u64)
+        .unwrap_or(1);
+    if revision < 2 {
+        settings.reduce_transparency = true;
+    }
+    settings.settings_revision = SETTINGS_REVISION;
 }
 
 impl Default for UserSettings {
@@ -208,13 +231,14 @@ impl Default for UserSettings {
             default_text_encoding: "UTF-8".to_string(),
             default_line_break: "\r\n".to_string(),
             startup_behavior: "newDocument".to_string(),
-            reduce_transparency: false,
+            reduce_transparency: true,
             markdown_renderer: "extended".to_string(),
             diagram_server: "https://kroki.io".to_string(),
             diagram_rendering: "auto".to_string(),
             plantuml_command: "plantuml".to_string(),
             d2_command: "d2".to_string(),
             preview_theme_styles: json!({}),
+            settings_revision: SETTINGS_REVISION,
         }
     }
 }
@@ -393,6 +417,7 @@ fn canonical_setting_key(key: &str) -> Option<&'static str> {
         "preview.plantumlCommand" | "plantumlCommand" => Some("preview.plantumlCommand"),
         "preview.d2Command" | "d2Command" => Some("preview.d2Command"),
         "preview.themeStyles" | "previewThemeStyles" => Some("preview.themeStyles"),
+        "meta.settingsRevision" => Some("meta.settingsRevision"),
         _ => None,
     }
 }
@@ -457,7 +482,8 @@ impl SettingsManager {
                     if let Some(target_map) = base_val.as_object_mut() {
                         apply_settings_patch_map(target_map, obj);
                     }
-                    if let Ok(settings) = serde_json::from_value::<UserSettings>(base_val) {
+                    if let Ok(mut settings) = serde_json::from_value::<UserSettings>(base_val) {
+                        migrate_settings(&mut settings, obj);
                         return settings;
                     }
                 }
@@ -768,5 +794,30 @@ mod tests {
         assert!(mgr
             .build_live_sync_js(&updated)
             .contains("setPreviewThemeStyles?.({\"dracula\""));
+    }
+
+    #[test]
+    fn panels_are_opaque_by_default_and_old_files_are_migrated_once() {
+        assert!(UserSettings::default().reduce_transparency);
+
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let mgr = SettingsManager::with_dir(tmp.path());
+        // A file from before revision 2: every field written out, transparency on.
+        fs::write(
+            mgr.settings_file_path(),
+            r#"{ "editor.fontSize": 16.0, "window.reduceTransparency": false }"#,
+        )
+        .expect("write old settings");
+        let migrated = mgr.load_user_settings();
+        assert!(migrated.reduce_transparency);
+        assert_eq!(migrated.font_size, 16.0);
+        assert_eq!(migrated.settings_revision, SETTINGS_REVISION);
+
+        // Turned off again by the user: saved with the current revision, so it stays off.
+        let chosen = mgr
+            .update_user_settings(&json!({ "reduceTransparency": false }))
+            .expect("turn transparency back on");
+        assert!(!chosen.reduce_transparency);
+        assert!(!mgr.load_user_settings().reduce_transparency);
     }
 }

@@ -503,7 +503,7 @@ function scan(text: string, state: InlineState): string {
       }
 
       case '{': {
-        const variable = /^\{\{\s*([\w.-]+)\s*\}\}/.exec(rest);
+        const variable = /^\{\{\s*([\p{L}\p{N}_.-]+)\s*\}\}/u.exec(rest);
         if (variable !== null) {
           const value = context.metadata.get(variable[1].toLowerCase());
           out += value === undefined
@@ -574,14 +574,17 @@ function scan(text: string, state: InlineState): string {
       }
 
       case '\n': {
-        // Hard break: two or more trailing spaces.
-        if (/ {2,}$/.test(text.slice(0, index))) {
-          out = out.replace(/ +$/, '');
-          out += '<br>\n';
-        } else {
-          out = out.replace(/ +$/, '');
-          out += '\n';
+        // Hard break: two or more trailing spaces. Look back only at those spaces: scanning the
+        // whole paragraph for every line made long paragraphs quadratic.
+        let spaces = 0;
+        while (spaces < index && text[index - 1 - spaces] === ' ') {
+          spaces += 1;
         }
+        let end = out.length;
+        while (end > 0 && out[end - 1] === ' ') {
+          end -= 1;
+        }
+        out = out.slice(0, end) + (spaces >= 2 ? '<br>\n' : '\n');
         index += 1;
         continue;
       }

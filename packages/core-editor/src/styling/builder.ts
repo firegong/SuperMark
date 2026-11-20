@@ -1,4 +1,5 @@
 import { EditorView } from '@codemirror/view';
+import { monospaceStack } from './fonts';
 import { HighlightStyle, TagStyle, syntaxHighlighting } from '@codemirror/language';
 import { Tag, tags as defaultTags } from '@lezer/highlight';
 import { StyleSpec } from 'style-mod';
@@ -69,7 +70,7 @@ const sharedStyles: { [selector: string]: StyleSpec } = {
   },
   '.cm-gutters': {
     borderRight: 'none',
-    fontFamily: 'ui-monospace, monospace',
+    fontFamily: monospaceStack,
   },
   // '.cm-gutterElement': {
   //   boxShadow: 'inset 0px 0px 0px 1px #f00',
@@ -111,7 +112,7 @@ const sharedStyles: { [selector: string]: StyleSpec } = {
     pointerEvents: 'none',
   },
   '.cm-md-monospace, .cm-md-monospace *, .cm-md-codeBlock *, .cm-md-table *': {
-    fontFamily: 'ui-monospace, monospace',
+    fontFamily: monospaceStack,
   },
   '.cm-md-inlineCodeStart': {
     borderTopLeftRadius: '3px',
@@ -132,7 +133,7 @@ const sharedHighlights = [
   { tag: [tags.emphasis, tags.quote], fontStyle: 'italic' },
   { tag: tags.strikethrough, textDecoration: 'line-through' },
   { tag: tags.link, textDecoration: 'underline' },
-  { tag: tags.monospace, fontFamily: 'ui-monospace, monospace' },
+  { tag: tags.monospace, fontFamily: monospaceStack },
 ];
 
 function buildTheme(colors: EditorColors, scheme?: ColorScheme) {

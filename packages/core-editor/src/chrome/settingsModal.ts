@@ -76,6 +76,17 @@ function normalizeDiagramRendering(value: unknown): UserSettings['diagramRenderi
   return value === 'local' || value === 'server' ? value : 'auto';
 }
 
+/** `value` when it is one of `allowed`, else `fallback` (a damaged file may hold anything). */
+function oneOf<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
+  return allowed.includes(value as T) ? value as T : fallback;
+}
+
+/** A finite number within bounds, else `fallback`. */
+function numberIn(value: unknown, min: number, max: number, fallback: number): number {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.min(max, Math.max(min, number)) : fallback;
+}
+
 export function normalizeUserSettings(
   source: unknown,
   fallback?: UserSettings,
@@ -98,7 +109,7 @@ export function normalizeUserSettings(
     lineHeight: 1.5,
     tabKeyBehavior: 2,
     indentUnit: '    ',
-    suggestWhileTyping: true,
+    suggestWhileTyping: false,
     autoCharacterPairs: true,
     smartQuotesEnabled: true,
     insertFinalNewline: true,
@@ -108,7 +119,7 @@ export function normalizeUserSettings(
     defaultTextEncoding: 'UTF-8',
     defaultLineBreak: '\n',
     startupBehavior: 'newDocument',
-    reduceTransparency: false,
+    reduceTransparency: true,
     markdownRenderer: 'extended',
     diagramServer: 'https://kroki.io',
     diagramRendering: 'auto',
@@ -130,22 +141,22 @@ export function normalizeUserSettings(
     theme: String(pickValue(raw, ['theme', 'lightTheme', 'editor.lightTheme'], base.theme)),
     themeExtension: String(pickValue(raw, ['themeExtension', 'editor.themeExtension'], base.themeExtension)),
     fontFamily: normalizedFontFamily,
-    fontSize: Number(pickValue(raw, ['fontSize', 'editor.fontSize'], base.fontSize)),
+    fontSize: numberIn(pickValue(raw, ['fontSize', 'editor.fontSize'], base.fontSize), 8, 72, base.fontSize),
     showLineNumbers: Boolean(pickValue(raw, ['showLineNumbers', 'editor.showLineNumbers'], base.showLineNumbers)),
     showActiveLineIndicator: Boolean(
       pickValue(raw, ['showActiveLineIndicator', 'editor.showActiveLineIndicator'], base.showActiveLineIndicator),
     ),
-    invisiblesBehavior: pickValue(
-      raw,
-      ['invisiblesBehavior', 'editor.invisiblesBehavior'],
+    invisiblesBehavior: oneOf(
+      pickValue(raw, ['invisiblesBehavior', 'editor.invisiblesBehavior'], base.invisiblesBehavior),
+      ['never', 'selection', 'trailing', 'always'],
       base.invisiblesBehavior,
     ),
     typewriterMode: Boolean(pickValue(raw, ['typewriterMode', 'editor.typewriterMode'], base.typewriterMode)),
     focusMode: Boolean(pickValue(raw, ['focusMode', 'editor.focusMode'], base.focusMode)),
     livePreview: Boolean(pickValue(raw, ['livePreview', 'editor.livePreview'], base.livePreview)),
     lineWrapping: Boolean(pickValue(raw, ['lineWrapping', 'editor.lineWrapping'], base.lineWrapping)),
-    lineHeight: Number(pickValue(raw, ['lineHeight', 'editor.lineHeight'], base.lineHeight)),
-    tabKeyBehavior: Number(pickValue(raw, ['tabKeyBehavior', 'editor.tabKeyBehavior'], base.tabKeyBehavior)),
+    lineHeight: numberIn(pickValue(raw, ['lineHeight', 'editor.lineHeight'], base.lineHeight), 1, 3, base.lineHeight),
+    tabKeyBehavior: Math.round(numberIn(pickValue(raw, ['tabKeyBehavior', 'editor.tabKeyBehavior'], base.tabKeyBehavior), 0, 99, base.tabKeyBehavior)),
     indentUnit: String(pickValue(raw, ['indentUnit', 'editor.indentUnit'], base.indentUnit)),
     suggestWhileTyping: Boolean(
       pickValue(raw, ['suggestWhileTyping', 'assistant.wordsInDocument'], base.suggestWhileTyping),
@@ -162,7 +173,7 @@ export function normalizeUserSettings(
     trimTrailingWhitespace: Boolean(
       pickValue(raw, ['trimTrailingWhitespace', 'assistant.trimTrailingWhitespace'], base.trimTrailingWhitespace),
     ),
-    appearance: pickValue(raw, ['appearance', 'general.appearance'], base.appearance),
+    appearance: oneOf(pickValue(raw, ['appearance', 'general.appearance'], base.appearance), ['system', 'light', 'dark'], base.appearance),
     newFilenameExtension: String(
       pickValue(raw, ['newFilenameExtension', 'general.newFilenameExtension'], base.newFilenameExtension),
     ),

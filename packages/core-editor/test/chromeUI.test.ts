@@ -913,7 +913,7 @@ describe('Settings Modal', () => {
     config.theme = 'dracula';
     window.dispatchEvent(new Event('editor-colors-changed'));
     // Values are sanitized: nothing escapes the declaration, sizes are clamped.
-    expect(css()).toContain('h2 { font-family: Georgia  body  display: none; font-size: 96px; }');
+    expect(css()).toContain('h2 { font-family: Georgia  body  display none; font-size: 96px; }');
     expect(css()).not.toContain('}  body {');
 
     config.theme = 'cobalt';

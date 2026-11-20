@@ -76,12 +76,25 @@ function renderYamlFrontMatter(yaml: string): string {
 }
 
 function isFencedCodeStart(line: string): { fence: string; lang: string } | null {
-  const match = /^(```|~~~)([^\s]*)/.exec(line);
+  // Three or more backticks or tildes; a longer fence can hold shorter ones (```` around ```).
+  const match = /^(`{3,}|~{3,})(.*)$/.exec(line);
   if (match === null) {
     return null;
   }
 
-  return { fence: match[1], lang: match[2].trim() };
+  const info = match[2].trim();
+  // CommonMark: the info string of a backtick fence cannot contain a backtick.
+  if (match[1].startsWith('`') && info.includes('`')) {
+    return null;
+  }
+
+  return { fence: match[1], lang: info.split(/\s/)[0] };
+}
+
+/** A closing fence: the same character, at least as long as the opening one, nothing after it. */
+function isFencedCodeEnd(line: string, fence: string): boolean {
+  const match = /^(`{3,}|~{3,})\s*$/.exec(line);
+  return match !== null && match[1][0] === fence[0] && match[1].length >= fence.length;
 }
 
 function isHorizontalRule(line: string): boolean {
@@ -257,7 +270,7 @@ function renderFencedCode(lines: Line[], context: RenderContext): { html: string
 
   while (consumed < lines.length) {
     const line = lines[consumed].raw;
-    if (line.startsWith(start.fence)) {
+    if (isFencedCodeEnd(line, start.fence)) {
       consumed += 1;
       break;
     }
@@ -519,7 +532,26 @@ function tryCustomBlockPlugins(lines: Line[], context: RenderContext): { html: s
   return null;
 }
 
+/**
+ * Nesting limit for blocks inside blocks (quotes, lists, …): each level recurses, so thousands of
+ * `>` would overflow the stack. Deeper content is shown as plain text.
+ */
+const maxNestingDepth = 64;
+let nestingDepth = 0;
+
 function renderBlocks(lines: Line[], context: RenderContext): string {
+  if (nestingDepth >= maxNestingDepth) {
+    return `<p>${escapeHtml(lines.map(line => line.raw).join('\n'))}</p>`;
+  }
+  nestingDepth += 1;
+  try {
+    return renderBlocksAtDepth(lines, context);
+  } finally {
+    nestingDepth -= 1;
+  }
+}
+
+function renderBlocksAtDepth(lines: Line[], context: RenderContext): string {
   // Line numbers are absolute (assigned once in render()); nested calls must not renumber them.
   const withLineNumbers = lines;
   let index = 0;

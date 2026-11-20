@@ -29,6 +29,7 @@ import { paragraphIndentStyle, lineIndentStyle } from './styling/nodes/indent';
 import { gutterExtensions } from './styling/nodes/gutter';
 import { IndentBehavior } from './config';
 import { bundledLanguages } from './languages';
+import { streamCodeLanguages } from './codeLanguages';
 import { editingState } from './common/store';
 import { playSystemBeep } from './common/utils';
 import { livePreviewExtension } from './chrome/liveEditorPreview';
@@ -192,6 +193,8 @@ export function markdownConfigurations() {
     codeLanguages: [
       ...bundledLanguages(html()),
       ...userCodeLanguages(),
+      // After the extension's languages, which are more precise when installed.
+      ...streamCodeLanguages(),
     ],
     extensions: [
       ...markdownExtensions,

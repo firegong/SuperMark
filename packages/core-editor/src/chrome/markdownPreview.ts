@@ -193,22 +193,55 @@ async function renderDocumentInFrame(body: HTMLElement, renderDocument: (markdow
     if (loaded.scrollingElement !== null) {
       loaded.scrollingElement.scrollTop = scrollTop;
     }
-    // Links: same-document anchors scroll; nothing navigates the frame away.
-    loaded.addEventListener('click', event => {
-      const anchor = (event.target as Element | null)?.closest('a');
-      if (anchor === null || anchor === undefined) {
-        return;
-      }
-      event.preventDefault();
-      const href = anchor.getAttribute('href') ?? '';
-      if (href.startsWith('#')) {
-        loaded.getElementById(decodeURIComponent(href.slice(1)))?.scrollIntoView();
-      }
-    });
+    // Links: same-document anchors scroll, others open outside the preview (open_link).
+    loaded.addEventListener('click', event => handlePreviewLinkClick(event, loaded));
     attachFrameScrollSync(loaded);
     realignAfterRender();
   }, { once: true });
   frame.srcdoc = html;
+}
+
+/**
+ * Clicking a link must never navigate the app's own page (or the preview frame) away from the
+ * editor: in-page anchors scroll, everything else goes to the host, which opens web links in the
+ * browser, documents in the app and nothing unsafe (src-tauri/src/links.rs).
+ */
+export function handlePreviewLinkClick(event: MouseEvent, owner: Document): void {
+  const anchor = (event.target as Element | null)?.closest('a');
+  if (anchor === null || anchor === undefined) {
+    return;
+  }
+  const href = anchor.getAttribute('href') ?? '';
+  // Links made by the preview itself (tabs, copy buttons, footnote back-links handle their own).
+  if (event.defaultPrevented) {
+    return;
+  }
+  event.preventDefault();
+
+  if (href.startsWith('#')) {
+    const id = decodeURIComponent(href.slice(1));
+    const target = owner.getElementById(id) ?? Array.from(owner.querySelectorAll('[name]')).find(element => element.getAttribute('name') === id);
+    target?.scrollIntoView({ block: 'start' });
+    return;
+  }
+  if (href.trim() === '') {
+    return;
+  }
+
+  const invoke = window.__TAURI_INTERNALS__?.invoke;
+  if (invoke === undefined) {
+    console.warn('[MarkEdit] Links open from the desktop app only:', href);
+    return;
+  }
+  void openLink(invoke, href);
+}
+
+async function openLink(invoke: (cmd: string, args?: Record<string, unknown>) => Promise<unknown>, href: string): Promise<void> {
+  try {
+    await invoke('open_link', { href });
+  } catch (error) {
+    console.error('[MarkEdit] Failed to open link:', error);
+  }
 }
 
 function attachPreviewInteractions(): void {
@@ -748,6 +781,7 @@ function createPreviewPane(): HTMLElement {
 
   const body = createElement('div', 'markedit-preview-body', pane);
   body.addEventListener('scroll', handlePreviewScroll, { passive: true });
+  body.addEventListener('click', event => handlePreviewLinkClick(event, document));
   previewState.body = body;
 
   previewState.pane = pane;

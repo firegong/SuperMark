@@ -26,7 +26,8 @@ import {
 registerBuiltinRendererPlugins();
 
 const placeholderPattern = new RegExp(`${placeholderStart}([XTE]):([^${placeholderEnd}]*)${placeholderEnd}`, 'g');
-const metadataKeyPattern = /^([A-Za-z0-9_][A-Za-z0-9 _.-]{0,40}?):(?:[ \t]+(.*))?$/;
+// Keys in any script (`제목: …`), not only ASCII.
+const metadataKeyPattern = /^([\p{L}\p{N}_][\p{L}\p{N} _.-]{0,40}?):(?:[ \t]+(.*))?$/u;
 
 interface Metadata {
   entries: { key: string; value: string }[];
@@ -61,7 +62,7 @@ function extractMetadata(lines: SourceLine[]): Metadata {
 
     for (const line of lines.slice(1, end)) {
       // Top-level scalar keys only; nested YAML is shown but not used for variables.
-      const match = /^([\w.-][\w .-]*?):[ \t]*(.*)$/.exec(line.text);
+      const match = /^([\p{L}\p{N}_.-][\p{L}\p{N}_ .-]*?):[ \t]*(.*)$/u.exec(line.text);
       if (match !== null && !/^\s/.test(line.text)) {
         entries.push({ key: match[1], value: match[2].trim().replace(/^(["'])(.*)\1$/, '$2') });
       }

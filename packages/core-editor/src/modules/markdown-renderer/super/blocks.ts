@@ -1379,7 +1379,26 @@ function tryBlockPlugins(lines: SourceLine[], index: number, context: SuperConte
 }
 
 /** Renders a sequence of source lines. `tight` drops `<p>` wrappers (tight list items). */
+/**
+ * Nesting limit for blocks inside blocks (quotes, lists, fenced divs, callouts): each level
+ * recurses, so thousands of `>` would overflow the stack. Deeper content is shown as plain text.
+ */
+const maxNestingDepth = 64;
+let nestingDepth = 0;
+
 export function renderBlocks(lines: SourceLine[], context: SuperContext, tight = false): string {
+  if (nestingDepth >= maxNestingDepth) {
+    return `<p>${escapeHtml(lines.map(line => line.text).join('\n'))}</p>`;
+  }
+  nestingDepth += 1;
+  try {
+    return renderBlocksAtDepth(lines, context, tight);
+  } finally {
+    nestingDepth -= 1;
+  }
+}
+
+function renderBlocksAtDepth(lines: SourceLine[], context: SuperContext, tight: boolean): string {
   let html = '';
   let index = 0;
 

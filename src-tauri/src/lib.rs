@@ -4,18 +4,95 @@ pub mod diagrams;
 pub mod document;
 pub mod extensions;
 pub mod menu;
+pub mod links;
 pub mod settings;
 
 use bridge::{dispatch_bridge_message, BridgeMessage, WebBridge};
 use document::DocumentManager;
 use rfd::{MessageButtons, MessageDialog, MessageDialogResult, MessageLevel};
-use serde_json::Value;
+use serde_json::{json, Value};
 use settings::SettingsManager;
 use std::path::PathBuf;
 use tauri::{
     AppHandle, Manager, Runtime, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
     WindowEvent,
 };
+
+/// Opens a clicked link safely (see links.rs): web and mail links in the system, documents in the
+/// app (or the window that already has them), other files only revealed, unsafe links ignored.
+/// Async: dialogs are shown with rfd's async API, which is safe off the main thread on macOS.
+async fn follow_link<R: Runtime>(window: &WebviewWindow<R>, href: &str) {
+    let app = window.app_handle();
+    let doc_mgr = app.state::<DocumentManager>();
+    let base_dir = doc_mgr.with_session(window.label(), |s| {
+        s.file_path.as_ref().and_then(|path| path.parent().map(PathBuf::from))
+    });
+    match links::resolve_link(href, base_dir.as_deref()) {
+        links::LinkTarget::External(url) => menu::open_in_shell(&url),
+        links::LinkTarget::Document(path) => menu::open_document_path(app, path),
+        links::LinkTarget::Reveal(path) => links::reveal_in_file_manager(&path),
+        links::LinkTarget::NotFound(path) => {
+            let message = if base_dir.is_none() && path.is_relative() {
+                format!("Save this document first to follow relative links:\n{}", path.display())
+            } else {
+                format!("The linked file was not found:\n{}", path.display())
+            };
+            rfd::AsyncMessageDialog::new()
+                .set_title("SuperMarkdownEdit")
+                .set_description(message)
+                .set_level(MessageLevel::Warning)
+                .set_buttons(MessageButtons::Ok)
+                .show()
+                .await;
+        }
+        links::LinkTarget::Ignored => {}
+    }
+}
+
+/// Standard buttons for `count` requested buttons (custom labels need a Windows feature rfd does
+/// not enable here): 1 → OK, 2 → OK/Cancel, 3+ → Yes/No/Cancel. The result is the index of the
+/// clicked button in the requested order.
+fn alert_buttons(count: usize) -> MessageButtons {
+    match count {
+        0 | 1 => MessageButtons::Ok,
+        2 => MessageButtons::OkCancel,
+        _ => MessageButtons::YesNoCancel,
+    }
+}
+
+fn alert_result_index(result: &MessageDialogResult) -> i64 {
+    match result {
+        MessageDialogResult::Ok | MessageDialogResult::Yes => 0,
+        MessageDialogResult::No => 1,
+        MessageDialogResult::Cancel => 1,
+        MessageDialogResult::Custom(_) => 0,
+    }
+}
+
+async fn show_alert(params: &Value) -> i64 {
+    let text = |key: &str| params.get(key).and_then(Value::as_str).unwrap_or("").to_string();
+    let buttons = params.get("buttons").and_then(Value::as_array).map(Vec::len).unwrap_or(0);
+    let title = text("title");
+    let result = rfd::AsyncMessageDialog::new()
+        .set_title(if title.is_empty() { "SuperMarkdownEdit" } else { title.as_str() })
+        .set_description(text("message"))
+        .set_level(MessageLevel::Info)
+        .set_buttons(alert_buttons(buttons))
+        .show()
+        .await;
+    // Yes/No/Cancel: Cancel is the third button.
+    if buttons >= 3 && result == MessageDialogResult::Cancel {
+        return 2;
+    }
+    alert_result_index(&result)
+}
+
+/// A link clicked in the preview.
+#[tauri::command]
+async fn open_link(window: WebviewWindow, href: String) -> Result<(), String> {
+    follow_link(&window, &href).await;
+    Ok(())
+}
 
 #[tauri::command]
 async fn handle_bridge_message(
@@ -24,7 +101,38 @@ async fn handle_bridge_message(
     message: BridgeMessage,
 ) -> Result<Value, String> {
     let label = window.label().to_string();
+
+    // MarkEdit.openDocument (extensions): like File > Open — a new window, or the one that
+    // already shows the file — never replacing this window's (possibly unsaved) document.
+    if message.module_name == "api" && message.method_name == "openDocument" {
+        let path = serde_json::from_str::<Value>(&message.parameters)
+            .ok()
+            .and_then(|params| params.get("path").and_then(Value::as_str).map(PathBuf::from));
+        let Some(path) = path.filter(|path| path.exists()) else {
+            return Ok(json!(false));
+        };
+        menu::open_document_path(window.app_handle(), path);
+        menu::refresh_app_menu(window.app_handle());
+        return Ok(json!(true));
+    }
+
+    // MarkEdit.showAlert (extensions): a real dialog; returns the index of the clicked button.
+    if message.module_name == "api" && message.method_name == "showAlert" {
+        let params = serde_json::from_str::<Value>(&message.parameters).unwrap_or(Value::Null);
+        return Ok(json!(show_alert(&params).await));
+    }
+
     let (response, followup_js) = dispatch_bridge_message(&label, &message, &doc_mgr)?;
+
+    // Ctrl+click on a link in the editor.
+    if message.module_name == "core" && message.method_name == "notifyLinkClicked" {
+        let link = serde_json::from_str::<Value>(&message.parameters)
+            .ok()
+            .and_then(|params| params.get("link").and_then(Value::as_str).map(str::to_string));
+        if let Some(link) = link {
+            follow_link(&window, &link).await;
+        }
+    }
 
     if message.module_name == "core" && message.method_name == "notifyViewDidUpdate" {
         let new_title = doc_mgr.with_session(&label, |s| s.display_title());
@@ -448,6 +556,13 @@ async fn versions_delete_all(
 }
 
 pub fn build_bootstrap_script() -> String {
+    let runtime_info_json = json!({
+        "appVersion": env!("CARGO_PKG_VERSION"),
+        "appBuild": env!("CARGO_PKG_VERSION"),
+        "osVersion": format!("{} {}", std::env::consts::OS, std::env::consts::ARCH),
+        "webkitVersion": "",
+    })
+    .to_string();
     let mgr = SettingsManager::new();
     let settings = mgr.load_or_default();
     let user_settings = mgr.load_user_settings();
@@ -469,6 +584,8 @@ pub fn build_bootstrap_script() -> String {
         window.config = Object.assign({{}}, window.config, (function() {{ try {{ return {config_json}; }} catch (_) {{ return {{}}; }} }})());
         if (typeof window.config !== 'object' || window.config === null) {{ window.config = {{}}; }}
         if (!window.config.host) {{ window.config.host = 'mainApp'; }}
+        // MarkEdit.runtimeInfo(); webkitVersion is read from the WebView (api/methods.ts).
+        window.config.runtimeInfo = {runtime_info_json};
         window.MarkEdit = window.MarkEdit || {{
             editorConfig: window.config,
             userSettings: {user_settings_json}
@@ -556,6 +673,64 @@ pub fn persist_last_session<R: Runtime>(app: &AppHandle<R>, closing: Option<&str
     let _ = app.state::<DocumentManager>().write_last_session(&labels);
 }
 
+/// Offers to restore unsaved changes left by a crash (with the default `newDocument` startup,
+/// which does not reopen the last session). `main_is_free`: the main window has no document yet,
+/// so the first recovered document can go there. Declining keeps the text in an archive folder.
+fn recover_unsaved_work<R: Runtime>(app: &AppHandle<R>, main_is_free: bool) {
+    let doc_mgr = app.state::<DocumentManager>();
+    let plan = doc_mgr.plan_unsaved_recovery();
+    if plan.is_empty() {
+        return;
+    }
+
+    let names: Vec<String> = plan
+        .iter()
+        .map(|item| {
+            item.path
+                .as_ref()
+                .and_then(|path| path.file_name())
+                .map(|name| name.to_string_lossy().into_owned())
+                .unwrap_or_else(|| "Untitled".to_string())
+        })
+        .collect();
+    let answer = MessageDialog::new()
+        .set_title("SuperMarkdownEdit")
+        .set_description(format!(
+            "SuperMarkdownEdit did not close normally. Restore unsaved changes in {} document(s)?\n\n{}",
+            plan.len(),
+            names.join("\n")
+        ))
+        .set_level(MessageLevel::Warning)
+        .set_buttons(MessageButtons::YesNo)
+        .show();
+
+    if answer != MessageDialogResult::Yes {
+        let labels: Vec<String> = plan.iter().map(|item| item.previous_label.clone()).collect();
+        match doc_mgr.archive_backups(&labels) {
+            Ok(folder) => diagnostics::log(&format!("kept declined backups in {}", folder.display())),
+            Err(error) => diagnostics::log(&format!("could not archive backups: {error}")),
+        }
+        return;
+    }
+
+    for (index, item) in plan.iter().enumerate() {
+        if index == 0 && main_is_free {
+            let title = doc_mgr.apply_restore_item("main", item);
+            if let Some(main_win) = app.get_webview_window("main") {
+                let _ = main_win.set_title(&title);
+            }
+            continue;
+        }
+        match create_editor_window(app, None) {
+            Ok(window) => {
+                let title = doc_mgr.apply_restore_item(window.label(), item);
+                let _ = window.set_title(&title);
+            }
+            Err(err) => eprintln!("[SuperMarkdownEdit] Failed to restore a document: {err}"),
+        }
+    }
+}
+
 /// Reopens the documents of the previous session. The first one goes into the main window.
 fn restore_last_session<R: Runtime>(app: &AppHandle<R>) {
     let doc_mgr = app.state::<DocumentManager>();
@@ -609,8 +784,36 @@ pub fn create_editor_window<R: Runtime>(
         .min_inner_size(420.0, 300.0)
         .initialization_script(&init_script)
         .build()?;
+    fit_window_to_screen(&window, false);
     persist_last_session(app, None);
     Ok(window)
+}
+
+/// Initial window size for a screen: a share of its work area (taskbar excluded), within bounds
+/// that keep the editor comfortable. Logical pixels, so it is the same on any DPI scale.
+fn window_size_for_work_area(work_width: f64, work_height: f64) -> (f64, f64) {
+    let width = (work_width * 0.6).clamp(800.0, 1400.0).min(work_width);
+    let height = (work_height * 0.8).clamp(600.0, 1000.0).min(work_height);
+    (width.round(), height.round())
+}
+
+/// Windows: size new windows to the monitor instead of a fixed 960×680 (too small on large
+/// screens, too big on small ones at 150% scale); the first window is centered, later ones keep
+/// the position Windows gives them (cascading). macOS keeps the configured size.
+fn fit_window_to_screen<R: Runtime>(window: &WebviewWindow<R>, center: bool) {
+    if !cfg!(target_os = "windows") {
+        return;
+    }
+    let Ok(Some(monitor)) = window.current_monitor() else {
+        return;
+    };
+    let scale = monitor.scale_factor();
+    let area = monitor.work_area().size.to_logical::<f64>(scale);
+    let (width, height) = window_size_for_work_area(area.width, area.height);
+    let _ = window.set_size(tauri::LogicalSize::new(width, height));
+    if center {
+        let _ = window.center();
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -618,6 +821,37 @@ pub fn run() {
     let init_script = build_bootstrap_script();
 
     tauri::Builder::default()
+        // Must be the first plugin. Launching the app again (e.g. double-clicking a document in
+        // Explorer while it runs) hands the files to this process instead of starting a second
+        // one that would share the backup and session files.
+        .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
+            // Relative paths are relative to the second launch's working directory.
+            let paths: Vec<PathBuf> = args
+                .iter()
+                .skip(1)
+                .filter(|arg| !arg.starts_with('-'))
+                .map(|arg| {
+                    let path = PathBuf::from(arg);
+                    if path.is_relative() { PathBuf::from(&cwd).join(path) } else { path }
+                })
+                .filter(|path| path.exists())
+                .collect();
+            if paths.is_empty() {
+                // Just bring the app forward.
+                let window = app
+                    .webview_windows()
+                    .into_values()
+                    .find(|window| window.is_focused().unwrap_or(false))
+                    .or_else(|| app.webview_windows().into_values().next());
+                if let Some(window) = window {
+                    let _ = window.unminimize();
+                    let _ = window.set_focus();
+                }
+            }
+            for path in paths {
+                menu::open_document_path(app, path);
+            }
+        }))
         .manage(DocumentManager::new())
         .setup(move |app| {
             let app_handle = app.handle();
@@ -637,9 +871,10 @@ pub fn run() {
                 .find(|window| window.label == "main")
                 .cloned()
                 .ok_or("tauri.conf.json has no \"main\" window")?;
-            WebviewWindowBuilder::from_config(app_handle, &main_config)?
+            let main_window = WebviewWindowBuilder::from_config(app_handle, &main_config)?
                 .initialization_script(&init_script)
                 .build()?;
+            fit_window_to_screen(&main_window, true);
 
             let doc_mgr = app.state::<DocumentManager>();
             let _ = doc_mgr.extensions().ensure_directories();
@@ -674,11 +909,15 @@ pub fn run() {
                 for extra_path in cli_paths.iter().skip(1) {
                     let _ = create_editor_window(app_handle, Some(extra_path.clone()));
                 }
+                // Unsaved work from a crash goes into windows of its own.
+                recover_unsaved_work(app_handle, false);
             } else if SettingsManager::new().load_user_settings().startup_behavior == "lastSession" {
                 // Reopen the previous windows, including unsaved changes kept as backups.
                 restore_last_session(app_handle);
+            } else {
+                // `newDocument` (the default): an empty document, unless a crash left unsaved work.
+                recover_unsaved_work(app_handle, true);
             }
-            // Otherwise (`newDocument`, the default) the main window starts with an empty document.
             persist_last_session(app_handle, None);
 
             // Background extension update check (upstream ExtensionRegistry semantics).
@@ -866,7 +1105,8 @@ pub fn run() {
             versions_list,
             versions_get_content,
             versions_restore,
-            versions_delete_all
+            versions_delete_all,
+            open_link
         ])
         .run(tauri::generate_context!())
         .expect("error while running SuperMarkdownEdit");
@@ -874,6 +1114,20 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn window_size_follows_the_screen_work_area() {
+        use super::window_size_for_work_area;
+        // 1920x1080 at 100% (taskbar excluded): 60% x 80%.
+        assert_eq!(window_size_for_work_area(1920.0, 1032.0), (1152.0, 826.0));
+        // 1920x1080 at 150% is 1280x720 logical: within the minimums.
+        assert_eq!(window_size_for_work_area(1280.0, 688.0), (800.0, 600.0));
+        // 4K at 100%: capped.
+        assert_eq!(window_size_for_work_area(3840.0, 2112.0), (1400.0, 1000.0));
+        // A screen smaller than the minimum: never larger than the screen.
+        assert_eq!(window_size_for_work_area(700.0, 500.0), (700.0, 500.0));
+    }
+
     /// The main window must be created in `setup` (with the bridge bootstrap as an
     /// initialization script), not automatically from tauri.conf.json: injecting the bootstrap
     /// later with `eval` raced the page load and opened files never reached the editor.
