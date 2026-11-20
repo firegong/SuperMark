@@ -1,129 +1,147 @@
 # 시스템 아키텍처 설계서 (Tauri v2 + WebView2 + CoreEditor)
 
 - **문서 번호**: `ARCH-001`
-- **작성일**: 2026-11-08
-- **상태**: Draft v1.0
+- **작성일**: 2026-11-08 (최초), 2026-11-21 (현재 구현 기준으로 개정)
+- **상태**: v2.0
+- **관련 문서**: `ARCH-002` 브리지 명세, `DES-001` 문서 수명주기, `DES-002` 파서·프리뷰, `DES-003` 설정·테마·폰트
 
 ---
 
-## 1. 전체 아키텍처 개요
+## 1. 개요
 
-`SuperMark`(구 MarkEdit-Win)은 **Tauri v2 (Rust)** 네이티브 호스트 프로세스와 **Microsoft Edge WebView2** 렌더러 프로세스로 구성되며, 렌더러 내부에서 원본 MarkEdit의 **`CoreEditor` (CodeMirror 6)** 단일 파일 번들이 실행됩니다.
+**SuperMark**(구 SuperMarkdownEdit, MarkEdit-Win)는 macOS 마크다운 에디터 [MarkEdit](https://github.com/MarkEdit-app/MarkEdit)를 Windows로 포팅하고 기능을 확장한 앱이다.
+
+- **네이티브 호스트**: Tauri v2 (Rust, `src-tauri/`, 크레이트 `supermark`)
+- **렌더러**: Microsoft Edge WebView2 (macOS 빌드는 WKWebView)
+- **에디터**: 원본 MarkEdit의 `CoreEditor` (CodeMirror 6 + Lezer, `packages/core-editor/`)를 기반으로 한 단일 파일 번들 + 앱 자체 UI(chrome)와 프리뷰
 
 ```text
 +-----------------------------------------------------------------------------------+
-|                            SuperMark (Windows Process)                            |
+|                         SuperMark (네이티브 프로세스, Rust)                          |
 |                                                                                   |
-|  +-----------------------------------------------------------------------------+  |
-|  |                     Rust Native Host (src-tauri)                            |  |
-|  |                                                                             |  |
-|  |  +-------------------+  +--------------------+  +------------------------+  |  |
-|  |  | Window & Menu Mgr |  | Document & File IO |  | Settings & Script Loader|  |  |
-|  |  | (Tauri / muda)    |  | (Encoding, Watcher)|  | (%APPDATA%/MarkEdit)   |  |  |
-|  |  +---------+---------+  +---------+----------+  +-----------+------------+  |  |
-|  |            |                      |                         |               |  |
-|  |  +---------v----------------------v-------------------------v------------+  |  |
-|  |  |             Generated Bridge Dispatcher (ts-gyb -> Rust)              |  |  |
-|  |  |  - NativeModules: core, api, completion, tokenizer, secretStorage...  |  |  |
-|  |  |  - WebModules Caller: core, config, format, search, history, toc...   |  |  |
-|  |  +-----------------------------------+-----------------------------------+  |  |
-|  +--------------------------------------|--------------------------------------+  |
-|                                         | Tauri IPC / WebView2 Eval               |
-|  +--------------------------------------v--------------------------------------+  |
-|  |                     Microsoft Edge WebView2 (Renderer)                      |  |
-|  |                                                                             |  |
-|  |  +-----------------------------------------------------------------------+  |  |
-|  |  |               Bridge Polyfill / Adapter (nativeModule.ts)             |  |  |
-|  |  |   window.webkit.messageHandlers.bridge.postMessage -> Tauri invoke    |  |  |
-|  |  +-----------------------------------+-----------------------------------+  |  |
-|  |                                      |                                      |  |
-|  |  +-----------------------------------v-----------------------------------+  |  |
-|  |  |                     CoreEditor (CodeMirror 6 + Lezer)                 |  |  |
-|  |  |  - window.webModules (12 modules)                                     |  |  |
-|  |  |  - window.nativeModules (7 modules)                                   |  |  |
-|  |  |  - MarkEdit Extension Runtime (markedit-api)                          |  |  |
-|  |  +-----------------------------------------------------------------------+  |  |
-|  +-----------------------------------------------------------------------------+  |
+|  lib.rs  ── 시작, 창 생성, Tauri 명령(27개), 창 이벤트(닫기 보호), 단일 인스턴스        |
+|   ├─ menu/          네이티브 메뉴(muda) 구성·상태·동작 → 웹 호출                      |
+|   ├─ document/      DocumentManager: 세션, 인코딩, 저장, 백업, 버전, TextBundle        |
+|   ├─ bridge/        웹 브리지 디스패처(core, api, tokenizer, secretStorage …)         |
+|   ├─ settings/      settings.json, 마이그레이션, 모든 창 실시간 동기화                 |
+|   ├─ extensions/    확장 레지스트리·다운로드(sha256)·설정·내장 확장                    |
+|   ├─ diagrams/      로컬 PlantUML·D2 실행                                            |
+|   ├─ links.rs       링크 대상 판정(외부/문서/표시만/무시)                              |
+|   └─ diagnostics.rs 로그 (logs/markedit.log)                                        |
+|                                                                                   |
+|        ▲ invoke('handle_bridge_message' 등)        │ window.eval(스크립트)           |
++--------|-------------------------------------------|------------------------------+
+         |                                           ▼
++-----------------------------------------------------------------------------------+
+|                         WebView2 (렌더러, TypeScript)                              |
+|                                                                                   |
+|  부트스트랩: window.config, MarkEdit.userSettings, runtimeInfo, 브리지 폴리필        |
+|  ├─ CoreEditor (src/core.ts, modules/*, styling/*)   CodeMirror 6 편집기             |
+|  │    window.webModules (12)  ◀── 호스트 호출                                        |
+|  │    window.nativeModules (7) ──▶ 호스트 호출                                       |
+|  ├─ chrome/  앱 UI: 검색 바, 목차·통계 팝오버, 설정, 확장 관리자, 버전 기록,          |
+|  │          컨텍스트 메뉴, 프리뷰 창                    window.chromeUI               |
+|  ├─ modules/markdown-renderer/  파서(parsers/) + 다이어그램·수식·코드 강조 플러그인    |
+|  ├─ chrome/preview/             파서별 프리뷰(HTML 조각, 격리 프레임, Super Set)       |
+|  └─ 확장 런타임 (markedit-api)  사용자 확장 스크립트·스타일, 테마 확장                |
 +-----------------------------------------------------------------------------------+
 ```
 
 ---
 
-## 2. 부트스트랩 및 설정 주입 흐름 (Bootstrap Sequence)
+## 2. 저장소 구성
 
-원본 MarkEdit의 `CoreEditor/index.html`은 빌드 시점에 플레이스홀더 문자열을 남기고, 네이티브 호스트가 WebView 로드 시 실제 설정 JSON으로 치환하거나 초기화 스크립트로 주입합니다.
-
-```html
-<!-- CoreEditor/index.html -->
-<script>
-  window.config = "{{EDITOR_CONFIG}}";
-  MarkEdit = {
-    editorConfig: window.config,
-    userSettings: "{{USER_SETTINGS}}",
-  };
-</script>
-```
-
-### Windows (Tauri v2) 초기화 시퀀스:
-1. **Rust 호스트 기동**:
-   - `%APPDATA%/MarkEdit/settings.json`을 읽어들여 해당 창의 초기 `EditorConfig` 구조체를 생성합니다.
-   - 명령줄 인자(더블클릭한 `.md` 파일 경로)가 있으면 해당 파일 텍스트를 미리 읽거나 준비합니다.
-2. **WebView2 초기화 스크립트(`initialization_script`) 주입**:
-   - `window.webkit.messageHandlers.bridge.postMessage` 호환 어댑터를 주입하여 `CoreEditor`가 수정 없이도 Tauri의 `invoke("bridge_message", ...)`를 호출하도록 연결합니다.
-   - `window.config` 및 `window.MarkEdit` 초기 객체를 주입하고, 로컬 사용자 확장 스크립트(`__prepareScriptContexts__`)를 등록합니다.
-3. **`notifyWindowDidLoad` 핸드셰이크**:
-   - `CoreEditor`의 `window.onload`가 실행되면 `window.nativeModules.core.notifyWindowDidLoad()`가 호출됩니다.
-   - Rust 호스트는 이 신호를 받은 즉시 `webModules.core.resetEditor({ text, documentChanged: false })` 및 `webModules.api.notifyAppReady()`를 호출하여 문서를 렌더링합니다.
+| 경로 | 내용 |
+| --- | --- |
+| `src-tauri/` | Rust 호스트 (`Cargo.toml`, `tauri.conf.json`, `src/`) |
+| `packages/core-editor/` | 에디터·UI·프리뷰 (TypeScript, vite 단일 파일 빌드 → `dist/`) |
+| `docs/` | 요구사항, 아키텍처, 설계, 로드맵, 테스트 계획과 샘플 |
+| `scripts/` | `build-app.sh` / `build-app.ps1` (에디터 빌드 + 릴리스 빌드, macOS `.app` 래핑) |
+| `.github/workflows/` | Windows CI, 릴리스(`tauri build` 설치 파일) |
 
 ---
 
-## 3. 하이브리드 UI 구성 전략 (툴바·검색 바·통계 뷰)
+## 3. 프로세스와 통신
 
-macOS 버전은 `AppKit`의 `NSFindBar`와 `NSPopover`로 검색 바, 목차(TOC), 통계 팝오버를 그리지만, Windows(Tauri)에서는 다음 두 가지 방식 중 하나로 구현할 수 있습니다.
-
-### 채택 방식: 단일 WebView 내 상단 도킹 크롬(Overlay/Top-Bar) + 네이티브 Win32 메뉴바
-- **메뉴바 및 컨텍스트 메뉴**: Tauri의 `muda` 기반 **100% Windows 네이티브 메뉴바 및 우클릭 메뉴**를 사용합니다.
-- **검색/바꾸기 바(Find & Replace) 및 TOC/통계 팝오버**:
-  - 별도 OS 창을 띄우면 포커스 이동과 위치 동기화 지연이 발생하므로, WebView 상단 레이어(고정 헤더 슬롯)에 경량 UI 컴포넌트로 마운트합니다.
-  - 검색 입력 시 즉시 같은 컨텍스트의 `window.webModules.search.updateQuery(...)` / `findNext(...)`를 호출하므로 IPC 왕복 지연이 **0ms**입니다.
+| 방향 | 방식 | 용도 |
+| --- | --- | --- |
+| Web → Native | `__TAURI_INTERNALS__.invoke('handle_bridge_message', { message })` | `window.nativeModules.*` 호출. `window.webkit.messageHandlers.bridge.postMessage` 폴리필로 CoreEditor 코드를 수정 없이 연결 (`ARCH-002`) |
+| Web → Native | `invoke('<명령>', args)` | 앱 UI가 쓰는 Tauri 명령: 저장, 설정, 확장, 버전, 링크, 다이어그램 등 (`ARCH-002` §4) |
+| Native → Web | `webview.eval(script)` | `window.webModules.*`, `window.chromeUI.*` 호출, 설정 실시간 동기화 |
+| Native → Web (데이터) | 명령의 반환값 | 문서 내용과 확장은 큰 `eval` 대신 데이터로 전달 (`notifyWindowDidLoad` 응답, `document_content`, `extensions_bootstrap`) — WebView2에서 수 MB짜리 `eval`이 실패해 창이 비는 문제를 피함 |
 
 ---
 
-## 4. `ts-gyb` 기반 코드 생성 파이프라인 확장 설계
+## 4. 시작 순서
 
-원본 `CoreEditor/src/@codegen/config.json`에 Rust 타겟을 추가하여, TypeScript 브리지 정의가 변경될 때마다 Rust 프로토콜 코드가 자동 갱신되도록 구성합니다.
+1. **`run()`** (`src-tauri/src/lib.rs`)
+   1. 부트스트랩 스크립트 생성 (`build_bootstrap_script`).
+   2. 단일 인스턴스 플러그인: 두 번째 실행의 파일 인자를 실행 중인 앱에 넘김(상대 경로는 그 실행의 작업 폴더 기준). 파일이 없으면 기존 창만 앞으로.
+   3. `DocumentManager` 등록, 네이티브 메뉴 구성.
+   4. 메인 창을 직접 생성(`tauri.conf.json`은 `create: false`) — 부트스트랩을 초기화 스크립트로 넣어 페이지 스크립트보다 먼저 실행되게 함. Windows에서는 화면 크기에 맞춤.
+   5. 명령줄 파일: 첫 파일은 메인 창, 나머지는 새 창. 그 뒤 비정상 종료로 남은 미저장 내용 복구 제안.
+   6. 명령줄 파일이 없으면: 시작 동작이 `lastSession`이면 지난 세션 복원, 아니면(기본) 미저장 내용 복구 제안.
+   7. 확장 업데이트 확인 스레드(업데이트 동작: Never / Quiet(기본) / Notify / Automatic).
+2. **부트스트랩 스크립트**(각 창의 초기화 스크립트): `window.config`(EditorConfig), `window.config.runtimeInfo`, `window.MarkEdit.userSettings`, `<html data-appearance data-reduce-transparency>`, 브리지 폴리필.
+3. **에디터 로드**: CoreEditor가 `core.notifyWindowDidLoad`를 호출 → 호스트는 `{ text, restoreText, extensions }`를 반환 → `hostDocument.ts`가 문서를 넣고, 복구 텍스트를 편집으로 적용(되돌리기 가능, 수정됨 표시)하고, 확장을 하나씩 실행(한 확장의 오류가 문서 로드를 막지 않음).
+4. **에디터·앱 UI 초기화**: `index.ts`가 번들 폰트(`@font-face`)를 등록하고 편집기를 만든 뒤, `initChromeUI()`가 `window.chromeUI`를 만들고 저장된 파서·다이어그램 설정·프리뷰 스타일을 복원하며 `<html data-platform>`을 설정한다.
 
-```json
-{
-  "rendering": {
-    "rust": {
-      "renders": [
-        {
-          "target": "config",
-          "template": "rust-config.mustache",
-          "outputPath": "../../../src-tauri/src/bridge/generated"
-        },
-        {
-          "target": "native",
-          "template": "rust-native-module.mustache",
-          "outputPath": "../../../src-tauri/src/bridge/generated/native"
-        },
-        {
-          "target": "web",
-          "template": "rust-web-module.mustache",
-          "outputPath": "../../../src-tauri/src/bridge/generated/web"
-        }
-      ],
-      "namedTypesTemplatePath": "rust-shared-types.mustache",
-      "namedTypesOutputPath": "../../../src-tauri/src/bridge/generated/shared_types.rs",
-      "typeNameMap": {
-        "CodeGen_Int": "i64",
-        "CodeGen_UInt64": "u64",
-        "CodeGen_Self": "Self",
-        "CodeGen_Dict": "serde_json::Map<String, serde_json::Value>"
-      }
-    }
-  }
-}
-```
-이를 통해 수동으로 수십 개의 JSON 직렬화/역직렬화 코드를 작성할 필요 없이 **타입 안전성(Type-safety)을 100% 보장**합니다.
+---
+
+## 5. UI 구성
+
+| 영역 | 구현 |
+| --- | --- |
+| 메뉴 바 | 네이티브(muda): SuperMark, File, Edit, Format, View, Go, Extensions, Window, Help. 메뉴 동작은 대부분 포커스된 창에 웹 스크립트로 전달. 확장이 추가한 항목 포함, 상태 변경 시 메뉴 전체 재구성 |
+| 검색/바꾸기, 목차, 통계, 줄 이동 | WebView 안의 패널·팝오버(`chrome/`). 같은 컨텍스트에서 `webModules.search` 등을 직접 호출 |
+| 설정, 확장 관리자, 버전 기록 | WebView 안의 모달 대화상자 (`DES-003`) |
+| 프리뷰 | 분할/마크다운 보기 창, 파서별 프리뷰 (`DES-002`) |
+| 경고·저장 대화상자 | 네이티브(`rfd`) |
+
+---
+
+## 6. 보안 경계
+
+| 항목 | 설계 |
+| --- | --- |
+| 프리뷰의 원시 HTML | 공통 엔진은 이스케이프, Markdown Super Set은 태그 필터. 위험 URL(`javascript:` 등) 차단 |
+| 확장 렌더러 문서 | 스크립트 불가 샌드박스 프레임 |
+| 링크 | 페이지 이동 금지. `links.rs`: http(s)·mailto만 시스템으로, 마크다운 문서는 앱에서, 그 밖의 로컬 파일은 탐색기에서 표시만(실행 파일을 실행하지 않음), 그 외 무시 |
+| 확장 설치 | https만, sha256 고정·검증, 확장 홈페이지는 http(s)만 |
+| 버전 기록 ID | `v-<ms>-<seq>` 형식만 허용(경로 탈출 방지), 선택한 ID만 삭제 |
+| 다이어그램 서버 출력 | `<img>`로만 표시 |
+| 비밀 저장소 | **미흡**: `secrets.json` 평문 (Credential Manager 연동 예정) |
+
+---
+
+## 7. 데이터 저장 위치 (`<config_dir>/MarkEdit/`)
+
+Windows `%APPDATA%\MarkEdit`, macOS `~/Library/Application Support/MarkEdit`. 앱 이름이 바뀌었어도 기존 데이터를 그대로 쓰기 위해 폴더 이름과 앱 식별자(`app.markedit.rust`)는 유지한다.
+
+| 경로 | 내용 |
+| --- | --- |
+| `settings.json` | 사용자 설정 (`DES-003`) |
+| `recent.json` | 최근 문서 (최대 15개) |
+| `last-session.json` | 열려 있던 창 목록 |
+| `Backups/` | 미저장 내용 백업(`<label>.md` + `.json`), 복구 거절 시 `Backups/Discarded/<시각>/` |
+| `Versions/<경로 해시>/` | 저장할 때마다 기록하는 버전 |
+| `extensions.json`, `scripts/`, `styles/`, `cache/` | 확장 설정, 확장 스크립트·스타일, 레지스트리 캐시 |
+| `secrets.json` | 확장용 비밀 값 |
+| `logs/markedit.log` | 진단 로그 (1MB에서 `.log.1`로 교체) |
+
+---
+
+## 8. 빌드와 배포
+
+| 단계 | 내용 |
+| --- | --- |
+| 에디터 | `packages/core-editor`에서 `yarn build` = lint + typecheck + vite. `vite-plugin-singlefile`로 `dist/index.html` 하나에 번들하고, 큰 자산은 옆에 복사: `dist/vendor/mermaid.min.js`, `dist/fonts/`(D2Coding, Pretendard, 라이선스) |
+| 호스트 | `cargo build --release --features tauri/custom-protocol` → `target/release/supermark` (`frontendDist`의 `dist/`를 실행 파일에 포함) |
+| 설치 파일 | 릴리스 워크플로의 `tauri build`. 실행 파일 이름 `SuperMark.exe`(`mainBinaryName`), NSIS 사용자 설치, WebView2 부트스트래퍼 |
+| 단일 인스턴스 | `tauri-plugin-single-instance` |
+
+---
+
+## 9. 코드 생성 (`ts-gyb`)
+
+`packages/core-editor/src/@codegen/config.json`은 **Swift 대상만** 렌더링한다(원본 MarkEdit의 MarkEditCore/MarkEditKit 경로). Rust 쪽 `src-tauri/src/bridge/generated/mod.rs`는 **손으로 작성**되어 있다. TypeScript 브리지 정의와 Rust 구현이 어긋나지 않도록 Rust 대상(템플릿 `rust-*.mustache`)을 추가하는 것이 향후 과제다(`ARCH-002` §5).
