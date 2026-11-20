@@ -1,1 +1,1 @@
-{"default":{"identifier":"default","description":"Default capability for SuperMarkdownEdit editor windows","local":true,"windows":["*"],"permissions":["core:default"]}}
+{"default":{"identifier":"default","description":"Default capability for SuperMark editor windows","local":true,"windows":["*"],"permissions":["core:default"]}}

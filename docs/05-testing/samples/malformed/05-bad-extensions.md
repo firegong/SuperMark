@@ -5,7 +5,7 @@ tags: [a, b
 순환: {{변수}}
 ---
 
-# SuperMarkdown 확장 오용 (Misused extensions)
+# Markdown Super Set 확장 오용 (Misused extensions)
 
 ```{python run label= caption="닫히지 않은}
 print(1)

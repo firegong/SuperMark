@@ -38,7 +38,7 @@ async fn follow_link<R: Runtime>(window: &WebviewWindow<R>, href: &str) {
                 format!("The linked file was not found:\n{}", path.display())
             };
             rfd::AsyncMessageDialog::new()
-                .set_title("SuperMarkdownEdit")
+                .set_title("SuperMark")
                 .set_description(message)
                 .set_level(MessageLevel::Warning)
                 .set_buttons(MessageButtons::Ok)
@@ -74,7 +74,7 @@ async fn show_alert(params: &Value) -> i64 {
     let buttons = params.get("buttons").and_then(Value::as_array).map(Vec::len).unwrap_or(0);
     let title = text("title");
     let result = rfd::AsyncMessageDialog::new()
-        .set_title(if title.is_empty() { "SuperMarkdownEdit" } else { title.as_str() })
+        .set_title(if title.is_empty() { "SuperMark" } else { title.as_str() })
         .set_description(text("message"))
         .set_level(MessageLevel::Info)
         .set_buttons(alert_buttons(buttons))
@@ -624,7 +624,7 @@ fn reload_extensions_everywhere(window: &WebviewWindow, mgr: &extensions::Extens
 pub fn report_open_failure(path: &std::path::Path, error: &str) {
     diagnostics::log(&format!("failed to open {}: {error}", path.display()));
     let _ = MessageDialog::new()
-        .set_title("SuperMarkdownEdit")
+        .set_title("SuperMark")
         .set_description(format!("The document could not be opened:\n{}\n\n{error}", path.display()))
         .set_level(MessageLevel::Error)
         .set_buttons(MessageButtons::Ok)
@@ -694,9 +694,9 @@ fn recover_unsaved_work<R: Runtime>(app: &AppHandle<R>, main_is_free: bool) {
         })
         .collect();
     let answer = MessageDialog::new()
-        .set_title("SuperMarkdownEdit")
+        .set_title("SuperMark")
         .set_description(format!(
-            "SuperMarkdownEdit did not close normally. Restore unsaved changes in {} document(s)?\n\n{}",
+            "SuperMark did not close normally. Restore unsaved changes in {} document(s)?\n\n{}",
             plan.len(),
             names.join("\n")
         ))
@@ -726,7 +726,7 @@ fn recover_unsaved_work<R: Runtime>(app: &AppHandle<R>, main_is_free: bool) {
                 let title = doc_mgr.apply_restore_item(window.label(), item);
                 let _ = window.set_title(&title);
             }
-            Err(err) => eprintln!("[SuperMarkdownEdit] Failed to restore a document: {err}"),
+            Err(err) => eprintln!("[SuperMark] Failed to restore a document: {err}"),
         }
     }
 }
@@ -750,7 +750,7 @@ fn restore_last_session<R: Runtime>(app: &AppHandle<R>) {
                 let title = doc_mgr.apply_restore_item(window.label(), item);
                 let _ = window.set_title(&title);
             }
-            Err(err) => eprintln!("[SuperMarkdownEdit] Failed to reopen window: {err}"),
+            Err(err) => eprintln!("[SuperMark] Failed to reopen window: {err}"),
         }
     }
 }
@@ -960,7 +960,7 @@ pub fn run() {
                                 updates.len()
                             );
                             let result = MessageDialog::new()
-                                .set_title("SuperMarkdownEdit")
+                                .set_title("SuperMark")
                                 .set_description(&prompt)
                                 .set_level(MessageLevel::Info)
                                 .set_buttons(MessageButtons::OkCancel)
@@ -981,7 +981,7 @@ pub fn run() {
                                         env!("CARGO_PKG_VERSION"),
                                     ) {
                                         eprintln!(
-                                            "[SuperMarkdownEdit] Failed to install extension update '{}': {}",
+                                            "[SuperMark] Failed to install extension update '{}': {}",
                                             entry.id, err
                                         );
                                     }
@@ -1016,7 +1016,7 @@ pub fn run() {
                                     env!("CARGO_PKG_VERSION"),
                                 ) {
                                     eprintln!(
-                                        "[SuperMarkdownEdit] Failed to install extension update '{}': {}",
+                                        "[SuperMark] Failed to install extension update '{}': {}",
                                         entry.id, err
                                     );
                                 }
@@ -1055,7 +1055,7 @@ pub fn run() {
                 if is_dirty {
                     api.prevent_close();
                     let result = MessageDialog::new()
-                        .set_title("SuperMarkdownEdit")
+                        .set_title("SuperMark")
                         .set_description("Do you want to save the changes made to this document?")
                         .set_level(MessageLevel::Warning)
                         .set_buttons(MessageButtons::YesNoCancel)
@@ -1109,7 +1109,7 @@ pub fn run() {
             open_link
         ])
         .run(tauri::generate_context!())
-        .expect("error while running SuperMarkdownEdit");
+        .expect("error while running SuperMark");
 }
 
 #[cfg(test)]

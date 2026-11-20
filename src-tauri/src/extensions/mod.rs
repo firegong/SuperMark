@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 /// (id, name, description)
 pub const BUILTIN_EXTENSIONS: &[(&str, &str, &str)] = &[(
     "supermarkdown",
-    "SuperMarkdown",
+    "Markdown Super Set",
     "Markdown parser: MultiMarkdown 6 with Pandoc, GFM and Obsidian syntax, merged table cells, cross references, run/render chunks, includes and more. Choose it in View → Markdown Parser.",
 )];
 
@@ -321,7 +321,7 @@ impl ExtensionManager {
                 r#"try {{
   window.__runScriptWithContext__?.({cap_json}, new Function('MarkEdit', 'require', {source_json}));
 }} catch (err) {{
-  console.error('[SuperMarkdownEdit] Failed to execute extension script ' + {cap_json} + ':', err);
+  console.error('[SuperMark] Failed to execute extension script ' + {cap_json} + ':', err);
 }}"#
             ));
         }

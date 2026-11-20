@@ -8,11 +8,11 @@
 
 ## 1. 전체 아키텍처 개요
 
-`MarkEdit-Win`은 **Tauri v2 (Rust)** 네이티브 호스트 프로세스와 **Microsoft Edge WebView2** 렌더러 프로세스로 구성되며, 렌더러 내부에서 원본 MarkEdit의 **`CoreEditor` (CodeMirror 6)** 단일 파일 번들이 실행됩니다.
+`SuperMark`(구 MarkEdit-Win)은 **Tauri v2 (Rust)** 네이티브 호스트 프로세스와 **Microsoft Edge WebView2** 렌더러 프로세스로 구성되며, 렌더러 내부에서 원본 MarkEdit의 **`CoreEditor` (CodeMirror 6)** 단일 파일 번들이 실행됩니다.
 
 ```text
 +-----------------------------------------------------------------------------------+
-|                            MarkEdit-Win (Windows Process)                         |
+|                            SuperMark (Windows Process)                            |
 |                                                                                   |
 |  +-----------------------------------------------------------------------------+  |
 |  |                     Rust Native Host (src-tauri)                            |  |

@@ -1,6 +1,6 @@
 # 다이어그램 · 수식 플러그인 샘플
 
-미리보기(Split/Preview)를 열고 **Extended** 또는 **SuperMarkdown** 파서에서 확인한다.
+미리보기(Split/Preview)를 열고 **Extended** 또는 **Markdown Super Set** 파서에서 확인한다.
 
 | 플러그인 | 코드 블록 언어 | 로컬 렌더링 | 서버 렌더링 |
 |---|---|---|---|

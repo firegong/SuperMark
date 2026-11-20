@@ -1,5 +1,5 @@
 ---
-title: SuperMarkdown 샘플 문서
+title: Markdown Super Set 샘플 문서
 version: 1.2
 author: MarkEdit
 execute: true
@@ -7,8 +7,8 @@ execute: true
 
 # {{title}} v{{version}} [#sec:top]
 
-이 문서는 SuperMarkdown 파서의 모든 문법을 한 번에 확인하기 위한 샘플이다.
-미리보기 도구 막대의 파서 선택에서 **SuperMarkdown**을 고른 뒤 확인한다.
+이 문서는 Markdown Super Set 파서의 모든 문법을 한 번에 확인하기 위한 샘플이다.
+미리보기 도구 막대의 파서 선택에서 **Markdown Super Set**을 고른 뒤 확인한다.
 
 [TOC depth=2]
 

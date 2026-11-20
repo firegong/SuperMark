@@ -11,7 +11,7 @@ cd "$(dirname "$0")/.."
 (cd packages/core-editor && yarn build)
 cargo build --release --features tauri/custom-protocol --manifest-path src-tauri/Cargo.toml
 
-echo "Built src-tauri/target/release/markedit-win (production, editor embedded)"
+echo "Built src-tauri/target/release/supermark (production, editor embedded)"
 
 # macOS: wrap the binary in an .app bundle so Finder and the Dock show the app icon and name
 # (a bare executable gets the generic icon). Installers for Windows and macOS come from the
@@ -23,7 +23,7 @@ if [[ "$(uname)" == "Darwin" ]]; then
   app="src-tauri/target/release/bundle/macos/$name.app"
   rm -rf "$app"
   mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
-  cp src-tauri/target/release/markedit-win "$app/Contents/MacOS/markedit-win"
+  cp src-tauri/target/release/supermark "$app/Contents/MacOS/supermark"
   cp src-tauri/icons/icon.icns "$app/Contents/Resources/icon.icns"
   cat > "$app/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -33,7 +33,7 @@ if [[ "$(uname)" == "Darwin" ]]; then
   <key>CFBundleDevelopmentRegion</key><string>English</string>
   <key>CFBundleDisplayName</key><string>$name</string>
   <key>CFBundleName</key><string>$name</string>
-  <key>CFBundleExecutable</key><string>markedit-win</string>
+  <key>CFBundleExecutable</key><string>supermark</string>
   <key>CFBundleIdentifier</key><string>$identifier</string>
   <key>CFBundleIconFile</key><string>icon.icns</string>
   <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>

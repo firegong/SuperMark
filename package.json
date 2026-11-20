@@ -1,8 +1,8 @@
 {
-  "name": "markedit-win",
+  "name": "supermark",
   "version": "0.1.0",
   "private": true,
-  "description": "SuperMarkdownEdit — Markdown editor for Windows (Tauri v2 + WebView2 + CodeMirror 6 CoreEditor)",
+  "description": "SuperMark — Markdown editor for Windows (Tauri v2 + WebView2 + CodeMirror 6 CoreEditor)",
   "scripts": {
     "dev:editor": "yarn --cwd packages/core-editor dev",
     "build:editor": "yarn --cwd packages/core-editor build",

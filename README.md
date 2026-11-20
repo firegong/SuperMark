@@ -1,4 +1,4 @@
-# SuperMarkdownEdit (formerly MarkEdit-Win)
+# SuperMark (formerly SuperMarkdownEdit, MarkEdit-Win)
 
 macOS용 오픈소스 경량 마크다운 에디터인 **[MarkEdit](https://github.com/MarkEdit-app/MarkEdit)** 를 **Tauri v2 (Rust + Microsoft Edge WebView2)** 기반으로 Windows 환경에 포팅한 프로젝트입니다.
 
@@ -28,7 +28,7 @@ macOS용 오픈소스 경량 마크다운 에디터인 **[MarkEdit](https://gith
 ## 저장소 폴더 구조
 
 ```text
-MarkEdit-Win/
+SuperMark/
 ├── README.md                                 # 프로젝트 개요 및 빌드 안내
 ├── .github/workflows/ci-windows.yml          # Windows CI 빌드 및 테스트 파이프라인
 ├── docs/                                     # 소프트웨어 공학 개발 산출물 (SDLC Artifacts)

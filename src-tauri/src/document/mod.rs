@@ -120,9 +120,9 @@ impl DocumentSession {
             .unwrap_or("Untitled");
 
         if self.is_dirty {
-            format!("● {file_name} — SuperMarkdownEdit")
+            format!("● {file_name} — SuperMark")
         } else {
-            format!("{file_name} — SuperMarkdownEdit")
+            format!("{file_name} — SuperMark")
         }
     }
 
@@ -858,10 +858,10 @@ mod tests {
         assert_eq!(session.bom, BomKind::Utf8);
         assert_eq!(session.line_endings, LineEndings::CRLF);
         assert_eq!(loaded, "# Title\n\n- [ ] Task 1\n");
-        assert_eq!(session.display_title(), "note.md — SuperMarkdownEdit");
+        assert_eq!(session.display_title(), "note.md — SuperMark");
 
         session.is_dirty = true;
-        assert_eq!(session.display_title(), "● note.md — SuperMarkdownEdit");
+        assert_eq!(session.display_title(), "● note.md — SuperMark");
 
         session
             .save_to_disk("# Title\n\n- [x] Task 1\n")

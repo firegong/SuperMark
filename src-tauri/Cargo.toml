@@ -1,13 +1,13 @@
 [package]
-name = "markedit-win"
+name = "supermark"
 version = "0.1.0"
-description = "SuperMarkdownEdit — Markdown editor for Windows (Tauri v2 + WebView2 + CodeMirror 6 CoreEditor)"
-authors = ["MarkEdit-Win Contributors"]
+description = "SuperMark — Markdown editor for Windows (Tauri v2 + WebView2 + CodeMirror 6 CoreEditor)"
+authors = ["SuperMark Contributors"]
 license = "MIT"
 edition = "2021"
 
 [lib]
-name = "markedit_win_lib"
+name = "supermark_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

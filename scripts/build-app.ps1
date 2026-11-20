@@ -11,4 +11,4 @@ yarn build
 Pop-Location
 
 cargo build --release --features tauri/custom-protocol --manifest-path src-tauri/Cargo.toml
-Write-Host 'Built src-tauri\target\release\markedit-win.exe (production, editor embedded)'
+Write-Host 'Built src-tauri\target\release\supermark.exe (production, editor embedded)'
