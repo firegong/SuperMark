@@ -2,7 +2,7 @@ import { escapeHtml } from '../utils';
 import { renderMermaidToSvg } from './mermaidPlugin';
 import { latexMathPlugin } from './mathPlugin';
 import { drawioPlugin } from './drawio';
-import { d2Plugin, plantumlPlugin, renderCachedOrPlaceholder } from './kroki';
+import { d2Plugin, graphvizPlugin, plantumlPlugin, renderCachedOrPlaceholder } from './kroki';
 import { registerDiagramPlugin, registerMathPlugin, type DiagramPlugin } from './registry';
 import { renderDiagramSources } from './strategy';
 import { renderWithMermaidJs } from './local';
@@ -54,6 +54,7 @@ export function registerBuiltinRendererPlugins(): void {
   registerDiagramPlugin(drawioPlugin);
   registerDiagramPlugin(d2Plugin);
   registerDiagramPlugin(plantumlPlugin);
+  registerDiagramPlugin(graphvizPlugin);
   registerDiagramPlugin(mermaidDiagramPlugin);
   registerMathPlugin(latexMathPlugin, true);
 }

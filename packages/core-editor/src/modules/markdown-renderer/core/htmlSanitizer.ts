@@ -1,7 +1,7 @@
-import { escapeHtml } from '../../utils';
+import { escapeHtml } from '../utils';
 
 /**
- * Minimal, DOM-free HTML filter for raw HTML written inside SuperMarkdown documents.
+ * Minimal, DOM-free HTML filter for raw HTML written in documents (Markdown Super Set, gsync).
  *
  * The preview is rendered into the app's own document, so raw HTML must never be able to run
  * script, load frames, restyle the app or navigate to `javascript:` URLs. Instead of a full

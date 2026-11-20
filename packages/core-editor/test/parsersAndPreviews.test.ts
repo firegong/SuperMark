@@ -13,7 +13,7 @@ const host = (): PreviewHost & { [K in keyof PreviewHost]: jest.Mock } => ({
 
 describe('Parsers, one file each', () => {
   test('the built-in parsers keep the ids the settings save, in menu order', () => {
-    expect(builtInParsers.map(parser => parser.id)).toEqual(['commonmark', 'gfm', 'extended', 'super', 'micromark']);
+    expect(builtInParsers.map(parser => parser.id)).toEqual(['commonmark', 'gfm', 'extended', 'super', 'micromark', 'gsync']);
     expect(defaultParser).toBe(extendedEngine);
     expect(superMarkdownEngine.name).toBe('Markdown Super Set');
   });

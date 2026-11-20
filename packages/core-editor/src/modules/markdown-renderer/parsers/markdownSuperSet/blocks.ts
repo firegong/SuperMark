@@ -1,6 +1,6 @@
 import { escapeHtml } from '../../utils';
 import { blockAttributes, codeBlockHtml as sharedCodeBlockHtml, tableOpenTag, taskCheckboxHtml } from '../../previewMarkup';
-import { sanitizeHtml } from './html';
+import { sanitizeHtml } from '../../core/htmlSanitizer';
 import { hasDiagramPlugin, renderDiagramWithPlugin } from '../../plugins/registry';
 import { diagramBlockHtml } from '../../plugins/builtin';
 import { parseInline } from './inline';

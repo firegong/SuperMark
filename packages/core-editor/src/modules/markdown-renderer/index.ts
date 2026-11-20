@@ -109,7 +109,7 @@ export function renderMermaid(code: string): string {
 
 export { commonmarkEngine, gfmEngine, extendedEngine, superMarkdownEngine };
 export { SuperMarkdownEngine } from './parsers/markdownSuperSet';
-export { builtInParsers, defaultParser } from './parsers';
+export { builtInParsers, defaultParser, gsyncEngine } from './parsers';
 export { markdownItEngine, markdownItEngineId, isMarkdownItAvailable } from './parsers/markdownIt';
 export {
   registerDiagramPlugin,

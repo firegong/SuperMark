@@ -76,3 +76,6 @@ export const plantumlPlugin = createDiagramPlugin('plantuml', 'PlantUML', ['plan
 
 /** D2: local `d2` first, then the diagram server. */
 export const d2Plugin = createDiagramPlugin('d2', 'D2', ['d2']);
+
+/** Graphviz: local `dot` first, then the diagram server. */
+export const graphvizPlugin = createDiagramPlugin('graphviz', 'Graphviz', ['dot', 'graphviz']);

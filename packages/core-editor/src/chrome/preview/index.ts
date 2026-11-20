@@ -1,7 +1,8 @@
-import { superMarkdownEngine, type MarkdownRendererEngine } from '../../modules/markdown-renderer';
+import { gsyncEngine, superMarkdownEngine, type MarkdownRendererEngine } from '../../modules/markdown-renderer';
 import { framePreview } from './framePreview';
 import { htmlPreview } from './htmlPreview';
 import { superSetPreview } from './superSetPreview';
+import { gsyncPreview } from './gsyncPreview';
 import type { PreviewRenderer } from './types';
 
 /**
@@ -10,6 +11,7 @@ import type { PreviewRenderer } from './types';
  */
 const previewsByParser = new Map<string, PreviewRenderer>([
   [superMarkdownEngine.id, superSetPreview],
+  [gsyncEngine.id, gsyncPreview],
 ]);
 
 export function previewFor(engine: MarkdownRendererEngine): PreviewRenderer {
@@ -21,7 +23,7 @@ export function setParserPreview(parserId: string, preview: PreviewRenderer): vo
   previewsByParser.set(parserId, preview);
 }
 
-export { framePreview, htmlPreview, superSetPreview };
+export { framePreview, htmlPreview, superSetPreview, gsyncPreview };
 export { previewFrame, removePreviewFrame } from './framePreview';
 export { clearSuperSetIncludes } from './superSetPreview';
 export type { PreviewHost, PreviewRenderer } from './types';

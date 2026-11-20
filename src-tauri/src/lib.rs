@@ -256,7 +256,7 @@ async fn view_state_changed(
     Ok(())
 }
 
-/// Renders a PlantUML / D2 diagram with the locally installed tool (see `diagrams`).
+/// Renders a PlantUML / D2 / Graphviz diagram with the locally installed tool (see `diagrams`).
 /// Errors start with `not-installed:` (try another renderer) or `failed:` (diagram error).
 #[tauri::command]
 async fn diagram_render_local(lang: String, source: String) -> Result<String, String> {
@@ -265,6 +265,8 @@ async fn diagram_render_local(lang: String, source: String) -> Result<String, St
         diagrams::render_local(&lang, &source, |tool| match tool {
             "plantuml" => settings.plantuml_command.clone(),
             "d2" => settings.d2_command.clone(),
+            // Graphviz is the `dot` command on PATH.
+            "graphviz" => "dot".to_string(),
             other => other.to_string(),
         })
         .map_err(|err| err.to_bridge_string())
@@ -281,6 +283,7 @@ async fn diagram_tools_status() -> Result<Vec<diagrams::ToolStatus>, String> {
         vec![
             diagrams::tool_status("plantuml", &settings.plantuml_command),
             diagrams::tool_status("d2", &settings.d2_command),
+            diagrams::tool_status("graphviz", "dot"),
         ]
     })
     .await

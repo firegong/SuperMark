@@ -36,6 +36,7 @@ pub const MARKDOWN_PARSERS: &[(&str, &str)] = &[
     ("gfm", "GitHub Flavored Markdown (GFM)"),
     ("commonmark", "CommonMark (Strict)"),
     ("micromark", "micromark (CommonMark + GFM)"),
+    ("gsync", "gsync Markdown"),
     ("markdown-it", "markdown-it (MarkEdit Preview)"),
 ];
 

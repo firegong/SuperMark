@@ -4,6 +4,7 @@ import { gfmEngine } from './gfm';
 import { extendedEngine } from './extended';
 import { superMarkdownEngine } from './markdownSuperSet';
 import { micromarkEngine } from './micromark';
+import { gsyncEngine } from './gsync';
 
 /**
  * The parsers that ship with the app, one file (or folder) each, in the order of
@@ -17,8 +18,9 @@ export const builtInParsers: readonly MarkdownRendererEngine[] = [
   extendedEngine,
   superMarkdownEngine,
   micromarkEngine,
+  gsyncEngine,
 ];
 
 export const defaultParser: MarkdownRendererEngine = extendedEngine;
 
-export { commonmarkEngine, gfmEngine, extendedEngine, superMarkdownEngine, micromarkEngine };
+export { commonmarkEngine, gfmEngine, extendedEngine, superMarkdownEngine, micromarkEngine, gsyncEngine };

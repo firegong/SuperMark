@@ -2708,3 +2708,128 @@ li.markedit-preview-task-item > p {
 :root[data-platform="windows"] ::-webkit-scrollbar-button {
   display: none;
 }
+
+/* gsync Markdown (parsers/gsync, docs/reference/GSYNC-MARKDOWN-SYNTAX.md) */
+
+.markedit-preview-body .gsync-header details summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.markedit-preview-body .gsync-header pre {
+  margin: 6px 0 0;
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+.markedit-preview-body .gsync-table-caption {
+  margin: 0 0 6px;
+}
+
+.markedit-preview-body .gsync-code-title {
+  margin: 12px 0 -10px;
+  font-size: 0.9em;
+  font-weight: 600;
+  opacity: 0.85;
+}
+
+.markedit-preview-body .gsync-diagram {
+  margin: 16px 0;
+}
+
+.markedit-preview-body .gsync-figure-caption {
+  text-align: center;
+  font-size: 0.92em;
+  opacity: 0.85;
+}
+
+.markedit-preview-body .container {
+  margin: 14px 0;
+  padding: 10px 14px;
+  border-left: 4px solid rgba(127, 127, 127, 0.5);
+  border-radius: 0 6px 6px 0;
+  background: rgba(127, 127, 127, 0.08);
+}
+
+.markedit-preview-body .container-title {
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.markedit-preview-body .container > :last-child {
+  margin-bottom: 0;
+}
+
+.markedit-preview-body .container-note,
+.markedit-preview-body .container-info { border-left-color: #2f81f7; background: rgba(47, 129, 247, 0.08); }
+.markedit-preview-body .container-tip,
+.markedit-preview-body .container-success { border-left-color: #2da44e; background: rgba(45, 164, 78, 0.08); }
+.markedit-preview-body .container-warning { border-left-color: #d29922; background: rgba(210, 153, 34, 0.1); }
+.markedit-preview-body .container-caution,
+.markedit-preview-body .container-danger,
+.markedit-preview-body .container-error { border-left-color: #cf222e; background: rgba(207, 34, 46, 0.08); }
+
+.markedit-preview-body .container-code-tabs {
+  padding: 0;
+  border-left: none;
+  background: none;
+}
+
+.markedit-preview-body details.admonition {
+  margin: 14px 0;
+  padding: 8px 14px;
+  border: 1px solid rgba(127, 127, 127, 0.35);
+  border-radius: 6px;
+}
+
+.markedit-preview-body details.admonition > summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.markedit-preview-body details.admonition[open] > summary {
+  margin-bottom: 8px;
+}
+
+.markedit-preview-body ul[data-marker="disc"] { list-style-type: disc; }
+.markedit-preview-body ul[data-marker="circle"] { list-style-type: circle; }
+.markedit-preview-body ul[data-marker="square"] { list-style-type: square; }
+.markedit-preview-body ul[data-marker="hollow-square"] { list-style-type: "▫ "; }
+
+.markedit-preview-body .gsync-definitions dt {
+  font-weight: 600;
+}
+
+.markedit-preview-body .gsync-definitions dd {
+  margin: 0 0 8px 24px;
+}
+
+.markedit-preview-body hr.cell-sep {
+  margin: 4px 0;
+}
+
+.markedit-preview-body .gsync-cell-list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.markedit-preview-body table.gsync-nested-table {
+  border-collapse: collapse;
+  font-size: 0.95em;
+}
+
+.markedit-preview-body table.gsync-nested-table th,
+.markedit-preview-body table.gsync-nested-table td {
+  padding: 2px 8px;
+  border: 1px solid rgba(127, 127, 127, 0.4);
+}
+
+.markedit-preview-body abbr[title] {
+  text-decoration: underline dotted;
+  cursor: help;
+}
+
+.markedit-preview-body a.cross-ref,
+.markedit-preview-body a.wiki-link {
+  text-decoration: underline dotted;
+}

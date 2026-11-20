@@ -241,6 +241,8 @@ pub fn tool_arguments(tool: &str) -> Option<Vec<String>> {
     match tool {
         "plantuml" => Some(vec!["-tsvg".into(), "-pipe".into(), "-charset".into(), "UTF-8".into()]),
         "d2" => Some(vec!["-".into(), "-".into()]),
+        // Graphviz reads the graph from stdin when no file is given.
+        "graphviz" => Some(vec!["-Tsvg".into()]),
         _ => None,
     }
 }
@@ -250,6 +252,7 @@ pub fn tool_for_language(lang: &str) -> Option<&'static str> {
     match lang.to_ascii_lowercase().as_str() {
         "plantuml" | "puml" | "uml" => Some("plantuml"),
         "d2" => Some("d2"),
+        "dot" | "graphviz" => Some("graphviz"),
         _ => None,
     }
 }
@@ -276,7 +279,11 @@ pub fn tool_status(tool: &str, command_spec: &str) -> ToolStatus {
 
     match resolve_command(command_spec) {
         Ok((program, mut args)) => {
-            args.push(if tool == "plantuml" { "-version".into() } else { "--version".into() });
+            args.push(match tool {
+                "plantuml" => "-version".into(),
+                "graphviz" => "-V".into(),
+                _ => "--version".into(),
+            });
             match run_with_timeout(&program, &args, b"", Duration::from_secs(20)) {
                 Ok(output) => {
                     status.available = true;
@@ -297,6 +304,13 @@ pub fn tool_status(tool: &str, command_spec: &str) -> ToolStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn graphviz_renders_dot_and_graphviz_fences_as_svg_from_stdin() {
+        assert_eq!(tool_for_language("dot"), Some("graphviz"));
+        assert_eq!(tool_for_language("Graphviz"), Some("graphviz"));
+        assert_eq!(tool_arguments("graphviz"), Some(vec!["-Tsvg".to_string()]));
+    }
 
     #[test]
     fn splits_quoted_command_lines() {
