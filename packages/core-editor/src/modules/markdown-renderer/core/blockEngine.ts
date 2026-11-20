@@ -1,4 +1,5 @@
 import { escapeHtml, isUnsafeUrl, slugify, parseLinkDestination } from '../utils';
+import { blockAttributes, codeBlockHtml, tableOpenTag, taskCheckboxHtml } from '../previewMarkup';
 import { renderMermaidToSvg } from '../plugins/mermaidPlugin';
 import { hasDiagramPlugin, renderDiagramWithPlugin, renderMathWithPlugin } from '../plugins/registry';
 import { diagramBlockHtml, registerBuiltinRendererPlugins } from '../plugins/builtin';
@@ -146,10 +147,6 @@ function isBlockquote(line: string): { content: string } | null {
   return { content: match[1] };
 }
 
-function blockAttributes(lineNumber: number, extraClass = ''): string {
-  const className = extraClass.length > 0 ? `markedit-preview-block ${extraClass}` : 'markedit-preview-block';
-  return `class="${className}" data-line="${lineNumber}"`;
-}
 
 function parseInline(text: string, context: RenderContext): string {
   let result = escapeHtml(text);
@@ -292,9 +289,7 @@ function renderFencedCode(lines: Line[], context: RenderContext): { html: string
   const code = context.options.enableCodeHighlight && start.lang.length > 0
     ? context.highlightCode(rawCode, start.lang)
     : escapeHtml(rawCode);
-  const langAttr = start.lang.length > 0 ? ` data-language="${escapeHtml(start.lang)}"` : '';
-  const langLabel = start.lang.length > 0 ? `<span class="markedit-preview-code-lang">${escapeHtml(start.lang)}</span>` : '';
-  const html = `<div ${blockAttributes(startLine)}><div class="markedit-preview-code-block"${langAttr}>${langLabel}<button type="button" class="markedit-preview-code-copy">Copy</button><pre><code>${code}</code></pre></div></div>`;
+  const html = `<div ${blockAttributes(startLine)}>${codeBlockHtml(code, start.lang)}</div>`;
 
   return { html, consumed };
 }
@@ -324,7 +319,7 @@ function renderTable(lines: Line[], context: RenderContext): { html: string; con
     return `<${tag} style="text-align: ${align}">${parseInline(cell, context)}</${tag}>`;
   }).join('');
 
-  let html = `<div ${blockAttributes(startLine)}><table class="markedit-preview-table"><thead><tr>${renderCells(header.cells, 'th')}</tr></thead><tbody>`;
+  let html = `<div ${blockAttributes(startLine)}>${tableOpenTag()}<thead><tr>${renderCells(header.cells, 'th')}</tr></thead><tbody>`;
 
   let consumed = 2;
   while (consumed < lines.length) {
@@ -406,7 +401,7 @@ function renderList(lines: Line[], context: RenderContext): { html: string; cons
   for (const item of items) {
     const taskEnabled = context.options.enableTaskLists;
     const checkbox = item.task !== null && taskEnabled
-      ? `<input type="checkbox" class="markedit-preview-task-checkbox" data-line="${item.lineNumber}"${item.task ? ' checked' : ''}>`
+      ? taskCheckboxHtml(item.lineNumber, item.task)
       : '';
     const subList = item.subLines.length > 0 ? renderBlocks(item.subLines, context) : '';
     const paragraphs = item.content.split(/\n\s*\n/).filter(paragraph => paragraph.length > 0);

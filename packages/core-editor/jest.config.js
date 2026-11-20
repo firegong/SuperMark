@@ -13,5 +13,11 @@ module.exports = {
   transform: {
     '^.+[\\\\/]src[\\\\/]modules[\\\\/]preview[\\\\/]frame[\\\\/](?:script\\.js|style\\.css)$': '<rootDir>/test/utils/rawTextTransformer.cjs',
     '^.+\\.tsx?$': ['ts-jest', {}],
+    // ESM-only packages (micromark / mdast for the micromark parser) are compiled to CommonJS.
+    '^.+[\\\\/]node_modules[\\\\/].+\\.js$': ['ts-jest', { tsconfig: { allowJs: true } }],
   },
+  // Transform these ESM-only packages; everything else in node_modules is used as is.
+  transformIgnorePatterns: [
+    '[\\\\/]node_modules[\\\\/](?!(micromark|mdast-util|unist-util|ccount|character-entities|decode-named-character-reference|devlop|longest-streak|markdown-table|zwitch|escape-string-regexp)[^\\\\/]*[\\\\/])',
+  ],
 };

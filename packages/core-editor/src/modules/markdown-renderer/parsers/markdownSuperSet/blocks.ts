@@ -1,4 +1,5 @@
 import { escapeHtml } from '../../utils';
+import { blockAttributes, codeBlockHtml as sharedCodeBlockHtml, tableOpenTag, taskCheckboxHtml } from '../../previewMarkup';
 import { sanitizeHtml } from './html';
 import { hasDiagramPlugin, renderDiagramWithPlugin } from '../../plugins/registry';
 import { diagramBlockHtml } from '../../plugins/builtin';
@@ -51,10 +52,8 @@ const calloutStyles: Record<string, string> = {
 
 const diagramLanguages = new Set(['mermaid', 'plantuml', 'puml', 'graphviz', 'dot', 'd2', 'ditaa']);
 
-export function blockAttributes(line: number, extraClass = ''): string {
-  const className = extraClass.length > 0 ? `markedit-preview-block ${extraClass}` : 'markedit-preview-block';
-  return `class="${className}" data-line="${line}"`;
-}
+// The preview markup contract (data-line, checkboxes, code blocks, tables), shared by all parsers.
+export { blockAttributes };
 
 export function isBlank(text: string): boolean {
   return text.trim().length === 0;
@@ -311,9 +310,7 @@ function codeBlockHtml(code: string, lang: string, context: SuperContext): strin
   const highlighted = context.options.enableCodeHighlight !== false && lang.length > 0
     ? context.highlightCode(code, lang)
     : escapeHtml(code);
-  const langAttr = lang.length > 0 ? ` data-language="${escapeHtml(lang)}"` : '';
-  const langLabel = lang.length > 0 ? `<span class="markedit-preview-code-lang">${escapeHtml(lang)}</span>` : '';
-  return `<div class="markedit-preview-code-block"${langAttr}>${langLabel}<button type="button" class="markedit-preview-code-copy">Copy</button><pre><code>${highlighted}</code></pre></div>`;
+  return sharedCodeBlockHtml(highlighted, lang);
 }
 
 function notice(message: string): string {
@@ -790,7 +787,7 @@ function wrapTable(sections: string, line: number, captionLine: string | undefin
   }
 
   return {
-    html: `<div ${blockAttributes(line)}${idAttr}>${error}<table class="markedit-preview-table">${captionHtml}${sections}</table></div>`,
+    html: `<div ${blockAttributes(line)}${idAttr}>${error}${tableOpenTag()}${captionHtml}${sections}</table></div>`,
     captionUsed: caption !== null,
   };
 }
@@ -1095,7 +1092,7 @@ function renderList(lines: SourceLine[], index: number, context: SuperContext): 
       const state = checkboxState(task[1]);
       hasTasks = true;
       itemClass = `markedit-preview-task-item msm-task-${state}`;
-      checkbox = `<input type="checkbox" class="markedit-preview-task-checkbox msm-task-checkbox is-${state}" data-line="${item.line}" data-state="${escapeHtml(task[1])}"${state === 'done' ? ' checked' : ''}>`;
+      checkbox = taskCheckboxHtml(item.line, state === 'done', `msm-task-checkbox is-${state}`, ` data-state="${escapeHtml(task[1])}"`);
       firstLine = firstLine.slice(task[0].length);
     }
 
