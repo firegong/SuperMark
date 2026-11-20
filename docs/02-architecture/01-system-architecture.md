@@ -25,7 +25,7 @@
 |   ├─ bridge/        웹 브리지 디스패처(core, api, tokenizer, secretStorage …)         |
 |   ├─ settings/      settings.json, 마이그레이션, 모든 창 실시간 동기화                 |
 |   ├─ extensions/    확장 레지스트리·다운로드(sha256)·설정·내장 확장                    |
-|   ├─ diagrams/      로컬 PlantUML·D2 실행                                            |
+|   ├─ diagrams/      로컬 PlantUML·D2·Graphviz 실행                                    |
 |   ├─ links.rs       링크 대상 판정(외부/문서/표시만/무시)                              |
 |   └─ diagnostics.rs 로그 (logs/markedit.log)                                        |
 |                                                                                   |

@@ -47,8 +47,8 @@
 ### Phase 4: 프리뷰, 테마, Windows 품질 (2026-11-09 ~ 11-21)
 - [x] **M4.1 앱 UI와 확장 관리자**: 설정·버전 기록·확장 관리자(탐색/설치/업데이트, sha256 검증, 업데이트 동작) 대화상자, 플랫폼별 창 버튼
 - [x] **M4.2 프리뷰**: 분할/마크다운 보기, 양방향 보간 스크롤 동기화(편집·선택 중 정지), 체크박스, 코드 복사, 안전한 링크 처리
-- [x] **M4.3 파서**: CommonMark, GFM, Extended, Markdown Super Set, markdown-it — 파서·프리뷰를 파일 단위로 분리 (`DES-002`)
-- [x] **M4.4 렌더러 플러그인**: Mermaid(번들)·PlantUML·D2(로컬)·Kroki 서버, LaTeX → MathML, 약 60개 언어 코드 강조(에디터·프리뷰 공통, 테마 색)
+- [x] **M4.3 파서**: CommonMark, GFM, Extended, Markdown Super Set, micromark(mdast 경유), gsync Markdown(`docs/reference/GSYNC-MARKDOWN-SYNTAX.md`), markdown-it — 파서·프리뷰를 파일 단위로 분리, 프리뷰 마크업 약속 도우미와 파서 계약 테스트 (`DES-002`)
+- [x] **M4.4 렌더러 플러그인**: Mermaid(번들)·PlantUML·D2·Graphviz(로컬)·Kroki 서버, LaTeX → MathML, 약 60개 언어 코드 강조(에디터·프리뷰 공통, 테마 색)
 - [x] **M4.5 테마·설정**: 테마 드롭다운(색상 견본), 16개 테마별 프리뷰 기본 스타일과 사용자 스타일, 테마 확장 선택, 설정 마이그레이션 (`DES-003`)
 - [x] **M4.6 Windows 품질**: 기본 불투명, 한글 글꼴(Pretendard·D2Coding 번들), 화면 맞춤 창 크기, Windows 스크롤바
 - [x] **M4.7 신뢰성**: 기본 설정에서도 충돌 복구, 단일 인스턴스, 열린 파일 창 포커스, 버전 선택 삭제·ID 검증

@@ -67,9 +67,9 @@
 | ID | 요구사항 | 상태 | 비고 |
 | --- | --- | --- | --- |
 | FR-05.1 | 분할/마크다운 보기 프리뷰, 편집 시 자동 갱신 | ✅ | |
-| FR-05.2 | 파서 선택: CommonMark, GFM, Extended(기본), Markdown Super Set, markdown-it(확장) | ✅ | 파서·프리뷰를 파일 단위로 분리해 교체 가능 |
+| FR-05.2 | 파서 선택: CommonMark, GFM, Extended(기본), Markdown Super Set, micromark, gsync Markdown, markdown-it(확장) | ✅ | 파서·프리뷰를 파일 단위로 분리해 교체 가능. 프리뷰 마크업 약속을 모든 파서에 대해 테스트 |
 | FR-05.3 | Markdown Super Set 문법(`MarkdownSuperSetGrammar.md` §0~30) | ⚠️ | 실행 청크(§13) 실행과 청크 캐시, 다이어그램 PNG 형식, 노트 임베드 미구현 |
-| FR-05.4 | 다이어그램(Mermaid, PlantUML, D2, draw.io): 로컬 도구 → Kroki 서버 대체 | ✅ | |
+| FR-05.4 | 다이어그램(Mermaid, PlantUML, D2, Graphviz, draw.io): 로컬 도구 → Kroki 서버 대체 | ✅ | |
 | FR-05.5 | 수식(LaTeX → MathML, 오프라인) | ✅ | |
 | FR-05.6 | 코드 블록 언어별 강조(테마 색), 코드 복사 | ✅ | |
 | FR-05.7 | 에디터 ⇄ 프리뷰 스크롤 동기화(편집·선택 중 일시 정지), 블록 더블클릭으로 원본 이동, 체크박스 토글 | ✅ | |
