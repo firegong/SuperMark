@@ -26,6 +26,31 @@ describe('Preview theme presets', () => {
     }
   });
 
+  test('every table header has a background that stands out from the page', () => {
+    // The editor background of each theme (styling/themes), which the preview uses.
+    const pageBackgrounds: Record<string, string> = {
+      'github-light': '#ffffff', 'github-dark': '#0d1117', 'xcode-light': '#ffffff', 'xcode-dark': '#1f1f24',
+      dracula: '#282a36', cobalt: '#193549', 'winter-is-coming-light': '#ffffff', 'winter-is-coming-dark': '#282822',
+      'minimal-light': '#ffffff', 'minimal-dark': '#1e1e1e', synthwave84: '#262335', 'night-owl': '#011627',
+      'rose-pine-dawn': '#faf4ed', 'rose-pine': '#191724', 'solarized-light': '#fdf6e3', 'solarized-dark': '#002b36',
+    };
+    const luminance = (hex: string) => {
+      const channel = (offset: number) => {
+        const value = parseInt(hex.slice(offset, offset + 2), 16) / 255;
+        return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+      };
+      return 0.2126 * channel(1) + 0.7152 * channel(3) + 0.0722 * channel(5);
+    };
+    const contrast = (a: string, b: string) => {
+      const [high, low] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+      return (high + 0.05) / (low + 0.05);
+    };
+    for (const id of builtInThemeIds) {
+      const header = previewThemePreset(id)?.colors.tableHeaderBackground ?? '';
+      expect(`${id}: ${contrast(header, pageBackgrounds[id]).toFixed(2)}`).not.toMatch(/: 1\.0\d$/);
+    }
+  });
+
   test('themes keep their own character', () => {
     const variables = (id: string) => previewPresetVariables(previewThemePreset(id) ?? previewThemePresets['github-light']);
     expect(variables('dracula')['--pv-h1']).toBe('#bd93f9');

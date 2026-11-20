@@ -92,7 +92,8 @@ const githubTableLayout: PreviewThemePreset['tableLayout'] = {
  * (styling/themes) for text, accent, link, bold, italic, quote and code, and the themes' upstream
  * Markdown token colors for headings (GitHub Primer / github-markdown-css, Dracula spec, Cobalt2,
  * Winter is Coming, SynthWave '84, Night Owl, Rosé Pine, Solarized). Table, code block and
- * highlight colors, fonts and sizes are chosen to suit each theme.
+ * highlight colors, fonts and sizes are chosen to suit each theme; every table header gets a
+ * background that stands out from the page (a raised surface on dark themes).
  */
 export const previewThemePresets: Record<string, PreviewThemePreset> = {
   'github-light': {
@@ -124,7 +125,7 @@ export const previewThemePresets: Record<string, PreviewThemePreset> = {
       blockquoteBorder: '#d0d7de',
       blockquoteBackground: 'transparent',
       tableBorder: '#d0d7de',
-      tableHeaderBackground: '#ffffff',
+      tableHeaderBackground: '#eff2f5',
       tableHeaderText: '#1f2328',
       tableStripe: '#f6f8fa',
       hr: '#d0d7de',
@@ -160,7 +161,7 @@ export const previewThemePresets: Record<string, PreviewThemePreset> = {
       blockquoteBorder: '#30363d',
       blockquoteBackground: 'transparent',
       tableBorder: '#30363d',
-      tableHeaderBackground: '#0d1117',
+      tableHeaderBackground: '#21262d',
       tableHeaderText: '#e6edf3',
       tableStripe: '#161b22',
       hr: '#30363d',
@@ -265,7 +266,7 @@ export const previewThemePresets: Record<string, PreviewThemePreset> = {
       blockquoteBorder: '#6272a4',
       blockquoteBackground: 'transparent',
       tableBorder: '#44475a',
-      tableHeaderBackground: '#21222c',
+      tableHeaderBackground: '#343746',
       tableHeaderText: '#bd93f9',
       tableStripe: '#2e303e',
       hr: '#6272a4',
@@ -370,7 +371,7 @@ export const previewThemePresets: Record<string, PreviewThemePreset> = {
       blockquoteBorder: '#219fd5',
       blockquoteBackground: 'transparent',
       tableBorder: '#264852',
-      tableHeaderBackground: '#1f1f1a',
+      tableHeaderBackground: '#3a3931',
       tableHeaderText: '#5abeb0',
       tableStripe: '#2e2e27',
       hr: '#a7dbf7',
@@ -406,7 +407,7 @@ export const previewThemePresets: Record<string, PreviewThemePreset> = {
       blockquoteBorder: '#d1d1d6',
       blockquoteBackground: 'transparent',
       tableBorder: '#e5e5ea',
-      tableHeaderBackground: '#ffffff',
+      tableHeaderBackground: '#f2f2f7',
       tableHeaderText: '#000000',
       tableStripe: '#ffffff',
       hr: '#e5e5ea',
@@ -442,7 +443,7 @@ export const previewThemePresets: Record<string, PreviewThemePreset> = {
       blockquoteBorder: '#48484a',
       blockquoteBackground: 'transparent',
       tableBorder: '#3a3a3c',
-      tableHeaderBackground: '#1e1e1e',
+      tableHeaderBackground: '#2c2c2e',
       tableHeaderText: '#ffffff',
       tableStripe: '#1e1e1e',
       hr: '#3a3a3c',
@@ -477,7 +478,7 @@ export const previewThemePresets: Record<string, PreviewThemePreset> = {
       blockquoteBorder: '#495495',
       blockquoteBackground: 'transparent',
       tableBorder: '#495495',
-      tableHeaderBackground: '#241b2f',
+      tableHeaderBackground: '#34294f',
       tableHeaderText: '#ff7edb',
       tableStripe: '#2a2139',
       hr: '#443964',
@@ -547,7 +548,7 @@ export const previewThemePresets: Record<string, PreviewThemePreset> = {
       blockquoteBorder: '#dfdad9',
       blockquoteBackground: 'transparent',
       tableBorder: '#dfdad9',
-      tableHeaderBackground: '#fffaf3',
+      tableHeaderBackground: '#dfdad9',
       tableHeaderText: '#575279',
       tableStripe: '#f4ede8',
       hr: '#dfdad9',
@@ -582,7 +583,7 @@ export const previewThemePresets: Record<string, PreviewThemePreset> = {
       blockquoteBorder: '#403d52',
       blockquoteBackground: 'transparent',
       tableBorder: '#403d52',
-      tableHeaderBackground: '#1f1d2e',
+      tableHeaderBackground: '#26233a',
       tableHeaderText: '#e0def4',
       tableStripe: '#21202e',
       hr: '#403d52',
