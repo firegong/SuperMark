@@ -68,7 +68,7 @@
 | ID | 요구사항 | 상태 | 비고 |
 | --- | --- | --- | --- |
 | FR-05.1 | 분할/마크다운 보기 프리뷰, 편집 시 자동 갱신 | ✅ | |
-| FR-05.2 | 파서 선택: CommonMark, GFM, Extended(기본), Markdown Super Set, micromark, gsync Markdown, markdown-it(확장) | ✅ | 파서·프리뷰를 파일 단위로 분리해 교체 가능. 프리뷰 마크업 약속을 모든 파서에 대해 테스트 |
+| FR-05.2 | 파서 선택: CommonMark, GFM, Extended(기본), Markdown Super Set, micromark, gsync Markdown, markdown-it(확장) | ✅ | 형식마다 모듈(폴더) 하나가 파서와 프리뷰를 함께 가져 형식별로 추가·교체 가능, 공통 기능은 공유 모듈. 프리뷰 마크업 약속을 모든 파서에 대해 테스트 |
 | FR-05.3 | Markdown Super Set 문법(`MarkdownSuperSetGrammar.md` §0~30) | ⚠️ | 실행 청크(§13) 실행과 청크 캐시, 다이어그램 PNG 형식, 노트 임베드 미구현 |
 | FR-05.4 | 다이어그램(Mermaid, PlantUML, D2, Graphviz, draw.io): 로컬 도구 → Kroki 서버 대체 | ✅ | |
 | FR-05.5 | 수식(LaTeX → MathML, 오프라인) | ✅ | |
@@ -123,3 +123,5 @@
 | NFR-06 | 강건성: 깨진·적대적·무작위 입력에서 예외·멈춤 없음, 손상된 설정 파일 허용 | ✅ (`test/robustness.test.ts`, `docs/05-testing/samples/malformed/`) |
 | NFR-07 | 한국어: 한글 메타데이터 키·변수, 한글 파일 이름 링크, 한글 글꼴 품질 | ✅ |
 | NFR-08 | 사용자 데이터 호환: 앱 이름이 바뀌어도 설정·백업·버전 위치 유지, 설정 형식 변경은 마이그레이션 | ✅ |
+| NFR-09 | 유지보수성: 마크다운 형식(파서 + 프리뷰)을 다른 형식에 영향 없이 추가·교체, 형식 간 공통 기능은 복제하지 않고 공유 | ✅ (`DES-002` §2, §3.3) |
+| NFR-10 | 배포: 서명된 릴리스와 앱 자체 업데이트, 문서화된 릴리스 절차 | ✅ (`ARCH-001` §8.1, `docs/06-release/01-release-procedure.md`) |

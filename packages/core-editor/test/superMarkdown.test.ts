@@ -1,8 +1,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { describe, expect, jest, test } from '@jest/globals';
-import { SuperMarkdownEngine } from '../src/modules/markdown-renderer/parsers/markdownSuperSet/engine';
-import { parseCodeInfo, parseAttributes } from '../src/modules/markdown-renderer/parsers/markdownSuperSet/attributes';
+import { SuperMarkdownEngine } from '../src/modules/markdown-renderer/formats/markdownSuperSet/engine';
+import { parseCodeInfo, parseAttributes } from '../src/modules/markdown-renderer/formats/markdownSuperSet/attributes';
 import { sanitizeHtml } from '../src/modules/markdown-renderer/core/htmlSanitizer';
 import {
   listMarkdownRenderers,
@@ -11,7 +11,7 @@ import {
   getMarkdownSyntaxStandard,
 } from '../src/modules/markdown-renderer';
 import { toggleTaskMarker } from '../src/chrome/markdownPreview';
-import type { SuperMarkdownOptions } from '../src/modules/markdown-renderer/parsers/markdownSuperSet/context';
+import type { SuperMarkdownOptions } from '../src/modules/markdown-renderer/formats/markdownSuperSet/context';
 
 const engine = new SuperMarkdownEngine();
 const render = (markdown: string, options?: SuperMarkdownOptions) => engine.render(markdown, options);

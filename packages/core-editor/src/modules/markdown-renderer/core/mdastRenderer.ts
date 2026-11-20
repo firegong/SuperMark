@@ -16,7 +16,7 @@ import { escapeHtml, isUnsafeUrl } from '../utils';
 /**
  * Renders an mdast syntax tree (https://github.com/syntax-tree/mdast) as preview HTML.
  *
- * Parsers that produce a tree (parsers/micromark.ts, or any other mdast-based parser added later)
+ * Parsers that produce a tree (formats/micromark/, or any other mdast-based parser added later)
  * share this renderer, which follows the preview markup contract (previewMarkup.ts): every block
  * gets `data-line` from the tree's source positions, so scroll sync, double-click to source and
  * task checkboxes work the same as with the built-in engines.

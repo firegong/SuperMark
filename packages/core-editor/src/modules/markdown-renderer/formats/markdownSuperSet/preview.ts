@@ -1,10 +1,10 @@
-import { clearIncludeCache, includeOptions } from '../includeLoader';
-import { removePreviewFrame } from './framePreview';
-import { attachTabSets } from './tabSets';
-import type { PreviewRenderer } from './types';
+import { clearIncludeCache, includeOptions } from '../../preview/includeLoader';
+import { removePreviewFrame } from '../../preview/framePreview';
+import { attachTabSets } from '../../preview/tabSets';
+import type { PreviewRenderer } from '../../types';
 
 /**
- * Preview for Markdown Super Set: an HTML fragment like htmlPreview, plus what only this format
+ * Preview for Markdown Super Set: an HTML fragment like the shared htmlPreview, plus what only this format
  * has — files included with `@include` (read ahead; the preview renders again when they arrive)
  * and tab sets (§26).
  */

@@ -10,11 +10,11 @@ import {
 import {
   getActiveMarkdownRenderer,
   listMarkdownRenderers,
-  registerMarkdownRenderer,
+  registerMarkdownFormat,
   setActiveMarkdownRenderer,
   setMarkdownRendererAvailable,
 } from './modules/markdown-renderer';
-import { isMarkdownItAvailable, markdownItEngine, markdownItEngineId } from './modules/markdown-renderer/parsers/markdownIt';
+import { isMarkdownItAvailable, markdownItEngineId, markdownItFormat } from './modules/markdown-renderer/formats/markdownIt';
 
 /**
  * Loads the document and installed extensions that the desktop host returns from
@@ -107,7 +107,7 @@ export function syncExtensionRenderers(scripts: { capability: string }[]): void 
   const available = isMarkdownItAvailable(scripts);
   if (available) {
     if (!listMarkdownRenderers().some(engine => engine.id === markdownItEngineId)) {
-      registerMarkdownRenderer(markdownItEngine);
+      registerMarkdownFormat(markdownItFormat);
     }
     setMarkdownRendererAvailable(markdownItEngineId, true);
     if (savedRenderer() === markdownItEngineId && getActiveMarkdownRenderer().id !== markdownItEngineId) {

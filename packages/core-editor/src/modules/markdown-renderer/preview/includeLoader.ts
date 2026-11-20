@@ -1,4 +1,4 @@
-import type { SuperMarkdownOptions } from '../modules/markdown-renderer/parsers/markdownSuperSet';
+import type { SuperMarkdownOptions } from '../formats/markdownSuperSet/context';
 
 /**
  * Files for Markdown Super Set `@include path` (§27) and gsync `@import "path"` in the preview.

@@ -1,5 +1,5 @@
 import { describe, expect, test } from '@jest/globals';
-import { builtInParsers } from '../src/modules/markdown-renderer/parsers';
+import { builtInParsers } from '../src/modules/markdown-renderer/formats';
 import { previewClasses } from '../src/modules/markdown-renderer/previewMarkup';
 import type { MarkdownRendererEngine } from '../src/modules/markdown-renderer';
 

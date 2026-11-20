@@ -1,4 +1,4 @@
-import type { PreviewHost } from './types';
+import type { PreviewHost } from '../types';
 
 /**
  * Tab sets (`.msm-tabset`): clicking a tab shows its panel. Used by previews whose parsers render

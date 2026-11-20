@@ -2709,7 +2709,7 @@ li.markedit-preview-task-item > p {
   display: none;
 }
 
-/* gsync Markdown (parsers/gsync, docs/reference/GSYNC-MARKDOWN-SYNTAX.md) */
+/* gsync Markdown (formats/gsync, docs/reference/GSYNC-MARKDOWN-SYNTAX.md) */
 
 .markedit-preview-body .gsync-header details summary {
   cursor: pointer;

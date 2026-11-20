@@ -1,6 +1,6 @@
 import { describe, expect, test, beforeEach } from '@jest/globals';
-import { clearIncludeCache, includeOptions, resolveIncludePath } from '../src/chrome/includeLoader';
-import { SuperMarkdownEngine } from '../src/modules/markdown-renderer/parsers/markdownSuperSet';
+import { clearIncludeCache, includeOptions, resolveIncludePath } from '../src/modules/markdown-renderer/preview/includeLoader';
+import { SuperMarkdownEngine } from '../src/modules/markdown-renderer/formats/markdownSuperSet';
 
 const files: Record<string, string> = {
   '/docs/chapters/intro.md': '## 소개\n\n@include ../shared/note.md',

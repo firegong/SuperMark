@@ -1,5 +1,5 @@
 import { removePreviewFrame } from './framePreview';
-import type { PreviewRenderer } from './types';
+import type { PreviewRenderer } from '../types';
 
 /**
  * Preview for parsers that produce an HTML fragment (CommonMark, GFM, Extended): the fragment is

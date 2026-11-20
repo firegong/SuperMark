@@ -1,8 +1,11 @@
 import { describe, expect, jest, test } from '@jest/globals';
-import { builtInParsers, defaultParser, commonmarkEngine, gfmEngine, extendedEngine, superMarkdownEngine } from '../src/modules/markdown-renderer/parsers';
-import { markdownItEngine } from '../src/modules/markdown-renderer/parsers/markdownIt';
+import { builtInParsers, defaultParser, commonmarkEngine, gfmEngine, extendedEngine, gsyncEngine, superMarkdownEngine } from '../src/modules/markdown-renderer/formats';
+import { markdownItEngine } from '../src/modules/markdown-renderer/formats/markdownIt';
 import type { MarkdownRendererEngine } from '../src/modules/markdown-renderer';
-import { framePreview, htmlPreview, previewFor, setParserPreview, superSetPreview, type PreviewHost, type PreviewRenderer } from '../src/chrome/preview';
+import { framePreview, htmlPreview, previewFor, registerMarkdownFormat, registerMarkdownRenderer, type PreviewHost, type PreviewRenderer } from '../src/modules/markdown-renderer';
+import { builtInFormats } from '../src/modules/markdown-renderer/formats';
+import { superSetPreview } from '../src/modules/markdown-renderer/formats/markdownSuperSet';
+import { gsyncPreview } from '../src/modules/markdown-renderer/formats/gsync';
 
 const host = (): PreviewHost & { [K in keyof PreviewHost]: jest.Mock } => ({
   rerender: jest.fn(),
@@ -11,7 +14,12 @@ const host = (): PreviewHost & { [K in keyof PreviewHost]: jest.Mock } => ({
   didChangeLayout: jest.fn(),
 });
 
-describe('Parsers, one file each', () => {
+describe('Format modules, one folder each', () => {
+  test('each format module pairs its parser with its preview', () => {
+    expect(builtInFormats.map(format => format.engine)).toEqual(builtInParsers);
+    expect(builtInFormats.every(format => typeof format.preview.render === 'function')).toBe(true);
+  });
+
   test('the built-in parsers keep the ids the settings save, in menu order', () => {
     expect(builtInParsers.map(parser => parser.id)).toEqual(['commonmark', 'gfm', 'extended', 'super', 'micromark', 'gsync']);
     expect(defaultParser).toBe(extendedEngine);
@@ -33,12 +41,13 @@ describe('Parsers, one file each', () => {
   });
 });
 
-describe('Previews, one file each', () => {
+describe('Previews', () => {
   test('each parser gets its preview', () => {
     expect(previewFor(commonmarkEngine)).toBe(htmlPreview);
     expect(previewFor(gfmEngine)).toBe(htmlPreview);
     expect(previewFor(extendedEngine)).toBe(htmlPreview);
     expect(previewFor(superMarkdownEngine)).toBe(superSetPreview);
+    expect(previewFor(gsyncEngine)).toBe(gsyncPreview);
     // Complete, self-styled documents go into a frame.
     expect(previewFor(markdownItEngine)).toBe(framePreview);
   });
@@ -47,8 +56,11 @@ describe('Previews, one file each', () => {
     const custom: PreviewRenderer = { id: 'custom', render: jest.fn() };
     const parser: MarkdownRendererEngine = { id: 'custom-parser', name: 'Custom', standard: 'custom', render: () => '' };
     expect(previewFor(parser)).toBe(htmlPreview);
-    setParserPreview(parser.id, custom);
+    registerMarkdownFormat({ engine: parser, preview: custom });
     expect(previewFor(parser)).toBe(custom);
+    // A parser registered on its own (e.g. by an extension) gets the default preview.
+    registerMarkdownRenderer(parser);
+    expect(previewFor(parser)).toBe(htmlPreview);
   });
 
   test('the HTML preview renders fragments and hands over to the host', () => {

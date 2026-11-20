@@ -1,5 +1,6 @@
-import type { MarkdownRendererEngine } from '../../types';
+import type { MarkdownFormat, MarkdownRendererEngine } from '../../types';
 import { SuperMarkdownEngine } from './engine';
+import { superSetPreview } from './preview';
 
 /**
  * Markdown Super Set: MultiMarkdown 6 with Pandoc, GFM and Obsidian syntax, plus merged table
@@ -11,5 +12,9 @@ import { SuperMarkdownEngine } from './engine';
  */
 export const superMarkdownEngine: MarkdownRendererEngine = new SuperMarkdownEngine();
 
-export { SuperMarkdownEngine };
+/** The HTML fragment, plus `@include` files and tab sets (preview.ts). */
+export const superSetFormat: MarkdownFormat = { engine: superMarkdownEngine, preview: superSetPreview };
+
+export { SuperMarkdownEngine, superSetPreview };
+export { clearSuperSetIncludes } from './preview';
 export type { SuperMarkdownOptions } from './context';

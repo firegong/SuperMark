@@ -1,5 +1,6 @@
-import { extendedEngine } from './extended';
-import type { MarkdownRendererEngine } from '../types';
+import { extendedEngine } from '../extended';
+import type { MarkdownFormat, MarkdownRendererEngine } from '../../types';
+import { framePreview } from '../../preview/framePreview';
 
 /**
  * markdown-it, as bundled by the MarkEdit Preview extension (`markedit-preview.js`), offered as
@@ -47,6 +48,9 @@ export const markdownItEngine: MarkdownRendererEngine = {
     return render(markdown, true);
   },
 };
+
+/** A complete, self-styled document, shown in an isolated frame. Added when the extension is enabled. */
+export const markdownItFormat: MarkdownFormat = { engine: markdownItEngine, preview: framePreview };
 
 /** Whether the extension's renderer is loaded and the extension is enabled. */
 export function isMarkdownItAvailable(extensionScripts: { capability: string }[]): boolean {

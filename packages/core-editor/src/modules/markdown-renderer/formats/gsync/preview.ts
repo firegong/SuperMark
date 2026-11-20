@@ -1,7 +1,7 @@
-import { includeOptions } from '../includeLoader';
-import { removePreviewFrame } from './framePreview';
-import { attachTabSets } from './tabSets';
-import type { PreviewRenderer } from './types';
+import { includeOptions } from '../../preview/includeLoader';
+import { removePreviewFrame } from '../../preview/framePreview';
+import { attachTabSets } from '../../preview/tabSets';
+import type { PreviewRenderer } from '../../types';
 
 /**
  * Preview for gsync Markdown (docs/reference/GSYNC-MARKDOWN-SYNTAX.md): an HTML fragment, plus

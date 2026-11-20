@@ -1,4 +1,4 @@
-import type { PreviewRenderer } from './types';
+import type { PreviewRenderer } from '../types';
 
 /**
  * Preview for parsers that produce a complete, self-styled HTML document (`renderDocument`, e.g.

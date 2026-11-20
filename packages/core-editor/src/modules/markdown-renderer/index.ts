@@ -1,7 +1,9 @@
-import { builtInParsers, defaultParser, commonmarkEngine, gfmEngine, extendedEngine, superMarkdownEngine } from './parsers';
-import type { MarkdownRendererEngine, MarkdownRenderOptions, MarkdownSyntaxStandard, MarkdownBlockPlugin, MarkdownInlinePlugin } from './types';
+import { builtInFormats, builtInParsers, defaultParser, defaultPreviewFor, commonmarkEngine, gfmEngine, extendedEngine, superMarkdownEngine } from './formats';
+import type { MarkdownFormat, MarkdownRendererEngine, MarkdownRenderOptions, MarkdownSyntaxStandard, MarkdownBlockPlugin, MarkdownInlinePlugin, PreviewHost, PreviewRenderer } from './types';
 
-// Parsers live in parsers/, one file each; this module only keeps the list and the active one.
+// Formats live in formats/, one folder each (parser + preview); this module keeps the list and
+// the active one.
+const formats = new Map<string, MarkdownFormat>(builtInFormats.map(format => [format.engine.id, format]));
 const engines = new Map<string, MarkdownRendererEngine>(builtInParsers.map(engine => [engine.id, engine]));
 
 let activeEngine: MarkdownRendererEngine = defaultParser;
@@ -9,11 +11,6 @@ let activeEngine: MarkdownRendererEngine = defaultParser;
 /** Renderers provided by built-in extensions that the user turned off. */
 const unavailableEngines = new Set<string>();
 
-/**
- * Shows or hides a renderer (built-in extensions such as SuperMarkdown can be turned off in
- * Extensions → Installed). Returns true when the hidden renderer is the active one, so the
- * caller can switch to another parser (and refresh the preview and View menu).
- */
 export function setMarkdownRendererAvailable(id: string, available: boolean): boolean {
   if (available) {
     unavailableEngines.delete(id);
@@ -28,8 +25,21 @@ export function isMarkdownRendererAvailable(id: string): boolean {
   return engines.has(id) && !unavailableEngines.has(id);
 }
 
+/** Adds a format module (parser and preview), or replaces the one with the same id. */
+export function registerMarkdownFormat(format: MarkdownFormat): void {
+  formats.set(format.engine.id, format);
+  engines.set(format.engine.id, format.engine);
+}
+
+/** Adds a parser (e.g. from an extension) with the default preview for its output. */
 export function registerMarkdownRenderer(engine: MarkdownRendererEngine): void {
-  engines.set(engine.id, engine);
+  registerMarkdownFormat({ engine, preview: defaultPreviewFor(engine) });
+}
+
+/** The preview of `engine`'s format (the default preview for an engine that has none). */
+export function previewFor(engine: MarkdownRendererEngine): PreviewRenderer {
+  const format = formats.get(engine.id);
+  return format?.engine === engine ? format.preview : defaultPreviewFor(engine);
 }
 
 export function setActiveMarkdownRenderer(id: string): void {
@@ -108,9 +118,11 @@ export function renderMermaid(code: string): string {
 }
 
 export { commonmarkEngine, gfmEngine, extendedEngine, superMarkdownEngine };
-export { SuperMarkdownEngine } from './parsers/markdownSuperSet';
-export { builtInParsers, defaultParser, gsyncEngine } from './parsers';
-export { markdownItEngine, markdownItEngineId, isMarkdownItAvailable } from './parsers/markdownIt';
+export { SuperMarkdownEngine, clearSuperSetIncludes } from './formats/markdownSuperSet';
+export { builtInFormats, defaultFormat, builtInParsers, defaultParser, gsyncEngine, micromarkEngine } from './formats';
+export { markdownItEngine, markdownItEngineId, markdownItFormat, isMarkdownItAvailable } from './formats/markdownIt';
+export { htmlPreview } from './preview/htmlPreview';
+export { framePreview, previewFrame, removePreviewFrame } from './preview/framePreview';
 export {
   registerDiagramPlugin,
   unregisterDiagramPlugin,
@@ -130,8 +142,8 @@ export {
 export type { DiagramPlugin, MathPlugin, DiagramRenderContext, DiagramRendering } from './plugins/registry';
 export { clearDiagramCache, renderDiagramSources, RendererUnavailableError } from './plugins/strategy';
 export { registerBuiltinRendererPlugins } from './plugins/builtin';
-export type { SuperMarkdownOptions } from './parsers/markdownSuperSet';
-export type { MarkdownRendererEngine, MarkdownRenderOptions, MarkdownSyntaxStandard };
+export type { SuperMarkdownOptions } from './formats/markdownSuperSet';
+export type { MarkdownFormat, MarkdownRendererEngine, MarkdownRenderOptions, MarkdownSyntaxStandard, PreviewHost, PreviewRenderer };
 
 // Convenience alias for backward compatibility
 export function renderMarkdownToHtml(markdown: string, options?: MarkdownRenderOptions): string {

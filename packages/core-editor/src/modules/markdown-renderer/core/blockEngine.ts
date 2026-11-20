@@ -634,8 +634,8 @@ function renderBlocksAtDepth(lines: Line[], context: RenderContext): string {
 }
 
 /**
- * The syntax a parser built on this engine understands (see parsers/commonmark.ts, gfm.ts and
- * extended.ts, which each define their own).
+ * The syntax a parser built on this engine understands (see formats/commonmark/, gfm/ and
+ * extended/, which each define their own).
  */
 export type SyntaxFeatures = Omit<Required<MarkdownRenderOptions>, 'standard' | 'blockPlugins' | 'inlinePlugins'>;
 
@@ -646,7 +646,7 @@ function fillOptions(standard: MarkdownSyntaxStandard, features: SyntaxFeatures,
 /**
  * The shared block/inline Markdown engine. A parser is an instance with its own id, name and
  * syntax features; a parser that needs different rules can be replaced by any other
- * MarkdownRendererEngine in its file under parsers/.
+ * MarkdownRendererEngine in its folder under formats/.
  */
 export class DefaultMarkdownEngine implements MarkdownRendererEngine {
   readonly id: string;

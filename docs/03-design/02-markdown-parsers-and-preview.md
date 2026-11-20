@@ -2,7 +2,7 @@
 
 - **문서 번호**: `DES-002`
 - **작성일**: 2026-11-21
-- **상태**: v1.0 (현재 구현 기준)
+- **상태**: v1.1 (형식 모듈 구조로 개정, 2026-11-21)
 - **관련 문서**: `ARCH-001` 시스템 아키텍처, `DES-003` 설정·테마·폰트
 
 ---
@@ -10,7 +10,7 @@
 ## 1. 목적과 범위
 
 에디터 옆 프리뷰(분할/마크다운 보기)에 마크다운을 HTML로 그리는 부분의 구조를 정의한다.
-파서와 프리뷰를 **파일 단위로 분리**하여, 한 파서(또는 한 종류의 프리뷰)를 다른 것에 영향 없이 갱신하거나 교체할 수 있게 하는 것이 핵심 원칙이다.
+마크다운 형식마다 **형식 모듈**(폴더 하나)이 파서(마크다운 → HTML)와 프리뷰를 함께 갖는다. 한 형식을 추가·갱신·교체할 때 그 폴더와 형식 목록 한 줄만 바꾸면 되고, 다른 형식에는 영향이 없다는 것이 핵심 원칙이다. 형식들이 함께 쓰는 기능(블록 엔진, mdast 렌더러, HTML 필터, 플러그인, 기본 프리뷰)은 중복하지 않고 공유 모듈로 둔다.
 
 - 파서: 마크다운 텍스트 → HTML (TypeScript로 구현, 앱에 내장)
 - 프리뷰: 파서 출력을 프리뷰 창에 표시하는 방식 (HTML 조각 삽입, 격리 프레임 등)
@@ -23,34 +23,30 @@
 ```text
 packages/core-editor/src/
 ├─ modules/markdown-renderer/
-│  ├─ index.ts                 파서 목록 관리, 활성 파서 전환, 렌더 진입점
-│  ├─ types.ts                 MarkdownRendererEngine 등 공통 인터페이스
+│  ├─ index.ts                 형식 등록, 활성 파서 전환, 형식별 프리뷰(previewFor), 렌더 진입점
+│  ├─ types.ts                 MarkdownRendererEngine, MarkdownFormat, PreviewRenderer, PreviewHost
 │  ├─ utils.ts                 escapeHtml, isUnsafeUrl, slugify …
 │  ├─ previewMarkup.ts         프리뷰 마크업 약속(data-line, 체크박스, 코드 블록, 표) 도우미
+│  ├─ formats/                 형식 모듈: 형식마다 폴더 하나 (파서 + 프리뷰)
+│  │  ├─ index.ts              내장 형식 목록(메뉴 순서), 기본 형식, 기본 프리뷰 선택
+│  │  ├─ commonmark/           CommonMark (엄격)            — 공통 블록 엔진 + HTML 프리뷰
+│  │  ├─ gfm/                  GitHub Flavored Markdown     — 〃
+│  │  ├─ extended/             Extended (기본값)            — 〃
+│  │  ├─ markdownSuperSet/     Markdown Super Set — 자체 엔진(engine·blocks·inline·attributes·context) + preview.ts(@include, 탭 세트)
+│  │  ├─ micromark/            micromark — parser.ts(micromark → mdast → 공통 mdast 렌더러) + HTML 프리뷰
+│  │  ├─ gsync/                gsync Markdown — engine.ts(preprocess·blocks·tables·inline·context) + preview.ts(@import, 코드 탭)
+│  │  └─ markdownIt/           markdown-it (MarkEdit Preview 확장이 제공할 때만) + 프레임 프리뷰
+│  ├─ preview/                 형식들이 공유하는 프리뷰 부품
+│  │  ├─ htmlPreview.ts        HTML 조각 삽입
+│  │  ├─ framePreview.ts       완전한 HTML 문서를 격리 프레임에 표시
+│  │  ├─ tabSets.ts            탭 세트 클릭 처리 (Super Set, gsync)
+│  │  └─ includeLoader.ts      @include / @import 파일 미리 읽기·캐시
 │  ├─ core/blockEngine.ts      CommonMark·GFM·Extended가 공유하는 블록/인라인 엔진
 │  ├─ core/htmlSanitizer.ts    원시 HTML 필터 (Markdown Super Set, gsync 공용)
 │  ├─ core/mdastRenderer.ts    mdast 구문 트리 → 프리뷰 HTML (트리 기반 파서 공용)
-│  ├─ parsers/
-│  │  ├─ index.ts              내장 파서 목록(메뉴 순서)과 기본 파서
-│  │  ├─ commonmark.ts         CommonMark (엄격)
-│  │  ├─ gfm.ts                GitHub Flavored Markdown
-│  │  ├─ extended.ts           Extended (기본값)
-│  │  ├─ markdownSuperSet/     Markdown Super Set (자체 엔진: engine·blocks·inline·attributes·html·context)
-│  │  ├─ micromark.ts          micromark (CommonMark + GFM + 수식, mdast 경유)
-│  │  ├─ gsync/                gsync Markdown (자체 엔진: preprocess·blocks·inline·tables·context)
-│  │  └─ markdownIt.ts         markdown-it (MarkEdit Preview 확장이 제공할 때만)
 │  └─ plugins/                 다이어그램·수식·코드 강조 렌더러 플러그인
 └─ chrome/
-   ├─ markdownPreview.ts       프리뷰 창: 레이아웃, 갱신, 스크롤 동기화, 공통 상호작용
-   ├─ preview/
-   │  ├─ index.ts              파서별 프리뷰 선택 (previewFor, setParserPreview)
-   │  ├─ types.ts              PreviewRenderer, PreviewHost
-   │  ├─ htmlPreview.ts        HTML 조각 삽입 (CommonMark, GFM, Extended)
-   │  ├─ framePreview.ts       완전한 HTML 문서를 격리 프레임에 표시 (markdown-it)
-   │  ├─ superSetPreview.ts    Markdown Super Set 전용: 파일 포함(@include), 탭 세트
-   │  ├─ gsyncPreview.ts       gsync 전용: 파일 가져오기(@import), 코드 탭
-   │  └─ tabSets.ts            탭 세트 클릭 처리 (Super Set, gsync 공용)
-   ├─ includeLoader.ts         @include / @import 파일 미리 읽기·캐시
+   ├─ markdownPreview.ts       프리뷰 창: 레이아웃, 갱신, 스크롤 동기화, 공통 상호작용(PreviewHost 제공)
    ├─ scrollSync.ts            에디터 ⇄ 프리뷰 스크롤 위치 계산
    ├─ previewThemePresets.ts   테마별 프리뷰 기본 스타일 (DES-003)
    └─ previewThemeStyles.ts    사용자 프리뷰 스타일 (DES-003)
@@ -61,6 +57,13 @@ packages/core-editor/src/
 ## 3. 파서
 
 ### 3.1 인터페이스
+
+형식 모듈(`formats/<이름>/index.ts`)은 `MarkdownFormat`을 export한다.
+
+| 멤버 | 설명 |
+| --- | --- |
+| `engine` | 파서. `MarkdownRendererEngine`(아래) |
+| `preview` | 이 형식의 출력을 보여 주는 `PreviewRenderer`. 대부분 공유 프리뷰(`htmlPreview`, `framePreview`)를 그대로 쓰고, 형식 고유 동작이 있으면 폴더 안 `preview.ts` |
 
 모든 파서는 `MarkdownRendererEngine`(`types.ts`)을 구현한다.
 
@@ -76,26 +79,27 @@ packages/core-editor/src/
 
 ### 3.2 내장 파서
 
-| 파서 (id) | 파일 | 엔진 | 문법 |
+| 형식 (id) | 폴더 | 엔진 | 문법 |
 | --- | --- | --- | --- |
-| CommonMark (`commonmark`) | `parsers/commonmark.ts` | `core/blockEngine.ts` | 핵심 문법만. 표·작업 목록·취소선·각주·수식·다이어그램·코드 강조 없음 |
-| GitHub Flavored Markdown (`gfm`) | `parsers/gfm.ts` | 〃 | CommonMark + 표, 작업 목록, 취소선, 자동 링크, 각주, 코드 강조 |
-| Extended Markdown (`extended`, 기본값) | `parsers/extended.ts` | 〃 | GFM + front matter, 수식, Mermaid 등 다이어그램, 콜아웃 |
-| Markdown Super Set (`super`) | `parsers/markdownSuperSet/` | 자체 엔진 | MultiMarkdown 6 + Pandoc·GFM·Obsidian 문법, 셀 병합, 상호 참조, 실행·렌더 청크, 파일 포함 등 (`docs/05-testing/samples/MarkdownSuperSetGrammar.md`) |
-| gsync Markdown (`gsync`) | `parsers/gsync/` | 자체 엔진 | gsync(Markdown → Confluence 도구)의 문법 (`docs/reference/GSYNC-MARKDOWN-SYNTAX.md`): 문단 안 줄바꿈 = `<br>`, 빈 줄로 끝나는 인용, 블록 없는 목록과 깊이별 마커, MPE 표(캡션 3종, `>`·후행 빈 셀·`^` 병합, 셀 안 목록·`!` 중첩 표), `:::` 컨테이너·코드 탭, `???` 접이식, 속성 블록 `{…}`, `@ref`, 위키 링크, 약어, `@import`(md·csv·html·코드), 타이포그래피, Alert, PlantUML·Graphviz 다이어그램 |
-| micromark (`micromark`) | `parsers/micromark.ts` | micromark → mdast → `core/mdastRenderer.ts` | 명세를 엄격히 따르는 CommonMark + GFM(표, 작업 목록, 취소선, 자동 링크, 각주) + 수식. 다이어그램·코드 강조는 공통 플러그인. front matter·콜아웃 없음 |
-| markdown-it (`markdown-it`) | `parsers/markdownIt.ts` | MarkEdit Preview 확장 | 확장이 설치되어 있을 때만 목록에 추가. `renderDocument`로 완전한 문서를 반환 |
+| CommonMark (`commonmark`) | `formats/commonmark/` | `core/blockEngine.ts` | 핵심 문법만. 표·작업 목록·취소선·각주·수식·다이어그램·코드 강조 없음 |
+| GitHub Flavored Markdown (`gfm`) | `formats/gfm/` | 〃 | CommonMark + 표, 작업 목록, 취소선, 자동 링크, 각주, 코드 강조 |
+| Extended Markdown (`extended`, 기본값) | `formats/extended/` | 〃 | GFM + front matter, 수식, Mermaid 등 다이어그램, 콜아웃 |
+| Markdown Super Set (`super`) | `formats/markdownSuperSet/` | 자체 엔진 | MultiMarkdown 6 + Pandoc·GFM·Obsidian 문법, 셀 병합, 상호 참조, 실행·렌더 청크, 파일 포함 등 (`docs/05-testing/samples/MarkdownSuperSetGrammar.md`) |
+| gsync Markdown (`gsync`) | `formats/gsync/` | 자체 엔진 | gsync(Markdown → Confluence 도구)의 문법 (`docs/reference/GSYNC-MARKDOWN-SYNTAX.md`): 문단 안 줄바꿈 = `<br>`, 빈 줄로 끝나는 인용, 블록 없는 목록과 깊이별 마커, MPE 표(캡션 3종, `>`·후행 빈 셀·`^` 병합, 셀 안 목록·`!` 중첩 표), `:::` 컨테이너·코드 탭, `???` 접이식, 속성 블록 `{…}`, `@ref`, 위키 링크, 약어, `@import`(md·csv·html·코드), 타이포그래피, Alert, PlantUML·Graphviz 다이어그램 |
+| micromark (`micromark`) | `formats/micromark/` | micromark → mdast → `core/mdastRenderer.ts` | 명세를 엄격히 따르는 CommonMark + GFM(표, 작업 목록, 취소선, 자동 링크, 각주) + 수식. 다이어그램·코드 강조는 공통 플러그인. front matter·콜아웃 없음 |
+| markdown-it (`markdown-it`) | `formats/markdownIt/` | MarkEdit Preview 확장 | 확장이 설치되어 있을 때만 목록에 추가. `renderDocument`로 완전한 문서를 반환 |
 
 - CommonMark·GFM·Extended는 같은 엔진(`DefaultMarkdownEngine`)의 인스턴스이며, 각 파일이 자신의 **문법 기능 표(`SyntaxFeatures`)**를 정의한다.
 - micromark는 구문 해석(micromark → mdast)과 HTML 생성(`core/mdastRenderer.ts`)이 나뉜 **트리 기반 파서**다(§3.6).
-- `parsers/index.ts`의 `builtInParsers`가 메뉴 순서를 정한다. 파서 추가는 파일을 만들고 이 목록에 한 줄을 더하는 것으로 끝난다.
+- `formats/index.ts`의 `builtInFormats`가 메뉴 순서를 정한다(`builtInParsers`는 그 파서 목록). 형식 추가는 폴더를 만들고 이 목록에 한 줄을 더하는 것으로 끝난다. 확장 파서는 `registerMarkdownRenderer(engine)`(기본 프리뷰) 또는 `registerMarkdownFormat({ engine, preview })`로 등록한다.
 - 내장 확장(Markdown Super Set)은 Extensions → Installed에서 끌 수 있다. 꺼진 파서는 목록에서 사라지고, 활성 파서였다면 다른 파서로 바뀐다(`setMarkdownRendererAvailable`).
 
 ### 3.3 교체·갱신 규칙
 
-1. 해당 파서 파일(또는 폴더)만 수정한다.
-2. 같은 이름으로 `MarkdownRendererEngine`을 export하고 **`id`를 유지**한다(사용자 설정 호환).
-3. 출력 HTML은 **프리뷰 마크업 약속**을 지킨다. 약속은 `previewMarkup.ts`의 도우미로 만들고(모든 엔진이 공유), `test/parserContract.test.ts`가 등록된 모든 파서를 검사한다.
+1. 해당 형식 폴더만 수정한다. 파서와 프리뷰를 함께 바꿀 수 있다.
+2. 폴더의 `index.ts`가 같은 이름으로 `MarkdownFormat`(과 엔진)을 export하고 **`id`를 유지**한다(사용자 설정 호환).
+3. 형식 사이에 같은 기능이 필요하면 복사하지 않고 공유 모듈(`core/`, `plugins/`, `preview/`, `previewMarkup.ts`)에 두고 가져다 쓴다.
+4. 출력 HTML은 **프리뷰 마크업 약속**을 지킨다. 약속은 `previewMarkup.ts`의 도우미로 만들고(모든 엔진이 공유), `test/parserContract.test.ts`가 등록된 모든 파서를 검사한다.
 
 | 약속 | 도우미 | 쓰는 곳 |
 | --- | --- | --- |
@@ -104,7 +108,7 @@ packages/core-editor/src/
 | 코드 블록(언어 표시, Copy 버튼) | `codeBlockHtml(code, lang)` | 코드 복사 |
 | 표 `markedit-preview-table` | `tableOpenTag()` | 표 스타일 |
 
-### 3.4 gsync 파서의 설계 (`parsers/gsync/`)
+### 3.4 gsync 형식의 설계 (`formats/gsync/`)
 
 | 파일 | 역할 |
 | --- | --- |
@@ -152,6 +156,7 @@ gsync 출력과 의도적으로 다른 점(미리보기 용도):
    └─ previewFor(engine).render(body, text, engine, previewHost)
          ├─ htmlPreview      : body.innerHTML = engine.render(text) → host.didRenderHtml()
          ├─ superSetPreview  : engine.render(text, includeOptions) + 탭 세트 → host.didRenderHtml()
+         ├─ gsyncPreview     : engine.render(text, includeOptions) + 코드 탭 → host.didRenderHtml()
          └─ framePreview     : engine.renderDocument(text) → <iframe sandbox="allow-same-origin"> → host.didLoadFrame()
 ```
 
@@ -160,7 +165,7 @@ gsync 출력과 의도적으로 다른 점(미리보기 용도):
 | `PreviewRenderer` | `render(body, text, engine, host)` — 한 종류의 프리뷰 |
 | `PreviewHost` (`markdownPreview.ts`가 제공) | `rerender()`, `didRenderHtml(body)`(공통 상호작용 연결·스크롤 재정렬·다이어그램 수화), `didLoadFrame(doc)`, `didChangeLayout()` |
 
-- 파서 → 프리뷰 매핑: `preview/index.ts`의 표에 명시된 것(`super` → `superSetPreview`)이 우선이고, 없으면 `renderDocument`가 있으면 `framePreview`, 아니면 `htmlPreview`. 확장 파서는 `setParserPreview(parserId, preview)`로 지정할 수 있다.
+- 파서 → 프리뷰: 별도 매핑 표 없이 **형식 모듈이 자기 프리뷰를 갖는다**(`previewFor(engine)` = 등록된 형식의 `preview`). 프리뷰 없이 등록된 파서는 `renderDocument`가 있으면 `framePreview`, 아니면 `htmlPreview`(`defaultPreviewFor`).
 - 프레임 프리뷰는 다른 프리뷰로 바뀌면 진행 중인 렌더를 버린다(`removePreviewFrame`이 토큰을 증가).
 - 테마가 바뀌면(`editor-colors-changed`) 프리뷰를 다시 그린다(코드 강조 클래스가 테마에 따라 달라지므로).
 
@@ -175,10 +180,10 @@ gsync 출력과 의도적으로 다른 점(미리보기 용도):
 | 링크 | 페이지 이동 금지. `#앵커`는 프리뷰 안에서 스크롤, 그 밖은 호스트 `open_link`로 전달(ARCH-001 §6 보안) |
 | 스크롤 동기화 | `data-line` 앵커 사이를 선형 보간. 기준점이 뷰포트 위→아래로 이동하여 양쪽이 함께 처음·끝에 도달. 편집 중이거나 선택 영역이 있으면 일시 정지. 프레임 프리뷰는 제목 텍스트로 매칭 |
 
-### 4.3 Markdown Super Set 전용 (`superSetPreview.ts`)
+### 4.3 형식 고유 프리뷰 (`formats/markdownSuperSet/preview.ts`, `formats/gsync/preview.ts`)
 
-- `@include 경로`: 렌더링이 동기이므로 포함 파일을 미리 읽어 캐시하고(`includeLoader.ts`), 처음 보는 파일은 호스트에서 읽어 오는 동안 "loading" 줄을 표시한 뒤 도착하면 다시 그린다. 문서가 바뀌거나 창이 다시 포커스되면 캐시를 비운다.
-- 탭 세트(§26): 탭 버튼 클릭으로 패널을 전환하고 스크롤 앵커를 무효화한다.
+- `@include 경로`(Super Set), `@import "경로"`(gsync): 렌더링이 동기이므로 포함 파일을 미리 읽어 캐시하고(공유 `preview/includeLoader.ts`), 처음 보는 파일은 호스트에서 읽어 오는 동안 "loading" 줄을 표시한 뒤 도착하면 다시 그린다. 문서가 바뀌거나 창이 다시 포커스되면 캐시를 비운다.
+- 탭 세트(Super Set §26, gsync 코드 탭, 공유 `preview/tabSets.ts`): 탭 버튼 클릭으로 패널을 전환하고 스크롤 앵커를 무효화한다.
 
 ---
 
@@ -197,7 +202,7 @@ gsync 출력과 의도적으로 다른 점(미리보기 용도):
 
 | 위협 | 대응 |
 | --- | --- |
-| 원시 HTML의 스크립트 | 공통 엔진은 HTML을 이스케이프. Markdown Super Set은 `parsers/markdownSuperSet/html.ts`의 태그 단위 필터(script·style·iframe·form 등 차단, 이벤트 속성 제거) |
+| 원시 HTML의 스크립트 | 공통 엔진은 HTML을 이스케이프. Markdown Super Set과 gsync는 `core/htmlSanitizer.ts`의 태그 단위 필터(script·style·iframe·form 등 차단, 이벤트 속성 제거) |
 | 위험한 URL | `isUnsafeUrl`: 제어 문자를 제거한 뒤 `javascript:`, `vbscript:`, `data:` 차단 |
 | 확장 렌더러의 문서 | `sandbox="allow-same-origin"`(스크립트 불가) 프레임에 격리, 앱 CSS와 분리 |
 | 링크 클릭 | 호스트 `open_link`가 http(s)/mailto만 외부로, 문서는 앱에서, 그 밖의 파일은 탐색기에서 표시만(실행 금지) |
@@ -210,7 +215,7 @@ gsync 출력과 의도적으로 다른 점(미리보기 용도):
 
 | 테스트 | 범위 |
 | --- | --- |
-| `test/parsersAndPreviews.test.ts` | 파서 목록·id, 파서별 문법 차이, 파서→프리뷰 매핑, 프리뷰 교체, 프레임 렌더 취소 |
+| `test/parsersAndPreviews.test.ts` | 형식 모듈(파서·프리뷰 짝), 파서 목록·id, 파서별 문법 차이, 형식별 프리뷰, 형식 등록·교체, 프레임 렌더 취소 |
 | `test/parserContract.test.ts` | 모든 내장 파서의 프리뷰 마크업 약속(블록·체크박스 줄 번호, 코드 블록, 표) |
 | `test/gsyncParser.test.ts` | gsync 문법을 참조 문서 절(§2~9)별로 검사, 참조 문서 전체 렌더링 |
 | `test/micromarkParser.test.ts` | micromark 문법 정확성, 안전성, 한글 제목 id, 느린 입력 대비 |

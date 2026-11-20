@@ -1,6 +1,5 @@
 import { createElement } from './utils';
 import { isEditorLivePreview } from './liveEditorPreview';
-import { clearSuperSetIncludes, previewFor, previewFrame, type PreviewHost } from './preview';
 import {
   buildAnchors,
   lineToOffset,
@@ -21,7 +20,11 @@ import {
   registerMarkdownRenderer,
   listMarkdownRenderers,
   hydrateDiagrams,
+  clearSuperSetIncludes,
+  previewFor,
+  previewFrame,
   type MarkdownSyntaxStandard,
+  type PreviewHost,
 } from '../modules/markdown-renderer';
 
 export type MarkdownPreviewMode = 'editor' | 'split' | 'preview';
@@ -95,7 +98,7 @@ function updateContent(force = false): void {
     }
 
     previewState.lastContent = text;
-    // Each parser's output is shown by its own preview (src/chrome/preview/).
+    // Each format shows its parser's output with its own preview (modules/markdown-renderer/formats/).
     const engine = getActiveMarkdownRenderer();
     previewFor(engine).render(body, text, engine, previewHost);
   };
@@ -117,7 +120,7 @@ function updateContent(force = false): void {
   previewState.updateTimeout = setTimeout(() => render(false), 50);
 }
 
-/** What the per-parser previews (src/chrome/preview/) call back into. */
+/** What the format previews (modules/markdown-renderer/formats/, preview/) call back into. */
 const previewHost: PreviewHost = {
   rerender() {
     updateContent(true);

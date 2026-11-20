@@ -3,12 +3,12 @@ import { gfm } from 'micromark-extension-gfm';
 import { gfmFromMarkdown } from 'mdast-util-gfm';
 import { math } from 'micromark-extension-math';
 import { mathFromMarkdown } from 'mdast-util-math';
-import { renderMdast, type MdastRenderHooks } from '../core/mdastRenderer';
-import { highlightCode } from '../plugins/codeHighlightPlugin';
-import { renderDiagramWithPlugin, renderMathWithPlugin } from '../plugins/registry';
-import { diagramBlockHtml } from '../plugins/builtin';
-import { escapeHtml } from '../utils';
-import type { MarkdownRendererEngine } from '../types';
+import { renderMdast, type MdastRenderHooks } from '../../core/mdastRenderer';
+import { highlightCode } from '../../plugins/codeHighlightPlugin';
+import { renderDiagramWithPlugin, renderMathWithPlugin } from '../../plugins/registry';
+import { diagramBlockHtml } from '../../plugins/builtin';
+import { escapeHtml } from '../../utils';
+import type { MarkdownRendererEngine } from '../../types';
 
 /**
  * micromark (https://github.com/micromark/micromark): a spec-compliant CommonMark parser with the
@@ -17,7 +17,7 @@ import type { MarkdownRendererEngine } from '../types';
  * into preview HTML (so scroll sync and checkboxes work), with diagrams, math and code
  * highlighting from the shared plugins.
  *
- * To update or replace this parser, change only this file and keep the id `micromark`.
+ * To update or replace this parser, change only this folder and keep the id `micromark`.
  */
 
 const hooks: MdastRenderHooks = {

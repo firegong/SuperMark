@@ -16,7 +16,7 @@ import { expandImports, extractAbbreviations, extractHeader, toLines, type Docum
  * - `[[page]]` links to `page.md`, so the link opens the document in the app (gsync: page.html);
  * - front matter and metadata comments, which gsync removes, are shown in a header panel.
  *
- * To update or replace this parser, change only this folder and keep the id `gsync`.
+ * The format module (engine + preview) is index.ts.
  */
 
 const hooks: GsyncHooks = {

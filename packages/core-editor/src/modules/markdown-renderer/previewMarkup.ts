@@ -1,7 +1,7 @@
 import { escapeHtml } from './utils';
 
 /**
- * The markup contract between parsers and the preview (src/chrome/preview, markdownPreview.ts).
+ * The markup contract between parsers and the preview (each format's preview, preview/, chrome/markdownPreview.ts).
  *
  * Every parser that renders HTML fragments builds these parts with the helpers below, so the
  * preview's shared features keep working whichever parser is active:

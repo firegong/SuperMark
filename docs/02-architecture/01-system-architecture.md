@@ -42,8 +42,8 @@
 |  │    window.nativeModules (7) ──▶ 호스트 호출                                       |
 |  ├─ chrome/  앱 UI: 검색 바, 목차·통계 팝오버, 설정, 확장 관리자, 버전 기록,          |
 |  │          컨텍스트 메뉴, 프리뷰 창                    window.chromeUI               |
-|  ├─ modules/markdown-renderer/  파서(parsers/) + 다이어그램·수식·코드 강조 플러그인    |
-|  ├─ chrome/preview/             파서별 프리뷰(HTML 조각, 격리 프레임, Super Set)       |
+|  ├─ modules/markdown-renderer/  형식 모듈(formats/: 형식별 파서 + 프리뷰), 공유 프리뷰  |
+|  │                               (preview/), 블록 엔진·mdast(core/), 다이어그램·수식 플러그인 |
 |  └─ 확장 런타임 (markedit-api)  사용자 확장 스크립트·스타일, 테마 확장                |
 +-----------------------------------------------------------------------------------+
 ```
@@ -56,9 +56,9 @@
 | --- | --- |
 | `src-tauri/` | Rust 호스트 (`Cargo.toml`, `tauri.conf.json`, `src/`) |
 | `packages/core-editor/` | 에디터·UI·프리뷰 (TypeScript, vite 단일 파일 빌드 → `dist/`) |
-| `docs/` | 요구사항, 아키텍처, 설계, 로드맵, 테스트 계획과 샘플 |
+| `docs/` | 요구사항, 아키텍처, 설계, 로드맵, 테스트 계획과 샘플, 릴리스 절차 |
 | `scripts/` | `build-app.sh` / `build-app.ps1` (에디터 빌드 + 릴리스 빌드, macOS `.app` 래핑) |
-| `.github/workflows/` | Windows CI, 릴리스(`tauri build` 설치 파일) |
+| `.github/workflows/` | CI, 릴리스(서명된 설치 파일과 업데이트 파일을 `firegong/SuperMark-releases`에 게시, 절차는 `docs/06-release/`) |
 
 ---
 
@@ -97,7 +97,7 @@
 | 메뉴 바 | 네이티브(muda): SuperMark, File, Edit, Format, View, Go, Extensions, Window, Help. 메뉴 동작은 대부분 포커스된 창에 웹 스크립트로 전달. 확장이 추가한 항목 포함, 상태 변경 시 메뉴 전체 재구성 |
 | 검색/바꾸기, 목차, 통계, 줄 이동 | WebView 안의 패널·팝오버(`chrome/`). 같은 컨텍스트에서 `webModules.search` 등을 직접 호출 |
 | 설정, 확장 관리자, 버전 기록 | WebView 안의 모달 대화상자 (`DES-003`) |
-| 프리뷰 | 분할/마크다운 보기 창, 파서별 프리뷰 (`DES-002`) |
+| 프리뷰 | 분할/마크다운 보기 창, 형식 모듈별 프리뷰 (`DES-002`) |
 | 경고·저장 대화상자 | 네이티브(`rfd`) |
 
 ---
@@ -155,6 +155,7 @@ Windows `%APPDATA%\MarkEdit`, macOS `~/Library/Application Support/MarkEdit`. �
 | 비밀 값 | `RELEASES_TOKEN`(공개 저장소 Contents 읽기·쓰기 토큰), `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` — 소스 저장소의 Actions secrets |
 | 앱 동작 (`updates.rs`) | 메뉴 *Check for Updates…*: 결과를 항상 알림. 시작 시 확인: 새 버전이 있을 때만, 건너뛴 버전(`general.skippedUpdateVersion`)은 제외. 대화상자 예=설치, 아니요=나중에, 취소=이 버전 건너뛰기. 미저장 문서가 있으면 저장을 먼저 요청. Windows는 설치 프로그램(passive)이 이어받고, macOS는 앱을 교체한 뒤 재시작 |
 | 버전 | 릴리스마다 `tauri.conf.json`과 `Cargo.toml`의 `version`을 올린다. 앱은 실행 중인 버전보다 높은 버전만 제안 |
+| 절차 | `docs/06-release/01-release-procedure.md` (최초 설정, 릴리스, 게시, 문제 해결) |
 
 ---
 

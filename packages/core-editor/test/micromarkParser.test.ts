@@ -1,5 +1,5 @@
 import { describe, expect, test } from '@jest/globals';
-import { micromarkEngine, tamePathologicalInput } from '../src/modules/markdown-renderer/parsers/micromark';
+import { micromarkEngine, tamePathologicalInput } from '../src/modules/markdown-renderer/formats/micromark';
 
 describe('micromark parser', () => {
   test('renders CommonMark and GFM correctly where the line-based engine is lenient', () => {

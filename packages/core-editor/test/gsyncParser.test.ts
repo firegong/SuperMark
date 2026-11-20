@@ -1,8 +1,8 @@
 import { describe, expect, test } from '@jest/globals';
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { gsyncEngine } from '../src/modules/markdown-renderer/parsers';
-import type { GsyncOptions } from '../src/modules/markdown-renderer/parsers/gsync';
+import { gsyncEngine } from '../src/modules/markdown-renderer/formats';
+import type { GsyncOptions } from '../src/modules/markdown-renderer/formats/gsync';
 
 /** gsync Markdown, section by section of docs/reference/GSYNC-MARKDOWN-SYNTAX.md. */
 
