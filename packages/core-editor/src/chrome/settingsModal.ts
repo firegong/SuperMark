@@ -3,8 +3,23 @@ import { listThemeExtensions, setThemeExtension } from './themeExtensions';
 import { InvisiblesBehavior } from '../config';
 import { TabKeyBehavior } from '../modules/indentation';
 import { listMarkdownRenderers, setDiagramServer, setDiagramRendering, clearDiagramCache } from '../modules/markdown-renderer';
+import {
+  activePreviewThemeKey,
+  applyPreviewThemeStyles,
+  maxPreviewFontSize,
+  minPreviewFontSize,
+  normalizeElementStyle,
+  normalizePreviewThemeStyles,
+  previewStyleElements,
+  setPreviewThemeStyles,
+  PreviewElementStyle,
+  PreviewStyleElement,
+  PreviewThemeStyle,
+  PreviewThemeStyles,
+} from './previewThemeStyles';
+import { buildPreviewPresetCss, previewThemePreset, PreviewThemePreset } from './previewThemePresets';
 
-export type SettingsTab = 'editor' | 'assistant' | 'general' | 'window';
+export type SettingsTab = 'editor' | 'preview' | 'assistant' | 'general' | 'window';
 
 export interface UserSettings {
   theme: string;
@@ -38,6 +53,8 @@ export interface UserSettings {
   diagramRendering: 'auto' | 'local' | 'server';
   plantumlCommand: string;
   d2Command: string;
+  /** Preview typography per theme, see previewThemeStyles.ts. */
+  previewThemeStyles: PreviewThemeStyles;
 }
 
 interface SettingsModalController {
@@ -97,6 +114,7 @@ export function normalizeUserSettings(
     diagramRendering: 'auto',
     plantumlCommand: 'plantuml',
     d2Command: 'd2',
+    previewThemeStyles: {},
   };
 
   const rawFontFamily = pickValue<string>(
@@ -169,6 +187,7 @@ export function normalizeUserSettings(
     diagramRendering: normalizeDiagramRendering(pickValue(raw, ['diagramRendering', 'preview.diagramRendering'], base.diagramRendering)),
     plantumlCommand: String(pickValue(raw, ['plantumlCommand', 'preview.plantumlCommand'], base.plantumlCommand)),
     d2Command: String(pickValue(raw, ['d2Command', 'preview.d2Command'], base.d2Command)),
+    previewThemeStyles: normalizePreviewThemeStyles(pickValue<unknown>(raw, ['previewThemeStyles', 'preview.themeStyles'], base.previewThemeStyles)),
   };
 }
 
@@ -190,6 +209,63 @@ const builtInThemes: { id: string; label: string; colors: string }[] = [
   { id: 'solarized-light', label: 'Solarized (Light)', colors: '#fdf6e3,#657b83,#f5eed9,#859900,#d33682,#268bd2' },
   { id: 'solarized-dark', label: 'Solarized (Dark)', colors: '#002b36,#839496,#053542,#859900,#d33682,#268bd2' },
 ];
+
+const previewFontWeights: { value: string; label: string }[] = [
+  { value: '', label: 'Default' },
+  { value: '300', label: 'Light' },
+  { value: '400', label: 'Regular' },
+  { value: '500', label: 'Medium' },
+  { value: '600', label: 'Semibold' },
+  { value: '700', label: 'Bold' },
+  { value: '900', label: 'Black' },
+];
+
+/** Suggestions for the preview font fields; any installed font name works. */
+const previewFontSuggestions = [
+  'system-ui',
+  'serif',
+  'sans-serif',
+  'monospace',
+  "'Segoe UI'",
+  "'Malgun Gothic'",
+  "'Noto Sans KR'",
+  "'Nanum Gothic'",
+  "'Nanum Myeongjo'",
+  'Georgia',
+  "'Times New Roman'",
+  'Arial',
+  'Verdana',
+  "'Cascadia Code'",
+  'Consolas',
+  "'JetBrains Mono'",
+];
+
+/** The theme default an element's size field shows as its placeholder (headings and body text). */
+function presetFontSize(preset: PreviewThemePreset | undefined, element: PreviewStyleElement): number | undefined {
+  const sizes: Partial<Record<PreviewStyleElement, number>> = preset?.sizes ?? {};
+  return sizes[element];
+}
+
+/** The theme default an unset color field shows. */
+function presetColor(preset: PreviewThemePreset | undefined, element: PreviewStyleElement): string | undefined {
+  if (preset === undefined) {
+    return undefined;
+  }
+  const { colors } = preset;
+  const byElement: Record<PreviewStyleElement, string> = {
+    body: colors.text,
+    h1: colors.h1,
+    h2: colors.h2,
+    h3: colors.h3,
+    h4: colors.h4,
+    h5: colors.h5,
+    h6: colors.h6,
+    link: colors.link,
+    code: colors.codeText,
+    blockquote: colors.blockquoteText,
+  };
+  return byElement[element];
+}
 
 const fontFamilies: { value: string; label: string }[] = [
   { value: 'ui-monospace', label: 'System Mono' },
@@ -404,6 +480,8 @@ export function createSettingsModal(
   let settings = normalizeUserSettings(window.config);
   let activeTab: SettingsTab = initialTab;
   let mutationVersion = 0;
+  /** The theme whose preview styles the Preview tab edits; starts at the theme in use. */
+  let previewStyleThemeKey = activePreviewThemeKey() || settings.theme;
 
   const core = window.webModules.core as unknown as { restoreFocus: () => void } | undefined;
   const configModule = window.webModules.config as unknown as {
@@ -442,6 +520,7 @@ export function createSettingsModal(
   const tabsRow = createElement('div', 'markedit-chrome-settings-tabs', header);
   const tabs: Record<SettingsTab, string> = {
     editor: 'Editor',
+    preview: 'Preview',
     assistant: 'Assistant',
     general: 'General',
     window: 'Window',
@@ -524,6 +603,10 @@ export function createSettingsModal(
         break;
       case 'themeExtension':
         setThemeExtension(String(value));
+        applyPreviewThemeStyles();
+        break;
+      case 'previewThemeStyles':
+        setPreviewThemeStyles(value);
         break;
       case 'fontSize':
         configModule?.setFontSize?.({ fontSize: Number(value) });
@@ -651,6 +734,7 @@ export function createSettingsModal(
     applyLocalChange('markdownRenderer', next.markdownRenderer);
     applyLocalChange('diagramServer', next.diagramServer);
     applyLocalChange('diagramRendering', next.diagramRendering);
+    applyLocalChange('previewThemeStyles', next.previewThemeStyles);
     document.documentElement.dataset.appearance = next.appearance;
   }
 
@@ -884,6 +968,238 @@ export function createSettingsModal(
     }));
   }
 
+  /** Themes the Preview tab can style: built-in themes, installed extensions, then any other saved key. */
+  function previewStyleThemeOptions(): { value: string; label: string; colors?: string[] }[] {
+    const options: { value: string; label: string; colors?: string[] }[] = builtInThemes.map(theme => ({
+      value: theme.id,
+      label: theme.label,
+      colors: theme.colors.split(','),
+    }));
+    for (const extension of listThemeExtensions()) {
+      options.push({ value: `extension:${extension.capability}`, label: `${extension.label} (Extension)` });
+    }
+    for (const key of Object.keys(settings.previewThemeStyles)) {
+      if (!options.some(option => option.value === key)) {
+        options.push({ value: key, label: key });
+      }
+    }
+    if (!options.some(option => option.value === previewStyleThemeKey)) {
+      options.unshift({ value: previewStyleThemeKey, label: previewStyleThemeKey });
+    }
+    const active = activePreviewThemeKey();
+    return options.map(option => option.value === active ? { ...option, label: `${option.label} — Current` } : option);
+  }
+
+  /** Background and text colors for the sample: the theme's swatch, or the editor's colors for the theme in use. */
+  function previewSampleColors(colors: string[] | undefined): { background: string; text: string } {
+    if (colors !== undefined && colors.length > 1) {
+      return { background: colors[0], text: colors[1] };
+    }
+    const pane = document.querySelector<HTMLElement>('.markedit-markdown-preview-pane');
+    const style = getComputedStyle(pane ?? document.body);
+    return {
+      background: style.getPropertyValue('--preview-bg').trim() || style.backgroundColor,
+      text: style.getPropertyValue('--preview-fg').trim() || style.color,
+    };
+  }
+
+  function toHexColor(color: string): string {
+    if (/^#[0-9a-f]{6}$/i.test(color)) {
+      return color.toLowerCase();
+    }
+    const match = /rgba?\(\s*(\d+)[\s,]+(\d+)[\s,]+(\d+)/.exec(color);
+    if (match === null) {
+      return '#808080';
+    }
+    return `#${match.slice(1, 4).map(part => Number(part).toString(16).padStart(2, '0')).join('')}`;
+  }
+
+  function renderPreviewTab(): void {
+    const options = previewStyleThemeOptions();
+    const current = options.find(option => option.value === previewStyleThemeKey);
+    const sampleColors = previewSampleColors(current?.colors);
+    // Edited in place while a control is being dragged; saved on change.
+    let draft: PreviewThemeStyle = { ...(settings.previewThemeStyles[previewStyleThemeKey] ?? {}) };
+
+    const themeSection = createSection('Theme');
+    themeSection.appendChild(createSelect('Customize Preview For', options, previewStyleThemeKey, value => {
+      previewStyleThemeKey = value;
+      render();
+    }));
+    createElement('div', 'markedit-settings-hint', themeSection,
+      'Each theme keeps its own preview styles. Empty fields use the theme\'s defaults.');
+
+    const preset = previewThemePreset(previewStyleThemeKey);
+    const sample = createElement('div', 'markedit-settings-preview-sample', themeSection);
+    sample.style.backgroundColor = sampleColors.background;
+    sample.style.color = sampleColors.text;
+    // The theme's preview defaults, as in the preview itself.
+    createElement('style', '', sample, buildPreviewPresetCss(preset, '.markedit-chrome-settings-body .markedit-settings-preview-sample'));
+    const sampleNodes: Partial<Record<PreviewStyleElement, HTMLElement[]>> = {};
+    const addSample = (id: PreviewStyleElement, tag: keyof HTMLElementTagNameMap, text: string, parent: HTMLElement = sample) => {
+      const node = createElement(tag, `markedit-settings-preview-sample-${id}`, parent, text);
+      (sampleNodes[id] ??= []).push(node);
+      return node;
+    };
+    addSample('h1', 'div', 'Heading 1');
+    addSample('h2', 'div', 'Heading 2');
+    addSample('h3', 'div', 'Heading 3');
+    const paragraph = addSample('body', 'div', 'Body text with a ');
+    addSample('link', 'span', 'link', paragraph);
+    paragraph.appendChild(document.createTextNode(' and '));
+    addSample('code', 'span', 'inline code', paragraph);
+    paragraph.appendChild(document.createTextNode('.'));
+    addSample('h4', 'div', 'Heading 4');
+    addSample('h5', 'div', 'Heading 5');
+    addSample('h6', 'div', 'Heading 6');
+    addSample('blockquote', 'div', 'A blockquote.');
+    const table = createElement('table', 'markedit-preview-table', sample);
+    const headerRow = createElement('tr', '', createElement('thead', '', table));
+    createElement('th', '', headerRow, 'Table');
+    createElement('th', '', headerRow, 'Header');
+    const tableBody = createElement('tbody', '', table);
+    for (const row of [['Row', 'One'], ['Row', 'Two']]) {
+      const tableRow = createElement('tr', '', tableBody);
+      for (const cell of row) {
+        createElement('td', '', tableRow, cell);
+      }
+    }
+
+    const updateSample = () => {
+      for (const { id } of previewStyleElements) {
+        for (const node of sampleNodes[id] ?? []) {
+          const style = draft[id];
+          node.style.fontFamily = style?.fontFamily ?? '';
+          node.style.fontSize = style?.fontSize !== undefined ? `${style.fontSize}px` : '';
+          node.style.fontWeight = style?.fontWeight !== undefined ? String(style.fontWeight) : '';
+          node.style.color = style?.color ?? '';
+        }
+      }
+    };
+
+    const applyDraft = (persist: boolean) => {
+      updateSample();
+      const next: PreviewThemeStyles = { ...settings.previewThemeStyles };
+      if (Object.keys(draft).length > 0) {
+        next[previewStyleThemeKey] = draft;
+      } else {
+        delete next[previewStyleThemeKey];
+      }
+      if (persist) {
+        void updateSetting('previewThemeStyles', next);
+      } else {
+        setPreviewThemeStyles(next);
+      }
+    };
+
+    const updateElement = (id: PreviewStyleElement, patch: Partial<PreviewElementStyle>, persist: boolean) => {
+      const merged: Record<string, unknown> = { ...(draft[id] ?? {}), ...patch };
+      const style = normalizeElementStyle(merged);
+      draft = { ...draft };
+      if (style === undefined) {
+        delete draft[id];
+      } else {
+        draft[id] = style;
+      }
+      applyDraft(persist);
+    };
+
+    const styleSection = createSection('Typography');
+    const grid = createElement('div', 'markedit-settings-preview-styles', styleSection);
+    for (const heading of ['', 'Font', 'Size', 'Weight', 'Color', '']) {
+      createElement('div', 'markedit-settings-preview-styles-header', grid, heading);
+    }
+
+    for (const element of previewStyleElements) {
+      const style = draft[element.id] ?? {};
+      createElement('div', 'markedit-settings-preview-styles-label', grid, element.label);
+
+      const font = createElement('input', 'markedit-chrome-input markedit-settings-text');
+      font.type = 'text';
+      font.value = style.fontFamily ?? '';
+      font.placeholder = 'Default';
+      font.spellcheck = false;
+      font.setAttribute('list', 'markedit-settings-preview-fonts');
+      font.setAttribute('aria-label', `${element.label} font`);
+      font.dataset.element = element.id;
+      font.dataset.property = 'fontFamily';
+      font.addEventListener('change', () => {
+        updateElement(element.id, { fontFamily: font.value.trim() || undefined }, true);
+      });
+      grid.appendChild(font);
+
+      const size = createElement('input', 'markedit-chrome-input markedit-settings-number');
+      size.type = 'number';
+      size.min = String(minPreviewFontSize);
+      size.max = String(maxPreviewFontSize);
+      size.value = style.fontSize !== undefined ? String(style.fontSize) : '';
+      const defaultSize = presetFontSize(preset, element.id);
+      size.placeholder = defaultSize !== undefined ? String(defaultSize) : 'Auto';
+      size.setAttribute('aria-label', `${element.label} size`);
+      size.dataset.element = element.id;
+      size.dataset.property = 'fontSize';
+      size.addEventListener('change', () => {
+        const parsed = size.value.trim() === '' ? undefined : Number(size.value);
+        updateElement(element.id, { fontSize: parsed }, true);
+      });
+      grid.appendChild(size);
+
+      const weight = createElement('select', 'markedit-chrome-input markedit-settings-select');
+      for (const option of previewFontWeights) {
+        const node = createElement('option', '', weight, option.label);
+        node.value = option.value;
+      }
+      weight.value = style.fontWeight !== undefined ? String(style.fontWeight) : '';
+      weight.setAttribute('aria-label', `${element.label} weight`);
+      weight.dataset.element = element.id;
+      weight.dataset.property = 'fontWeight';
+      weight.addEventListener('change', () => {
+        updateElement(element.id, { fontWeight: weight.value === '' ? undefined : Number(weight.value) }, true);
+      });
+      grid.appendChild(weight);
+
+      const color = createElement('input', 'markedit-settings-preview-color');
+      color.type = 'color';
+      color.value = style.color ?? presetColor(preset, element.id) ?? toHexColor(sampleColors.text);
+      color.classList.toggle('is-unset', style.color === undefined);
+      color.title = style.color === undefined ? 'Theme default' : style.color;
+      color.setAttribute('aria-label', `${element.label} color`);
+      color.dataset.element = element.id;
+      color.dataset.property = 'color';
+      color.addEventListener('input', () => {
+        color.classList.remove('is-unset');
+        updateElement(element.id, { color: color.value }, false);
+      });
+      color.addEventListener('change', () => {
+        updateElement(element.id, { color: color.value }, true);
+      });
+      grid.appendChild(color);
+
+      const reset = createButton('↺', () => {
+        updateElement(element.id, { fontFamily: undefined, fontSize: undefined, fontWeight: undefined, color: undefined }, true);
+      }, 'markedit-chrome-button markedit-settings-preview-reset');
+      reset.title = `Reset ${element.label}`;
+      reset.disabled = draft[element.id] === undefined;
+      grid.appendChild(reset);
+    }
+
+    const fonts = createElement('datalist', '', styleSection);
+    fonts.id = 'markedit-settings-preview-fonts';
+    for (const family of previewFontSuggestions) {
+      createElement('option', '', fonts).value = family;
+    }
+
+    const actions = createElement('div', 'markedit-settings-actions', styleSection);
+    const resetAll = createButton('Reset This Theme', () => {
+      draft = {};
+      applyDraft(true);
+    }, 'markedit-chrome-button markedit-settings-preview-reset-all');
+    resetAll.disabled = Object.keys(draft).length === 0;
+    actions.appendChild(resetAll);
+
+    updateSample();
+  }
+
   function renderTabs(): void {
     for (const key of Object.keys(tabs) as SettingsTab[]) {
       const button = tabButtons.get(key);
@@ -900,6 +1216,9 @@ export function createSettingsModal(
     switch (activeTab) {
       case 'editor':
         renderEditorTab();
+        break;
+      case 'preview':
+        renderPreviewTab();
         break;
       case 'assistant':
         renderAssistantTab();

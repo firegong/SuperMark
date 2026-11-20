@@ -1469,6 +1469,10 @@ body.markedit-mode-preview #editor {
   flex: 1;
   overflow: auto;
   padding: 28px 32px;
+  /* --pv-* variables: per-theme preview defaults, see chrome/previewThemePresets.ts. */
+  font-family: var(--pv-font-body, inherit);
+  font-size: var(--pv-size-body, inherit);
+  color: var(--pv-text, inherit);
 }
 
 /* A readable column anchored to the left edge (not centered), in split view and Markdown view. */
@@ -1486,16 +1490,23 @@ body.markedit-mode-preview #editor {
 .markedit-preview-body h6 {
   margin-top: 24px;
   margin-bottom: 12px;
-  font-weight: 600;
+  font-family: var(--pv-font-heading, inherit);
+  font-weight: var(--pv-heading-weight, 600);
   line-height: 1.25;
 }
 
-.markedit-preview-body h1 { font-size: 28px; }
-.markedit-preview-body h2 { font-size: 24px; }
-.markedit-preview-body h3 { font-size: 20px; }
-.markedit-preview-body h4 { font-size: 17px; }
-.markedit-preview-body h5 { font-size: 15px; }
-.markedit-preview-body h6 { font-size: 13px; color: var(--chrome-text-secondary); }
+.markedit-preview-body h1 { font-size: var(--pv-size-h1, 28px); color: var(--pv-h1, inherit); }
+.markedit-preview-body h2 { font-size: var(--pv-size-h2, 24px); color: var(--pv-h2, inherit); }
+.markedit-preview-body h3 { font-size: var(--pv-size-h3, 20px); color: var(--pv-h3, inherit); }
+.markedit-preview-body h4 { font-size: var(--pv-size-h4, 17px); color: var(--pv-h4, inherit); }
+.markedit-preview-body h5 { font-size: var(--pv-size-h5, 15px); color: var(--pv-h5, inherit); }
+.markedit-preview-body h6 { font-size: var(--pv-size-h6, 13px); color: var(--pv-h6, var(--chrome-text-secondary)); }
+
+.markedit-preview-body h1,
+.markedit-preview-body h2 {
+  padding-bottom: var(--pv-heading-rule-gap, 0);
+  border-bottom: var(--pv-heading-rule, none);
+}
 
 .markedit-preview-heading {
   position: relative;
@@ -1520,7 +1531,7 @@ body.markedit-mode-preview #editor {
 }
 
 .markedit-preview-body a {
-  color: var(--preview-accent, var(--chrome-accent));
+  color: var(--pv-link, var(--preview-accent, var(--chrome-accent)));
   text-decoration: none;
 }
 
@@ -1530,10 +1541,12 @@ body.markedit-mode-preview #editor {
 
 .markedit-preview-body strong {
   font-weight: 700;
+  color: var(--pv-strong, inherit);
 }
 
 .markedit-preview-body em {
   font-style: italic;
+  color: var(--pv-em, inherit);
 }
 
 .markedit-preview-body del {
@@ -1541,15 +1554,17 @@ body.markedit-mode-preview #editor {
 }
 
 .markedit-preview-body mark {
-  background: rgba(249, 191, 59, 0.35);
+  background: var(--pv-mark-bg, rgba(249, 191, 59, 0.35));
+  color: inherit;
   padding: 1px 3px;
   border-radius: 3px;
 }
 
 .markedit-preview-body code {
-  font-family: 'Cascadia Mono', Consolas, monospace;
+  font-family: var(--pv-font-code, 'Cascadia Mono', Consolas, monospace);
   font-size: 0.92em;
-  background: var(--chrome-active);
+  color: var(--pv-code-text, inherit);
+  background: var(--pv-code-bg, var(--chrome-active));
   padding: 2px 5px;
   border-radius: 4px;
 }
@@ -1558,11 +1573,12 @@ body.markedit-mode-preview #editor {
   margin: 0;
   padding: 14px 16px;
   overflow: auto;
-  background: var(--chrome-bg-solid);
+  background: var(--pv-pre-bg, var(--chrome-bg-solid));
   border-radius: 0 0 6px 6px;
 }
 
 .markedit-preview-body pre code {
+  color: inherit;
   background: transparent;
   padding: 0;
   font-size: 13px;
@@ -1572,9 +1588,9 @@ body.markedit-mode-preview #editor {
 .markedit-preview-code-block {
   position: relative;
   margin: 16px 0;
-  border: 1px solid var(--chrome-border);
+  border: 1px solid var(--pv-table-border, var(--chrome-border));
   border-radius: 6px;
-  background: var(--chrome-bg-solid);
+  background: var(--pv-pre-bg, var(--chrome-bg-solid));
 }
 
 /* Room for the language label (top left) and Copy button (top right) above the code. */
@@ -1614,8 +1630,9 @@ body.markedit-mode-preview #editor {
 .markedit-preview-body blockquote {
   margin: 14px 0;
   padding: 8px 16px;
-  border-left: 4px solid var(--chrome-accent);
-  background: var(--chrome-input-bg);
+  color: var(--pv-quote-text, inherit);
+  border-left: 4px solid var(--pv-quote-border, var(--chrome-accent));
+  background: var(--pv-quote-bg, var(--chrome-input-bg));
   border-radius: 0 6px 6px 0;
 }
 
@@ -1700,7 +1717,7 @@ body.markedit-mode-preview #editor {
 .markedit-preview-body hr {
   margin: 20px 0;
   border: none;
-  border-top: 1px solid var(--chrome-border);
+  border-top: 1px solid var(--pv-hr, var(--chrome-border));
 }
 
 .markedit-preview-table {
@@ -1713,11 +1730,12 @@ body.markedit-mode-preview #editor {
 .markedit-preview-table th,
 .markedit-preview-table td {
   padding: 8px 12px;
-  border: 1px solid var(--chrome-border);
+  border: 1px solid var(--pv-table-border, var(--chrome-border));
 }
 
 .markedit-preview-table th {
-  background: var(--chrome-active);
+  color: var(--pv-table-header-text, inherit);
+  background: var(--pv-table-header-bg, var(--chrome-active));
   font-weight: 600;
   /* Browsers center <th>; Markdown's default column alignment is left. Columns marked
      `:---:` / `---:` keep their inline text-align. */
@@ -1725,8 +1743,9 @@ body.markedit-mode-preview #editor {
 }
 
 .markedit-preview-table tbody tr:nth-child(even) {
-  background: var(--chrome-input-bg);
+  background: var(--pv-table-stripe, var(--chrome-input-bg));
 }
+
 
 .markedit-preview-image {
   max-width: 100%;
@@ -2410,4 +2429,137 @@ li.markedit-preview-task-item > p {
 /* [TOC] in a document without headings */
 .markedit-preview-body .msm-toc:empty {
   display: none;
+}
+
+/* Settings: preview styles per theme */
+
+.markedit-settings-hint {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--chrome-text-secondary);
+  margin-bottom: 10px;
+}
+
+.markedit-settings-preview-sample {
+  border: 1px solid var(--chrome-border);
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-size: 15px;
+  line-height: 1.4;
+  overflow: hidden;
+}
+
+.markedit-settings-preview-sample > div {
+  margin: 0 0 6px;
+}
+
+.markedit-settings-preview-sample > div:last-child {
+  margin-bottom: 0;
+}
+
+.markedit-settings-preview-sample {
+  font-family: var(--pv-font-body, inherit);
+  font-size: var(--pv-size-body, 15px);
+  color: var(--pv-text, inherit);
+}
+
+.markedit-settings-preview-sample-h1,
+.markedit-settings-preview-sample-h2,
+.markedit-settings-preview-sample-h3,
+.markedit-settings-preview-sample-h4,
+.markedit-settings-preview-sample-h5,
+.markedit-settings-preview-sample-h6 {
+  font-family: var(--pv-font-heading, inherit);
+  font-weight: var(--pv-heading-weight, 600);
+  line-height: 1.25;
+}
+
+/* Same defaults as the preview (.markedit-preview-body). */
+.markedit-settings-preview-sample-h1 { font-size: var(--pv-size-h1, 28px); color: var(--pv-h1, inherit); }
+.markedit-settings-preview-sample-h2 { font-size: var(--pv-size-h2, 24px); color: var(--pv-h2, inherit); }
+.markedit-settings-preview-sample-h3 { font-size: var(--pv-size-h3, 20px); color: var(--pv-h3, inherit); }
+.markedit-settings-preview-sample-h4 { font-size: var(--pv-size-h4, 17px); color: var(--pv-h4, inherit); }
+.markedit-settings-preview-sample-h5 { font-size: var(--pv-size-h5, 15px); color: var(--pv-h5, inherit); }
+.markedit-settings-preview-sample-h6 { font-size: var(--pv-size-h6, 13px); color: var(--pv-h6, inherit); opacity: 0.8; }
+
+.markedit-settings-preview-sample-h1,
+.markedit-settings-preview-sample-h2 {
+  padding-bottom: var(--pv-heading-rule-gap, 0);
+  border-bottom: var(--pv-heading-rule, none);
+}
+
+.markedit-settings-preview-sample-link {
+  color: var(--pv-link, var(--chrome-accent));
+}
+
+.markedit-settings-preview-sample-code {
+  font-family: var(--pv-font-code, 'Cascadia Mono', Consolas, monospace);
+  font-size: 0.92em;
+  color: var(--pv-code-text, inherit);
+  background: var(--pv-code-bg, rgba(127, 127, 127, 0.18));
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.markedit-settings-preview-sample-blockquote {
+  color: var(--pv-quote-text, inherit);
+  background: var(--pv-quote-bg, transparent);
+  border-left: 3px solid var(--pv-quote-border, rgba(127, 127, 127, 0.45));
+  padding: 2px 10px;
+}
+
+.markedit-settings-preview-sample .markedit-preview-table {
+  margin: 8px 0 0;
+  font-size: 13px;
+}
+
+.markedit-settings-preview-sample .markedit-preview-table th,
+.markedit-settings-preview-sample .markedit-preview-table td {
+  padding: 4px 10px;
+}
+
+.markedit-settings-preview-styles {
+  display: grid;
+  grid-template-columns: minmax(80px, auto) minmax(0, 1fr) 64px 96px 36px 28px;
+  gap: 6px 8px;
+  align-items: center;
+}
+
+.markedit-settings-preview-styles-header {
+  font-size: 11px;
+  color: var(--chrome-text-secondary);
+}
+
+.markedit-settings-preview-styles-label {
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.markedit-settings-preview-styles .markedit-settings-text,
+.markedit-settings-preview-styles .markedit-settings-number,
+.markedit-settings-preview-styles .markedit-settings-select {
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.markedit-settings-preview-color {
+  width: 36px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--chrome-border);
+  border-radius: 6px;
+  background: none;
+  cursor: pointer;
+}
+
+.markedit-settings-preview-color.is-unset {
+  opacity: 0.45;
+}
+
+.markedit-settings-preview-reset {
+  width: 28px;
+  height: 26px;
+  padding: 0;
+  justify-content: center;
 }

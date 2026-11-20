@@ -174,6 +174,10 @@ pub struct UserSettings {
     /// Command for local D2.
     #[serde(rename = "preview.d2Command")]
     pub d2_command: String,
+    /// Preview typography per theme (font, size, weight and color of the body text, headings,
+    /// links, code and blockquotes), keyed by theme id or `extension:<script file name>`.
+    #[serde(rename = "preview.themeStyles")]
+    pub preview_theme_styles: Value,
 }
 
 impl Default for UserSettings {
@@ -210,6 +214,7 @@ impl Default for UserSettings {
             diagram_rendering: "auto".to_string(),
             plantuml_command: "plantuml".to_string(),
             d2_command: "d2".to_string(),
+            preview_theme_styles: json!({}),
         }
     }
 }
@@ -329,6 +334,10 @@ impl UserSettings {
             obj.insert("diagramRendering".to_string(), json!(self.diagram_rendering));
             obj.insert("plantumlCommand".to_string(), json!(self.plantuml_command));
             obj.insert("d2Command".to_string(), json!(self.d2_command));
+            obj.insert(
+                "previewThemeStyles".to_string(),
+                self.preview_theme_styles.clone(),
+            );
         }
         val
     }
@@ -383,6 +392,7 @@ fn canonical_setting_key(key: &str) -> Option<&'static str> {
         "preview.diagramRendering" | "diagramRendering" => Some("preview.diagramRendering"),
         "preview.plantumlCommand" | "plantumlCommand" => Some("preview.plantumlCommand"),
         "preview.d2Command" | "d2Command" => Some("preview.d2Command"),
+        "preview.themeStyles" | "previewThemeStyles" => Some("preview.themeStyles"),
         _ => None,
     }
 }
@@ -580,6 +590,8 @@ impl SettingsManager {
         let live_preview = settings.live_preview;
         let theme_extension_json =
             serde_json::to_string(&settings.theme_extension).unwrap_or_else(|_| "\"\"".to_string());
+        let preview_theme_styles_json = serde_json::to_string(&settings.preview_theme_styles)
+            .unwrap_or_else(|_| "{}".to_string());
         let reduce_trans_str = if settings.reduce_transparency {
             "true"
         } else {
@@ -625,6 +637,7 @@ impl SettingsManager {
   window.chromeUI?.setMarkdownRenderer?.({renderer_json});
   window.chromeUI?.setEditorLivePreview?.({live_preview});
   window.chromeUI?.setThemeExtension?.({theme_extension_json});
+  window.chromeUI?.setPreviewThemeStyles?.({preview_theme_styles_json});
 }})();"#
         )
     }
@@ -736,5 +749,24 @@ mod tests {
         assert!(mgr
             .build_live_sync_js(&with_renderer)
             .contains("window.chromeUI?.setMarkdownRenderer?.(\"super\")"));
+    }
+
+    #[test]
+    fn persists_preview_theme_styles_and_syncs_them_to_windows() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let mgr = SettingsManager::with_dir(tmp.path());
+        assert_eq!(mgr.load_user_settings().preview_theme_styles, json!({}));
+
+        let styles = json!({ "dracula": { "h1": { "fontSize": 32, "color": "#ff79c6" } } });
+        let updated = mgr
+            .update_user_settings(&json!({ "previewThemeStyles": styles }))
+            .expect("update preview theme styles");
+        assert_eq!(updated.preview_theme_styles, styles);
+        assert_eq!(mgr.load_user_settings().preview_theme_styles, styles);
+        assert_eq!(updated.to_frontend_value()["previewThemeStyles"], styles);
+        assert_eq!(updated.to_frontend_value()["preview.themeStyles"], styles);
+        assert!(mgr
+            .build_live_sync_js(&updated)
+            .contains("setPreviewThemeStyles?.({\"dracula\""));
     }
 }

@@ -651,6 +651,7 @@ describe('Settings Modal', () => {
     diagramRendering: 'auto',
     plantumlCommand: 'plantuml',
     d2Command: 'd2',
+    previewThemeStyles: {},
   };
 
   const tick = () => new Promise(resolve => { setTimeout(resolve, 0); });
@@ -713,8 +714,8 @@ describe('Settings Modal', () => {
     expect(document.querySelector('.markedit-chrome-settings-title')?.textContent).toBe('Settings');
 
     const tabs = document.querySelectorAll('.markedit-chrome-settings-tab');
-    expect(tabs.length).toBe(4);
-    expect(Array.from(tabs).map(tab => tab.textContent)).toEqual(['Editor', 'Assistant', 'General', 'Window']);
+    expect(tabs.length).toBe(5);
+    expect(Array.from(tabs).map(tab => tab.textContent)).toEqual(['Editor', 'Preview', 'Assistant', 'General', 'Window']);
 
     const themeSelect = document.querySelector('.markedit-settings-theme-select') as HTMLSelectElement;
     expect(themeSelect).not.toBeNull();
@@ -825,6 +826,77 @@ describe('Settings Modal', () => {
     await tick();
 
     expect(document.body.textContent).toContain('Reduce Transparency');
+  });
+
+  test('Preview tab saves per-theme preview styles and applies them to the preview', async () => {
+    (window.config as { theme?: string }).theme = 'github-light';
+    // The host keeps what was saved.
+    let saved: UserSettings = { ...sampleSettings };
+    settingsInvokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+      if (cmd === 'settings_update') {
+        saved = { ...saved, ...(args?.patch as Partial<UserSettings>) };
+      }
+      return saved;
+    });
+    (window.chromeUI as ChromeUI).openSettings('preview');
+    await tick();
+
+    const themeSelect = document.querySelector('.markedit-chrome-settings-body select') as HTMLSelectElement;
+    expect(themeSelect.value).toBe('github-light');
+
+    const size = document.querySelector('input[data-element="h1"][data-property="fontSize"]') as HTMLInputElement;
+    size.value = '32';
+    size.dispatchEvent(new Event('change'));
+    await tick();
+
+    expect(settingsInvokeMock).toHaveBeenCalledWith('settings_update', {
+      patch: { previewThemeStyles: { 'github-light': { h1: { fontSize: 32 } } } },
+    });
+    expect(document.getElementById('markedit-preview-theme-styles')?.textContent)
+      .toContain('.markedit-preview-body h1 { font-size: 32px; }');
+
+    const color = document.querySelector('input[data-element="body"][data-property="color"]') as HTMLInputElement;
+    color.value = '#336699';
+    color.dispatchEvent(new Event('change'));
+    await tick();
+    expect(document.getElementById('markedit-preview-theme-styles')?.textContent)
+      .toContain('.markedit-preview-body { color: #336699; }');
+
+    // Styles of another theme are kept apart and not applied to this one.
+    const otherTheme = document.querySelector('.markedit-chrome-settings-body select') as HTMLSelectElement;
+    otherTheme.value = 'dracula';
+    otherTheme.dispatchEvent(new Event('change'));
+    await tick();
+    expect((document.querySelector('input[data-element="h1"][data-property="fontSize"]') as HTMLInputElement).value).toBe('');
+    expect(document.getElementById('markedit-preview-theme-styles')?.textContent).toContain('font-size: 32px');
+
+    window.chromeUI?.setPreviewThemeStyles({});
+  });
+
+  test('preview styles follow the theme in use', () => {
+    const config = window.config as { theme?: string; themeExtension?: string };
+    config.theme = 'github-light';
+    config.themeExtension = '';
+    window.chromeUI?.setPreviewThemeStyles({
+      'github-light': { h2: { color: '#112233', fontWeight: 700 } },
+      dracula: { h2: { fontFamily: 'Georgia; } body { display: none', fontSize: 500 } },
+      bogus: 'not an object',
+    });
+    const css = () => document.getElementById('markedit-preview-theme-styles')?.textContent ?? '';
+    expect(css()).toContain('h2 { font-weight: 700; color: #112233; }');
+
+    config.theme = 'dracula';
+    window.dispatchEvent(new Event('editor-colors-changed'));
+    // Values are sanitized: nothing escapes the declaration, sizes are clamped.
+    expect(css()).toContain('h2 { font-family: Georgia  body  display: none; font-size: 96px; }');
+    expect(css()).not.toContain('}  body {');
+
+    config.theme = 'cobalt';
+    window.dispatchEvent(new Event('editor-colors-changed'));
+    expect(document.getElementById('markedit-preview-theme-styles')).toBeNull();
+
+    window.chromeUI?.setPreviewThemeStyles({});
+    config.theme = 'github-light';
   });
 
   test('Get More Themes opens Extensions Manager', async () => {
@@ -1505,6 +1577,7 @@ describe('Settings Modal Window Controls', () => {
     diagramRendering: 'auto',
     plantumlCommand: 'plantuml',
     d2Command: 'd2',
+    previewThemeStyles: {},
   };
 
   beforeEach(() => {
