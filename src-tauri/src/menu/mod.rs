@@ -1454,8 +1454,10 @@ pub fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, menu_id: &str) {
         let _ = MessageDialog::new()
             .set_title("About SuperMark")
             .set_description(format!(
-                "SuperMark v{}\n\nFast, lightweight Markdown editor powered by Tauri v2 (Rust) and CodeMirror 6 CoreEditor.",
-                env!("CARGO_PKG_VERSION")
+                "SuperMark v{}\n\n{}\n\n{}",
+                env!("CARGO_PKG_VERSION"),
+                "Fast, lightweight Markdown editor powered by Tauri v2 (Rust) and CodeMirror 6 CoreEditor.",
+                crate::licenses::third_party_licenses_text()
             ))
             .set_level(MessageLevel::Info)
             .set_buttons(MessageButtons::Ok)

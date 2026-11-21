@@ -3,6 +3,7 @@ pub mod diagnostics;
 pub mod diagrams;
 pub mod document;
 pub mod extensions;
+pub mod licenses;
 pub mod menu;
 pub mod links;
 pub mod settings;
