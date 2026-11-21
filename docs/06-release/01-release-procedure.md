@@ -151,7 +151,7 @@ gh release edit v0.3.0 -R firegong/SuperMark-releases --draft=false --latest
 - 스스로 업데이트하지 않는다. 새 버전을 찾으면 대화상자의 예 = **다운로드 페이지 열기**. 새 파일로 바꿔 쓰면 된다.
 - 빌드: 워크플로의 Windows 작업이 설치 파일을 만든 뒤 `cargo build --release --features "tauri/custom-protocol portable"`로 다시 빌드해 올린다(`portable` 기능, `src-tauri/src/updates.rs`의 `PORTABLE`).
 
-업데이트 기능은 0.2.0부터 들어 있다(단일 실행 파일은 0.2.1부터). 그보다 오래된 설치본은 한 번 직접 설치해야 한다.
+업데이트 기능은 0.2.0부터 들어 있다(단일 실행 파일은 0.3.0부터). 그보다 오래된 설치본은 한 번 직접 설치해야 한다.
 
 ---
 
