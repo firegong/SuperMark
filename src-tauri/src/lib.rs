@@ -16,7 +16,7 @@ use serde_json::{json, Value};
 use settings::SettingsManager;
 use std::path::PathBuf;
 use tauri::{
-    AppHandle, Manager, Runtime, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
+    AppHandle, Manager, RunEvent, Runtime, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
     WindowEvent,
 };
 
@@ -1124,9 +1124,27 @@ pub fn run() {
             versions_delete_all,
             open_link
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running SuperMark");
+        .build(tauri::generate_context!())
+        .expect("error while building SuperMark")
+        .run(|app_handle, event| handle_opened_files(app_handle, event));
 }
+
+/// macOS double-click (or relaunch) hands the documents to open as `RunEvent::Opened`; open
+/// them through the same path used for the startup file (see `setup` above).
+#[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
+fn handle_opened_files<R: Runtime>(app_handle: &AppHandle<R>, event: RunEvent) {
+    if let RunEvent::Opened { urls } = event {
+        for url in urls {
+            if let Ok(path) = url.to_file_path() {
+                menu::open_document_path(app_handle, path);
+            }
+        }
+    }
+}
+
+/// Other platforms never emit `RunEvent::Opened`.
+#[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "android")))]
+fn handle_opened_files<R: Runtime>(_app_handle: &AppHandle<R>, _event: RunEvent) {}
 
 #[cfg(test)]
 mod tests {
