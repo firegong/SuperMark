@@ -150,8 +150,8 @@ Windows `%APPDATA%\MarkEdit`, macOS `~/Library/Application Support/MarkEdit`. �
 
 | 항목 | 내용 |
 | --- | --- |
-| 릴리스 워크플로 | `.github/workflows/release.yml`: `v*` 태그 또는 수동 실행 → Windows·macOS에서 `tauri-action`이 빌드하고, `owner`/`repo`로 공개 저장소에 **초안** 릴리스를 만든다(태그는 그 저장소의 `main`에). 두 작업이 끝나면 사람이 초안을 게시 |
-| 업데이트 파일 | `bundle.createUpdaterArtifacts: true` → Windows NSIS 설치 파일, macOS `.app.tar.gz`와 각각의 `.sig`. `includeUpdaterJson: true` → 두 플랫폼 항목을 담은 `latest.json` |
+| 릴리스 워크플로 | `.github/workflows/release.yml`: `v*` 태그 또는 수동 실행 → Windows, macOS Apple Silicon, macOS Intel(교차 컴파일)에서 `tauri-action`이 빌드하고, `owner`/`repo`로 공개 저장소에 **초안** 릴리스를 만든다(태그는 그 저장소의 `main`에). 세 작업이 끝나면 사람이 초안을 게시 |
+| 업데이트 파일 | `bundle.createUpdaterArtifacts: true` → Windows NSIS 설치 파일, macOS `.app.tar.gz`와 각각의 `.sig`. `includeUpdaterJson: true` → 세 플랫폼 항목(`windows-x86_64`, `darwin-aarch64`, `darwin-x86_64`)을 담은 `latest.json` |
 | 확인 주소 | `https://github.com/firegong/SuperMark-releases/releases/latest/download/latest.json` (초안·사전 릴리스는 제외됨) |
 | 비밀 값 | `RELEASES_TOKEN`(공개 저장소 Contents 읽기·쓰기 토큰), `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` — 소스 저장소의 Actions secrets |
 | 앱 동작 (`updates.rs`) | 메뉴 *Check for Updates…*: 결과를 항상 알림. 시작 시 확인: 새 버전이 있을 때만, 건너뛴 버전(`general.skippedUpdateVersion`)은 제외. 대화상자 예=설치, 아니요=나중에, 취소=이 버전 건너뛰기. 미저장 문서가 있으면 저장을 먼저 요청. Windows는 설치 프로그램(passive)이 이어받고, macOS는 앱을 교체한 뒤 재시작 |

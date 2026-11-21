@@ -14,13 +14,13 @@
 | 소스 저장소 (비공개) | `firegong/SuperMark` |
 | 릴리스 저장소 (공개) | `firegong/SuperMark-releases` — 설치 파일과 업데이트 파일만 올라간다 |
 | 워크플로 | `.github/workflows/release.yml` (`v*` 태그 푸시 또는 수동 실행) |
-| 빌드 대상 | Windows(NSIS·MSI 설치 파일, 단일 실행 파일), macOS Apple Silicon(`.app`/`.dmg`) |
+| 빌드 대상 | Windows(NSIS·MSI 설치 파일, 단일 실행 파일), macOS Apple Silicon·Intel 각각(`.app`/`.dmg`) |
 | 업데이트 확인 주소 | `https://github.com/firegong/SuperMark-releases/releases/latest/download/latest.json` |
 | 서명 | minisign. 공개 키는 `src-tauri/tauri.conf.json`의 `plugins.updater.pubkey`, 개인 키는 GitHub Secrets |
 
 ```text
 v* 태그 푸시 (firegong/SuperMark)
-  └─ release.yml (Windows, macOS 동시)
+  └─ release.yml (Windows, macOS Apple Silicon, macOS Intel 동시 — Intel은 Apple Silicon 러너에서 교차 컴파일)
        ├─ yarn build (에디터)  →  tauri build (서명된 설치·업데이트 파일)
        └─ tauri-action: firegong/SuperMark-releases 에 초안 릴리스 + latest.json
 사람이 초안 확인 후 게시(Publish)
@@ -90,11 +90,11 @@ git push origin <브랜치> && git push origin v0.3.0
 - 태그 이름은 `v` + 설정 파일의 버전과 같게 한다. 워크플로는 태그 푸시로 시작된다.
 - 태그 없이 다시 빌드하려면 GitHub Actions → *Release Build* → **Run workflow**(태그 이름은 `v__VERSION__`, 즉 설정 파일의 버전으로 정해진다).
 - 진행 확인: `gh run list -R firegong/SuperMark -L 3`, `gh run watch <run-id> -R firegong/SuperMark`
-- 소요 시간: 보통 15~25분(Windows가 더 오래 걸린다).
+- 작업 3개(Windows, macOS aarch64, macOS x86_64)가 동시에 돌아간다. 소요 시간: 보통 15~25분(Windows가 더 오래 걸린다).
 
 ### 3.3 초안 확인
 
-두 작업이 모두 성공하면 `firegong/SuperMark-releases`에 **초안(draft)** 릴리스가 생긴다.
+세 작업이 모두 성공하면 `firegong/SuperMark-releases`에 **초안(draft)** 릴리스가 생긴다.
 
 ```bash
 gh release view v0.3.0 -R firegong/SuperMark-releases
@@ -107,9 +107,9 @@ gh release view v0.3.0 -R firegong/SuperMark-releases
 | `SuperMark_<버전>_x64-setup.exe` + `.sig` | Windows 설치 파일과 서명(업데이트에도 사용). 배포 안내는 이 파일로 |
 | `SuperMark_<버전>_x64_en-US.msi` + `.sig` | Windows MSI 설치 파일(관리 배포용) |
 | `SuperMark_<버전>_x64_portable.exe` | Windows 단일 실행 파일(설치 없이 실행, §4.1) |
-| `SuperMark_<버전>_<arch>.dmg` | macOS 설치 디스크 이미지 |
-| `SuperMark_<arch>.app.tar.gz` + `.sig` | macOS 업데이트 파일과 서명 |
-| `latest.json` | 업데이트 목록: 버전, 릴리스 노트, 플랫폼별 주소와 서명 |
+| `SuperMark_<버전>_aarch64.dmg`, `SuperMark_<버전>_x64.dmg` | macOS 설치 디스크 이미지(Apple Silicon, Intel) |
+| `SuperMark_aarch64.app.tar.gz`, `SuperMark_x64.app.tar.gz` + `.sig` | macOS 업데이트 파일과 서명(Apple Silicon, Intel) |
+| `latest.json` | 업데이트 목록: 버전, 릴리스 노트, 플랫폼별 주소와 서명(`windows-x86_64`, `darwin-aarch64`, `darwin-x86_64`) |
 
 필요하면 릴리스 노트(본문)를 고친다. 본문은 앱의 업데이트 대화상자에 그대로 표시된다(1,200자까지).
 
@@ -128,7 +128,7 @@ gh release edit v0.3.0 -R firegong/SuperMark-releases --draft=false --latest
    curl -sL https://github.com/firegong/SuperMark-releases/releases/latest/download/latest.json
    ```
 2. 이전 버전이 설치된 PC에서 SuperMark → **Check for Updates…** → 예 → 설치 후 재시작 → 다시 Check for Updates를 눌러 "is the latest version"에 새 버전 번호가 나오는지 확인.
-3. Windows와 macOS 모두 확인한다.
+3. Windows, Apple Silicon Mac, Intel Mac에서 각각 확인한다.
 
 ---
 

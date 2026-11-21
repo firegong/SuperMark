@@ -22,23 +22,32 @@ function replaceHostPlaceholders(): Plugin {
 }
 
 /**
- * Ships mermaid.js next to index.html (vendor/mermaid.min.js) instead of inlining it: the editor
- * is a single-file bundle, and Mermaid (~5 MB) is only needed when a preview has a Mermaid block,
- * so it is loaded on demand by the Mermaid diagram plugin. Works offline (Tauri serves dist/).
+ * Ships large diagram renderers next to index.html (dist/vendor/) instead of inlining them: the
+ * editor is a single-file bundle, and these are only needed when a preview has such a diagram,
+ * so the diagram plugins load them on demand. Works offline (Tauri serves dist/).
+ * - mermaid.js (~5 MB)
+ * - viz.js (~1.3 MB): Graphviz compiled to WebAssembly, for `dot` diagrams without Graphviz installed
  */
-function vendorMermaid(): Plugin {
-  const fileName = 'vendor/mermaid.min.js';
-  const source = () => readFileSync(fileURLToPath(new URL('./node_modules/mermaid/dist/mermaid.min.js', import.meta.url)));
+function vendorScripts(): Plugin {
+  const files: Record<string, string> = {
+    'vendor/mermaid.min.js': './node_modules/mermaid/dist/mermaid.min.js',
+    'vendor/viz-global.js': './node_modules/@viz-js/viz/dist/viz-global.js',
+  };
+  const source = (path: string) => readFileSync(fileURLToPath(new URL(path, import.meta.url)));
   return {
-    name: 'markedit-vendor-mermaid',
+    name: 'markedit-vendor-scripts',
     configureServer(server) {
-      server.middlewares.use(`/${fileName}`, (_req, res) => {
-        res.setHeader('Content-Type', 'text/javascript');
-        res.end(source());
-      });
+      for (const [fileName, path] of Object.entries(files)) {
+        server.middlewares.use(`/${fileName}`, (_req, res) => {
+          res.setHeader('Content-Type', 'text/javascript');
+          res.end(source(path));
+        });
+      }
     },
     generateBundle() {
-      this.emitFile({ type: 'asset', fileName, source: source() });
+      for (const [fileName, path] of Object.entries(files)) {
+        this.emitFile({ type: 'asset', fileName, source: source(path) });
+      }
     },
   };
 }
@@ -83,5 +92,5 @@ export default defineConfig({
       '@codemirror/lang-markdown': fileURLToPath(new URL('./src/@vendor/lang-markdown', import.meta.url)),
     },
   },
-  plugins: [replaceHostPlaceholders(), vendorMermaid(), vendorFonts(), viteSingleFile()],
+  plugins: [replaceHostPlaceholders(), vendorScripts(), vendorFonts(), viteSingleFile()],
 });

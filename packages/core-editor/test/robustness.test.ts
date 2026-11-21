@@ -4,6 +4,7 @@ import { join } from 'path';
 import { classHighlighter } from '@lezer/highlight';
 import { commonmarkEngine, extendedEngine, gfmEngine, gsyncEngine, micromarkEngine, superMarkdownEngine } from '../src/modules/markdown-renderer/formats';
 import type { MarkdownRendererEngine } from '../src/modules/markdown-renderer';
+import { maxHtmlNesting } from '../src/modules/markdown-renderer/core/htmlSanitizer';
 import { highlightCode } from '../src/modules/markdown-renderer/plugins/codeHighlightPlugin';
 import { highlightWithParser } from '../src/modules/markdown-renderer/plugins/syntaxHighlight';
 import { streamModes } from '../src/codeLanguages';
@@ -133,6 +134,14 @@ describe('Renderer robustness', () => {
   test.each(Object.entries(pathological))('pathological input "%s" renders in time with every renderer', (name, text) => {
     for (const engine of engines) {
       expectSafe(renderTimed(engine, text, `${engine.id} ${name}`, 4000), `${engine.id} ${name}`);
+    }
+  });
+
+  test('raw HTML nesting is capped', () => {
+    for (const engine of [superMarkdownEngine, gsyncEngine]) {
+      const html = engine.render('<div>'.repeat(5000));
+      expect((html.match(/<div>/g) ?? []).length).toBe(maxHtmlNesting);
+      expect(engine.render('<div><p>text</p></div>')).toContain('<div><p>text</p></div>');
     }
   });
 

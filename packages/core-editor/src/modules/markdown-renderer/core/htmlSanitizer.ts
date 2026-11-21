@@ -16,6 +16,16 @@ const blockedTags = new Set([
   'foreignobject', 'listing',
 ]);
 
+/** Elements without content: they never open a nesting level. */
+const voidTags = new Set(['area', 'br', 'col', 'hr', 'img', 'input', 'source', 'track', 'wbr']);
+
+/**
+ * Deepest raw HTML nesting kept in one block. Deeper start tags are shown as text: browsers
+ * flatten such trees anyway (Chromium stops nesting at 512), and very deep trees exhaust the
+ * stack of DOM code that walks them recursively.
+ */
+export const maxHtmlNesting = 256;
+
 const urlAttributes = new Set(['href', 'src', 'xlink:href', 'action', 'background', 'poster', 'cite', 'data', 'srcset', 'lowsrc', 'dynsrc']);
 
 /** Matches a single start/end tag at the beginning of the string. */
@@ -101,10 +111,14 @@ export function filterHtmlTag(tag: string): string | null {
   return `<${name}${attributes.join('')}${selfClosing === '/' ? ' /' : ''}>`;
 }
 
-/** Filters a block of raw HTML. Comments are dropped, unsafe tags become visible text. */
+/**
+ * Filters a block of raw HTML. Comments are dropped, unsafe tags become visible text, and start
+ * tags nested deeper than maxHtmlNesting are shown as text.
+ */
 export function sanitizeHtml(html: string): string {
   let output = '';
   let index = 0;
+  let depth = 0;
 
   while (index < html.length) {
     const lt = html.indexOf('<', index);
@@ -124,8 +138,18 @@ export function sanitizeHtml(html: string): string {
 
     const tag = htmlTagPattern.exec(rest);
     if (tag !== null) {
-      output += filterHtmlTag(tag[0]) ?? escapeHtml(tag[0]);
-      index = lt + tag[0].length;
+      const [source, closing, name, , selfClosing] = tag;
+      const opens = closing === '' && selfClosing === '' && !voidTags.has(name.toLowerCase());
+      const filtered = opens && depth >= maxHtmlNesting ? null : filterHtmlTag(source);
+      if (filtered !== null) {
+        if (opens) {
+          depth += 1;
+        } else if (closing === '/') {
+          depth = Math.max(0, depth - 1);
+        }
+      }
+      output += filtered ?? escapeHtml(source);
+      index = lt + source.length;
       continue;
     }
 

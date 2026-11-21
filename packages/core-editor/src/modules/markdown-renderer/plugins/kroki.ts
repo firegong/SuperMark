@@ -1,7 +1,7 @@
 import { transformBytes } from './compression';
 import { diagramPlaceholder, renderedDiagram, type DiagramPlugin, type DiagramRenderContext } from './registry';
 import { cachedDiagramHtml, renderDiagramSources } from './strategy';
-import { renderWithLocalTool } from './local';
+import { renderGraphvizLocally, renderWithLocalTool } from './local';
 
 /**
  * Diagram plugins backed by a Kroki-compatible server (https://kroki.io or self-hosted).
@@ -42,7 +42,9 @@ export async function krokiImageUrl(server: string, type: string, source: string
   return url;
 }
 
-function createDiagramPlugin(id: string, name: string, languages: string[]): DiagramPlugin {
+type LocalRenderer = (lang: string, code: string) => Promise<string>;
+
+function createDiagramPlugin(id: string, name: string, languages: string[], local: LocalRenderer = renderWithLocalTool): DiagramPlugin {
   return {
     id,
     name,
@@ -55,7 +57,7 @@ function createDiagramPlugin(id: string, name: string, languages: string[]): Dia
         name,
         lang,
         code,
-        local: async () => renderWithLocalTool(lang, code),
+        local: async () => local(lang, code),
         serverType: id,
       }, context);
     },
@@ -77,5 +79,5 @@ export const plantumlPlugin = createDiagramPlugin('plantuml', 'PlantUML', ['plan
 /** D2: local `d2` first, then the diagram server. */
 export const d2Plugin = createDiagramPlugin('d2', 'D2', ['d2']);
 
-/** Graphviz: local `dot` first, then the diagram server. */
-export const graphvizPlugin = createDiagramPlugin('graphviz', 'Graphviz', ['dot', 'graphviz']);
+/** Graphviz: local `dot`, else the bundled viz.js (Graphviz as WebAssembly), then the diagram server. */
+export const graphvizPlugin = createDiagramPlugin('graphviz', 'Graphviz', ['dot', 'graphviz'], renderGraphvizLocally);

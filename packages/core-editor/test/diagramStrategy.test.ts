@@ -1,6 +1,6 @@
 import { describe, expect, test, beforeEach, afterEach, jest } from '@jest/globals';
 import { CompressionStream as NodeCompressionStream } from 'node:stream/web';
-import { TextEncoder as NodeTextEncoder } from 'node:util';
+import { TextDecoder as NodeTextDecoder, TextEncoder as NodeTextEncoder } from 'node:util';
 import {
   renderDiagramWithPlugin,
   hydrateDiagrams,
@@ -9,12 +9,14 @@ import {
 } from '../src/modules/markdown-renderer/plugins/registry';
 import { registerBuiltinRendererPlugins } from '../src/modules/markdown-renderer/plugins/builtin';
 import { clearDiagramCache, svgToDataUrl } from '../src/modules/markdown-renderer/plugins/strategy';
-import { withIntrinsicSize } from '../src/modules/markdown-renderer/plugins/local';
+import { vizResultSvg, withIntrinsicSize } from '../src/modules/markdown-renderer/plugins/local';
+// The CommonJS build of viz.js (Graphviz as WebAssembly), as the bundled dist/vendor/viz-global.js would set it.
+import * as vizModule from '@viz-js/viz';
 
 registerBuiltinRendererPlugins();
 
-// jsdom provides neither compression streams nor image loading; WebView2 does.
-Object.assign(globalThis, { CompressionStream: NodeCompressionStream, TextEncoder: NodeTextEncoder });
+// jsdom provides neither compression streams, text decoding nor image loading; WebView2 does.
+Object.assign(globalThis, { CompressionStream: NodeCompressionStream, TextEncoder: NodeTextEncoder, TextDecoder: NodeTextDecoder });
 Object.defineProperty(HTMLImageElement.prototype, 'src', {
   configurable: true,
   get(this: HTMLImageElement) {
@@ -137,6 +139,75 @@ describe('diagram rendering strategy (local tools / server)', () => {
     const element = await renderInDocument('mermaid', 'classDiagram\nA <|-- B');
     expect(element.querySelector('img')?.getAttribute('src')).toMatch(/^https:\/\/kroki\.example\/mermaid\/svg\//);
     spy.mockRestore();
+  });
+
+  test('graphviz: the installed dot command is used first', async () => {
+    const invoke = jest.fn<Invoke>(async () => '<svg id="dot">graph</svg>');
+    mockTauri(invoke);
+
+    const element = await renderInDocument('dot', 'digraph { a -> b }');
+    expect(invoke).toHaveBeenCalledWith('diagram_render_local', { lang: 'dot', source: 'digraph { a -> b }' });
+    expect(element.querySelector('img')?.getAttribute('src')).toBe(svgToDataUrl('<svg id="dot">graph</svg>'));
+  });
+
+  test('graphviz: without dot and without the bundled viz.js, the server renders it', async () => {
+    const appendChild = document.head.appendChild.bind(document.head);
+    const spy = jest.spyOn(document.head, 'appendChild').mockImplementation(<T extends Node>(node: T): T => {
+      const result = appendChild(node);
+      setTimeout(() => node.dispatchEvent(new Event('error')), 0);
+      return result;
+    });
+
+    const element = await renderInDocument('graphviz', 'digraph { server -> fallback }');
+    expect(element.querySelector('img')?.getAttribute('src')).toMatch(/^https:\/\/kroki\.example\/graphviz\/svg\//);
+    spy.mockRestore();
+  });
+
+  describe('graphviz with the bundled viz.js', () => {
+    beforeEach(() => {
+      (window as unknown as { Viz?: unknown }).Viz = vizModule;
+    });
+
+    afterEach(() => {
+      delete (window as unknown as { Viz?: unknown }).Viz;
+    });
+
+    test('dot not installed: viz.js renders the graph offline', async () => {
+      mockTauri(async () => {
+        // Tauri rejects command errors with plain strings.
+        // eslint-disable-next-line @typescript-eslint/only-throw-error
+        throw 'not-installed: \'dot\' was not found on PATH';
+      });
+
+      const element = await renderInDocument('dot', 'digraph { rankdir=LR; 안녕 -> world }');
+      const src = element.querySelector('img')?.getAttribute('src') ?? '';
+      expect(src.startsWith('data:image/svg+xml;base64,')).toBe(true);
+      const svg = new TextDecoder().decode(Uint8Array.from(atob(src.slice(src.indexOf(',') + 1)), char => char.charCodeAt(0)));
+      expect(svg).toContain('<svg');
+      expect(svg).toContain('안녕');
+    });
+
+    test('outside the desktop app viz.js renders too, even with "local only"', async () => {
+      setDiagramRendering('local');
+      const element = await renderInDocument('graphviz', 'graph { a -- b -- c }');
+      expect(element.classList.contains('is-rendered')).toBe(true);
+    });
+
+    test('a DOT error from viz.js is shown, not sent to the server', async () => {
+      const element = await renderInDocument('dot', 'digraph { a -> }');
+      expect(element.classList.contains('is-error')).toBe(true);
+      expect(element.textContent).toMatch(/Graphviz: .*syntax error/i);
+      expect(element.querySelector('img')).toBeNull();
+    });
+  });
+
+  test('viz.js results: the SVG, or Graphviz\'s error messages without warnings', () => {
+    expect(vizResultSvg({ status: 'success', output: '<svg/>', errors: [{ level: 'warning', message: 'w' }] })).toBe('<svg/>');
+    expect(() => vizResultSvg({
+      status: 'failure',
+      errors: [{ level: 'warning', message: 'ignored' }, { level: 'error', message: ' syntax error in line 1 ' }],
+    })).toThrow('syntax error in line 1');
+    expect(() => vizResultSvg({ status: 'failure', errors: [] })).toThrow('the graph could not be rendered');
   });
 
   test('mermaid SVGs get an intrinsic size so <img> shows them at their real size', () => {
