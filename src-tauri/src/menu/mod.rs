@@ -1652,9 +1652,16 @@ pub fn open_document_path<R: Runtime>(app: &AppHandle<R>, path: PathBuf) {
         s.is_dirty || s.file_path.is_some() || !s.content_cache.is_empty()
     });
 
+    if target.is_none() {
+        // macOS hands the document over via `RunEvent::Opened` before the main window
+        // is built (see `setup`); queue it instead of creating a second window.
+        doc_mgr.push_pending_open(path);
+        return;
+    }
+
     // Reuse the focused window only while it is still an empty, untouched document;
-    // otherwise (or when no window is open) open the file in a new window.
-    if is_busy || target.is_none() {
+    // otherwise open the file in a new window.
+    if is_busy {
         let _ = create_editor_window(app, Some(path));
         refresh_app_menu(app);
     } else if let Some(webview) = target {

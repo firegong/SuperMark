@@ -369,6 +369,9 @@ fn file_mtime_secs(path: &Path) -> Option<u64> {
 pub struct DocumentManager {
     sessions: Mutex<HashMap<String, DocumentSession>>,
     recent_files: Mutex<Vec<PathBuf>>,
+    /// Files handed over by macOS via `RunEvent::Opened` before the main window
+    /// (see `setup`); they are opened into it instead of creating a second window.
+    pending_opens: Mutex<Vec<PathBuf>>,
     user_menu_items: Mutex<Vec<crate::bridge::generated::MenuItem>>,
     app_data_dir: PathBuf,
     versions: VersionManager,
@@ -413,6 +416,7 @@ impl DocumentManager {
             versions,
             extensions,
             secrets,
+            pending_opens: Mutex::new(Vec::new()),
         }
     }
 
@@ -514,6 +518,23 @@ impl DocumentManager {
             }
         }
         "doc-extra".to_string()
+    }
+
+    /// Queue a document the OS handed over via `RunEvent::Opened` before the main
+    /// window exists; `setup` opens them into it instead of creating a second window.
+    pub fn push_pending_open(&self, path: PathBuf) {
+        if let Ok(mut guard) = self.pending_opens.lock() {
+            if !guard.contains(&path) {
+                guard.push(path);
+            }
+        }
+    }
+
+    pub fn take_pending_opens(&self) -> Vec<PathBuf> {
+        self.pending_opens
+            .lock()
+            .map(|mut guard| std::mem::take(&mut *guard))
+            .unwrap_or_default()
     }
 
     pub fn push_recent(&self, path: PathBuf) {

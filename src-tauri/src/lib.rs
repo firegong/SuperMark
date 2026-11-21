@@ -884,6 +884,11 @@ pub fn run() {
             fit_window_to_screen(&main_window, true);
 
             let doc_mgr = app.state::<DocumentManager>();
+            // macOS double-click: open the documents the OS handed over via
+            // `RunEvent::Opened` into the main window instead of creating extra ones.
+            for path in doc_mgr.take_pending_opens() {
+                menu::open_document_path(app_handle, path);
+            }
             let _ = doc_mgr.extensions().ensure_directories();
 
             // Check CLI arguments for initial file paths (e.g. double-click in Windows Explorer)
