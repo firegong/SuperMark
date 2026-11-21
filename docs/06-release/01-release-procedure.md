@@ -14,7 +14,7 @@
 | 소스 저장소 (비공개) | `firegong/SuperMark` |
 | 릴리스 저장소 (공개) | `firegong/SuperMark-releases` — 설치 파일과 업데이트 파일만 올라간다 |
 | 워크플로 | `.github/workflows/release.yml` (`v*` 태그 푸시 또는 수동 실행) |
-| 빌드 대상 | Windows(NSIS 설치 파일), macOS(`.app`/`.dmg`) |
+| 빌드 대상 | Windows(NSIS·MSI 설치 파일, 단일 실행 파일), macOS Apple Silicon(`.app`/`.dmg`) |
 | 업데이트 확인 주소 | `https://github.com/firegong/SuperMark-releases/releases/latest/download/latest.json` |
 | 서명 | minisign. 공개 키는 `src-tauri/tauri.conf.json`의 `plugins.updater.pubkey`, 개인 키는 GitHub Secrets |
 
@@ -104,7 +104,9 @@ gh release view v0.3.0 -R firegong/SuperMark-releases
 
 | 자산 | 용도 |
 | --- | --- |
-| `SuperMark_<버전>_x64-setup.exe` + `.sig` | Windows 설치 파일과 서명(업데이트에도 사용) |
+| `SuperMark_<버전>_x64-setup.exe` + `.sig` | Windows 설치 파일과 서명(업데이트에도 사용). 배포 안내는 이 파일로 |
+| `SuperMark_<버전>_x64_en-US.msi` + `.sig` | Windows MSI 설치 파일(관리 배포용) |
+| `SuperMark_<버전>_x64_portable.exe` | Windows 단일 실행 파일(설치 없이 실행, §4.1) |
 | `SuperMark_<버전>_<arch>.dmg` | macOS 설치 디스크 이미지 |
 | `SuperMark_<arch>.app.tar.gz` + `.sig` | macOS 업데이트 파일과 서명 |
 | `latest.json` | 업데이트 목록: 버전, 릴리스 노트, 플랫폼별 주소와 서명 |
@@ -141,7 +143,15 @@ gh release edit v0.3.0 -R firegong/SuperMark-releases --draft=false --latest
 | 서명 불일치 | 설치하지 않음 (오류는 `logs/markedit.log`) |
 | Windows | NSIS 설치 프로그램이 passive 모드(진행 창만 표시)로 이어받고 앱이 종료·재시작 |
 
-업데이트 기능은 0.2.0부터 들어 있다. 그보다 오래된 설치본은 한 번 직접 설치해야 한다.
+### 4.1 Windows 단일 실행 파일 (portable)
+
+- `SuperMark_<버전>_x64_portable.exe` 하나로 실행된다. 에디터·폰트·Mermaid가 실행 파일에 포함되어 있다.
+- WebView2 런타임이 PC에 있어야 한다(Windows 10·11은 대부분 기본 설치). 시작 메뉴·파일 연결은 없다.
+- 설정·백업은 설치 버전과 같은 `%APPDATA%\MarkEdit`를 쓴다.
+- 스스로 업데이트하지 않는다. 새 버전을 찾으면 대화상자의 예 = **다운로드 페이지 열기**. 새 파일로 바꿔 쓰면 된다.
+- 빌드: 워크플로의 Windows 작업이 설치 파일을 만든 뒤 `cargo build --release --features "tauri/custom-protocol portable"`로 다시 빌드해 올린다(`portable` 기능, `src-tauri/src/updates.rs`의 `PORTABLE`).
+
+업데이트 기능은 0.2.0부터 들어 있다(단일 실행 파일은 0.2.1부터). 그보다 오래된 설치본은 한 번 직접 설치해야 한다.
 
 ---
 
@@ -153,6 +163,7 @@ gh release edit v0.3.0 -R firegong/SuperMark-releases --draft=false --latest
 | `Bad credentials`, `Resource not accessible by personal access token`, 404 | 토큰 만료 또는 권한 부족. 대상 저장소 `SuperMark-releases`, Contents: Read and write로 다시 만들어 등록 |
 | 서명 단계 실패(`incorrect password`, `failed to decode`) | `TAURI_SIGNING_PRIVATE_KEY`/`…_PASSWORD`가 키와 맞지 않음. 키 파일 내용과 비밀번호를 다시 등록 |
 | `Reference does not exist` / 태그 생성 실패 | 릴리스 저장소에 `main` 브랜치(첫 커밋)가 없음. README를 커밋해 `main`을 만든다 |
+| 단일 실행 파일만 없음 | Windows 작업의 마지막 단계 실패. 로그 확인 후 `gh run rerun <run-id> --failed` (설치 파일은 `--clobber`로 덮어씀) |
 | 한 OS만 실패 | 실패한 작업만 다시 실행(`gh run rerun <run-id> --failed`). 같은 초안에 자산이 추가된다 |
 | 앱이 "latest version"이라고만 함 | 릴리스가 아직 초안이거나 사전 릴리스, 또는 버전을 올리지 않음 |
 | 앱이 서명 오류로 설치 거부 | 빌드에 쓴 개인 키와 앱의 공개 키가 다름(키를 바꾼 경우). 새 공개 키가 든 버전을 직접 설치 |

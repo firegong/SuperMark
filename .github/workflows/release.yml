@@ -48,6 +48,7 @@ jobs:
           workspaces: "./src-tauri -> target"
 
       - name: Bundle installers and publish release
+        id: tauri
         uses: tauri-apps/tauri-action@v0
         env:
           # Releases are published to the public firegong/SuperMark-releases repository (the source
@@ -73,3 +74,20 @@ jobs:
           prerelease: false
           # latest.json, the update manifest read by the app, with both platforms' entries.
           includeUpdaterJson: true
+
+      # A single-file Windows build next to the installers. The executable the bundler leaves
+      # behind can carry its installer type (which the updater reads), so the portable copy is
+      # built again with the `portable` feature (only this crate recompiles); it sends updates
+      # to the download page instead of running an installer.
+      - name: Build and upload the portable executable (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          VERSION: ${{ steps.tauri.outputs.appVersion }}
+          TAG: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', steps.tauri.outputs.appVersion) || github.ref_name }}
+        working-directory: src-tauri
+        run: |
+          cargo build --release --features "tauri/custom-protocol portable"
+          cp target/release/SuperMark.exe "SuperMark_${VERSION}_x64_portable.exe"
+          gh release upload "$TAG" "SuperMark_${VERSION}_x64_portable.exe" -R firegong/SuperMark-releases --clobber

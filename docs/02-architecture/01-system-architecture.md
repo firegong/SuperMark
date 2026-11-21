@@ -141,6 +141,7 @@ Windows `%APPDATA%\MarkEdit`, macOS `~/Library/Application Support/MarkEdit`. �
 | 에디터 | `packages/core-editor`에서 `yarn build` = lint + typecheck + vite. `vite-plugin-singlefile`로 `dist/index.html` 하나에 번들하고, 큰 자산은 옆에 복사: `dist/vendor/mermaid.min.js`, `dist/fonts/`(D2Coding, Pretendard, 라이선스) |
 | 호스트 | `cargo build --release --features tauri/custom-protocol` → `target/release/supermark` (`frontendDist`의 `dist/`를 실행 파일에 포함) |
 | 설치 파일 | 릴리스 워크플로의 `tauri build`. 실행 파일 이름 `SuperMark.exe`(`mainBinaryName`), NSIS 사용자 설치, WebView2 부트스트래퍼 |
+| 단일 실행 파일 | Windows `SuperMark_<버전>_x64_portable.exe`: 웹 자산이 모두 포함된 실행 파일 하나. `portable` 기능으로 따로 빌드하며 업데이트는 다운로드 페이지로 안내 |
 | 단일 인스턴스 | `tauri-plugin-single-instance` |
 
 ### 8.1 릴리스와 앱 자체 업데이트

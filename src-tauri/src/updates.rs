@@ -8,6 +8,8 @@
 //! - At startup (release builds, `general.checkForUpdates`, default on): quietly, once; a version
 //!   the user chose to skip is not offered again.
 //! - Installing restarts the app, so it waits until every document is saved.
+//! - The portable Windows build (feature `portable`, a single exe without an installer) cannot
+//!   replace itself: it offers the download page instead.
 
 use crate::document::DocumentManager;
 use crate::settings::SettingsManager;
@@ -18,6 +20,9 @@ use tauri_plugin_updater::UpdaterExt;
 
 /// Where people can download releases by hand.
 pub const RELEASES_PAGE: &str = "https://github.com/firegong/SuperMark-releases/releases";
+
+/// The single-file build: updates are downloaded by hand.
+pub const PORTABLE: bool = cfg!(feature = "portable");
 
 /// Longest release notes shown in the dialog.
 const MAX_NOTES_CHARS: usize = 1200;
@@ -47,6 +52,17 @@ pub fn notes_excerpt(body: Option<&str>) -> String {
     }
     let cut: String = notes.chars().take(MAX_NOTES_CHARS).collect();
     format!("{cut}…")
+}
+
+/// The update dialog's text.
+pub fn offer_message(version: &str, current: &str, notes: &str, portable: bool) -> String {
+    let separator = if notes.is_empty() { "" } else { "\n\n" };
+    let choices = if portable {
+        "This portable copy cannot update itself.\n\nYes: open the download page\nNo: remind me later\nCancel: skip this version"
+    } else {
+        "Yes: download and install now (SuperMark restarts)\nNo: remind me later\nCancel: skip this version"
+    };
+    format!("SuperMark {version} is available (you have {current}).\n\n{notes}{separator}{choices}")
 }
 
 /// Whether the automatic check should offer `version` (not skipped by the user).
@@ -102,13 +118,7 @@ async fn run<R: Runtime>(app: &AppHandle<R>, interactive: bool) -> Result<(), St
     let notes = notes_excerpt(update.body.as_deref());
     let answer = AsyncMessageDialog::new()
         .set_title("SuperMark Update")
-        .set_description(format!(
-            "SuperMark {} is available (you have {}).\n\n{}{}Yes: download and install now (SuperMark restarts)\nNo: remind me later\nCancel: skip this version",
-            update.version,
-            update.current_version,
-            notes,
-            if notes.is_empty() { "" } else { "\n\n" },
-        ))
+        .set_description(offer_message(&update.version, &update.current_version, &notes, PORTABLE))
         .set_level(MessageLevel::Info)
         .set_buttons(MessageButtons::YesNoCancel)
         .show()
@@ -122,6 +132,11 @@ async fn run<R: Runtime>(app: &AppHandle<R>, interactive: bool) -> Result<(), St
             return Ok(());
         }
         UpdateChoice::Install => {}
+    }
+
+    if PORTABLE {
+        crate::menu::open_in_shell(RELEASES_PAGE);
+        return Ok(());
     }
 
     // Installing restarts the app: unsaved text would only survive as a crash backup.
@@ -161,6 +176,17 @@ mod tests {
         assert!(should_offer("0.2.0", "0.2.0", true));
         assert!(should_offer("0.3.0", "0.2.0", false));
         assert!(should_offer("0.2.0", "", false));
+    }
+
+    #[test]
+    fn the_portable_build_offers_the_download_page() {
+        let installed = offer_message("0.3.0", "0.2.0", "Notes", false);
+        assert!(installed.starts_with("SuperMark 0.3.0 is available (you have 0.2.0).\n\nNotes\n\n"));
+        assert!(installed.contains("download and install now"));
+        let portable = offer_message("0.3.0", "0.2.0", "", true);
+        assert!(portable.contains("cannot update itself"));
+        assert!(portable.contains("open the download page"));
+        assert!(!portable.contains("\n\n\n"));
     }
 
     #[test]
