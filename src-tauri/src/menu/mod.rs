@@ -1671,11 +1671,13 @@ pub fn open_document_path<R: Runtime>(app: &AppHandle<R>, path: PathBuf) {
         });
 
         match loaded {
-            Ok((_text, title)) => {
-                crate::diagnostics::log(&format!("opened {} in window {target_label}", path.display()));
+            Ok((text, title)) => {
+                crate::diagnostics::log(&format!("opened {} in window {target_label} ({} chars)", path.display(), text.chars().count()));
                 doc_mgr.push_recent(path);
                 refresh_app_menu(app);
                 let _ = webview.set_title(&title);
+                let _ = webview.set_focus();
+                let _ = webview.eval(&WebBridge::reset_editor(&text));
                 let _ = webview.eval(&WebBridge::reload_document());
                 crate::persist_last_session(app, None);
             }

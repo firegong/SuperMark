@@ -537,6 +537,20 @@ impl DocumentManager {
             .unwrap_or_default()
     }
 
+    /// Takes a single pending open (if any) without draining the whole queue.
+    pub fn take_one_pending_open(&self) -> Option<PathBuf> {
+        self.pending_opens
+            .lock()
+            .ok()
+            .and_then(|mut guard| {
+                if guard.is_empty() {
+                    None
+                } else {
+                    Some(guard.remove(0))
+                }
+            })
+    }
+
     pub fn push_recent(&self, path: PathBuf) {
         let mut recent = self.recent_files.lock().expect("recent_files lock");
         recent.retain(|p| p != &path);

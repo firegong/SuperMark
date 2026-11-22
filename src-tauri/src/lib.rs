@@ -790,6 +790,7 @@ pub fn create_editor_window<R: Runtime>(
         .initialization_script(&init_script)
         .build()?;
     fit_window_to_screen(&window, false);
+    let _ = window.set_focus();
     persist_last_session(app, None);
     Ok(window)
 }
@@ -878,17 +879,23 @@ pub fn run() {
                 .find(|window| window.label == "main")
                 .cloned()
                 .ok_or("tauri.conf.json has no \"main\" window")?;
-            let main_window = WebviewWindowBuilder::from_config(app_handle, &main_config)?
+            let main_window = WebviewWindowBuilder::new(app_handle, "main", WebviewUrl::App("index.html".into()))
+                .title(&main_config.title)
+                .inner_size(main_config.width, main_config.height)
+                .min_inner_size(main_config.min_width.unwrap_or(420.0), main_config.min_height.unwrap_or(300.0))
+                .resizable(main_config.resizable)
                 .initialization_script(&init_script)
                 .build()?;
+            let _ = main_window.show();
+            let _ = main_window.set_focus();
             fit_window_to_screen(&main_window, true);
 
             let doc_mgr = app.state::<DocumentManager>();
-            // macOS double-click: open the documents the OS handed over via
-            // `RunEvent::Opened` into the main window instead of creating extra ones.
-            for path in doc_mgr.take_pending_opens() {
-                menu::open_document_path(app_handle, path);
-            }
+            // macOS double-click: leave pending opens queued; `notifyWindowDidLoad`
+            // loads the first one into this window when the frontend is ready, so
+            // the content is reliably displayed (calling open_document_path here
+            // races the frontend load and the eval can be a no-op).
+            let _ = main_window.set_focus();
             let _ = doc_mgr.extensions().ensure_directories();
 
             // Check CLI arguments for initial file paths (e.g. double-click in Windows Explorer)

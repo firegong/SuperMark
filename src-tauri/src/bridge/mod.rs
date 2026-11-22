@@ -116,6 +116,15 @@ fn handle_core_module(
 ) -> Result<(Value, Option<String>), String> {
     match method {
         "notifyWindowDidLoad" => {
+            // macOS double-click: if the OS handed over a document before this
+            // window loaded, open it into this session now so its content is
+            // returned to the frontend instead of an empty document.
+            if let Some(path) = doc_mgr.take_one_pending_open() {
+                let _ = doc_mgr.with_session(window_label, |s| {
+                    let _ = s.load_from_path(&path);
+                    Ok::<(), String>(())
+                });
+            }
             let (initial_text, pending_restore, path) = doc_mgr.with_session(window_label, |s| {
                 (s.content_cache.clone(), s.pending_restore_text.take(), s.file_path.clone())
             });
