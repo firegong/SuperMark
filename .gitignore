@@ -34,3 +34,8 @@ Cargo.lock
 *.dmg
 *.zip
 coverage/
+
+# Icon build artifacts
+iconset*/
+SuperMark.icns
+supermark-icon.svg
