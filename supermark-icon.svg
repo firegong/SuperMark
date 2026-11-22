@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#2a5298"/>
+      <stop offset="100%" stop-color="#1a3a8f"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="1024" height="1024" rx="224" ry="224" fill="url(#bg)"/>
+  <!-- S on top, 1.5x bigger than M, stretched horizontally -->
+  <g transform="translate(512,380) scale(1.9,1)">
+    <text x="0" y="0" text-anchor="middle" dominant-baseline="middle"
+          font-family="-apple-system, 'Helvetica Neue', Arial, sans-serif"
+          font-size="510" font-weight="900" fill="#ffffff">S</text>
+  </g>
+  <!-- M below, stretched horizontally -->
+  <g transform="translate(512,800) scale(1.9,1)">
+    <text x="0" y="0" text-anchor="middle" dominant-baseline="middle"
+          font-family="-apple-system, 'Helvetica Neue', Arial, sans-serif"
+          font-size="340" font-weight="900" fill="#ffffff">M</text>
+  </g>
+  <!-- Thick UP arrow through center, large triangular head at top -->
+  <g stroke="#ffd700" stroke-width="42" stroke-linecap="round" fill="#ffd700">
+    <line x1="512" y1="924" x2="512" y2="104"/>
+    <polygon points="430,130 512,14 594,130"/>
+  </g>
+</svg>

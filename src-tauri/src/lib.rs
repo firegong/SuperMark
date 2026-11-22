@@ -702,8 +702,51 @@ async fn list_folder_tree(folder: String) -> Result<FolderNode, String> {
 }
 
 #[tauri::command]
-async fn open_document(app: AppHandle, path: String) -> Result<(), String> {
-    menu::open_document_path(&app, std::path::PathBuf::from(path));
+async fn open_document(window: WebviewWindow, app: AppHandle, path: String) -> Result<(), String> {
+    let path = std::path::PathBuf::from(path);
+    let label = window.label().to_string();
+    let doc_mgr = app.state::<DocumentManager>();
+
+    // If the current document is dirty, ask before discarding.
+    let is_dirty = doc_mgr.with_session(&label, |s| s.is_dirty);
+    if is_dirty {
+        let result = rfd::MessageDialog::new()
+            .set_title("SuperMark")
+            .set_description("The current document has unsaved changes. Discard them and open the selected file?")
+            .set_level(rfd::MessageLevel::Warning)
+            .set_buttons(rfd::MessageButtons::OkCancel)
+            .show();
+        if result != rfd::MessageDialogResult::Ok {
+            return Ok(());
+        }
+    }
+
+    let loaded = doc_mgr.with_session(&label, |s| {
+        let text = s.load_from_path(&path)?;
+        Ok::<(String, String), String>((text, s.display_title()))
+    });
+    match loaded {
+        Ok((text, title)) => {
+            doc_mgr.push_recent(path.clone());
+            if let Some(watcher) = app.try_state::<crate::document::watcher::ExternalFileWatcher>() {
+                let _ = watcher.watch(&path);
+            }
+            let _ = window.set_title(&title);
+            let _ = window.set_focus();
+            let _ = window.eval(&crate::bridge::WebBridge::set_document_path(Some(&path)));
+            let _ = window.eval(&crate::bridge::WebBridge::reset_editor(&text));
+            let _ = window.eval(&crate::bridge::WebBridge::reload_document());
+            crate::persist_last_session(&app, None);
+        }
+        Err(error) => {
+            let _ = rfd::MessageDialog::new()
+                .set_title("SuperMark")
+                .set_description(format!("Failed to open file:\n{error}"))
+                .set_level(rfd::MessageLevel::Error)
+                .set_buttons(rfd::MessageButtons::Ok)
+                .show();
+        }
+    }
     Ok(())
 }
 

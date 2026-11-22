@@ -356,6 +356,14 @@ pub fn build_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> 
             &MenuItemBuilder::with_id("file.open_folder", "Open Folder...")
                 .build(app)?,
         )
+        .item(
+            &CheckMenuItemBuilder::with_id(
+                "file.autosave",
+                "Auto Save",
+            )
+            .checked(crate::settings::SettingsManager::new().load_user_settings().autosave)
+            .build(app)?,
+        )
         .item(&recent_submenu)
         .item(&reopen_encoding_submenu)
         .separator()
@@ -1182,6 +1190,28 @@ pub fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, menu_id: &str) {
                 let _ = webview.eval(&format!("window.__markeditOpenFolder?.({path_json});"));
             }
             let _ = doc_mgr; // keep
+        }
+        return;
+    }
+
+    if menu_id == "file.autosave" {
+        let mgr = crate::settings::SettingsManager::new();
+        let mut settings = mgr.load_user_settings();
+        settings.autosave = !settings.autosave;
+        let _ = mgr.save_user_settings(&settings);
+        // Update checkmark
+        if let Some(item) = app.menu().and_then(|m| m.get("file.autosave")) {
+            if let Some(check) = item.as_check_menuitem() {
+                let _ = check.set_checked(settings.autosave);
+            }
+        }
+        // Notify frontend
+        let script = format!(
+            "if (window.MarkEdit?.userSettings) {{ window.MarkEdit.userSettings.autosave = {}; }}",
+            settings.autosave
+        );
+        if let Some(webview) = focused_webview(app) {
+            let _ = webview.eval(&script);
         }
         return;
     }

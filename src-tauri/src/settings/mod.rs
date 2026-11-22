@@ -128,6 +128,9 @@ pub struct UserSettings {
     pub tab_key_behavior: i64,
     #[serde(rename = "editor.indentUnit")]
     pub indent_unit: String,
+    /// Save the document to disk automatically when the editor becomes idle.
+    #[serde(rename = "editor.autosave")]
+    pub autosave: bool,
 
     #[serde(rename = "assistant.insertFinalNewline")]
     pub insert_final_newline: bool,
@@ -239,6 +242,7 @@ impl Default for UserSettings {
             line_height: 1.5,
             tab_key_behavior: 0,
             indent_unit: "  ".to_string(),
+            autosave: true,
             insert_final_newline: false,
             trim_trailing_whitespace: false,
             suggest_while_typing: false,
@@ -329,6 +333,7 @@ impl UserSettings {
             obj.insert("lineHeight".to_string(), json!(self.line_height));
             obj.insert("tabKeyBehavior".to_string(), json!(self.tab_key_behavior));
             obj.insert("indentUnit".to_string(), json!(self.indent_unit));
+            obj.insert("autosave".to_string(), json!(self.autosave));
             obj.insert(
                 "insertFinalNewline".to_string(),
                 json!(self.insert_final_newline),

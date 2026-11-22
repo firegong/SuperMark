@@ -167,7 +167,8 @@ fn handle_core_module(
         }
         "notifyEditorDidBecomeIdle" => {
             let (is_dirty, has_path) = doc_mgr.with_session(window_label, |s| (s.is_dirty, s.file_path.is_some()));
-            if is_dirty && has_path {
+            let autosave = crate::settings::SettingsManager::new().load_user_settings().autosave;
+            if is_dirty && has_path && autosave {
                 // Auto-save to disk when the document already has a file path.
                 let script = "window.__TAURI_INTERNALS__?.invoke('save_document_content', { text: window.webModules?.core?.getEditorText?.() ?? '', saveAs: false });".to_string();
                 Ok((Value::Null, Some(script)))
