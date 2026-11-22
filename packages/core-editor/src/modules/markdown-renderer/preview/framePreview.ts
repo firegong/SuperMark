@@ -1,4 +1,5 @@
 import type { PreviewRenderer } from '../types';
+import { resolvePreviewImages } from '../../../common/documentPath';
 
 /**
  * Preview for parsers that produce a complete, self-styled HTML document (`renderDocument`, e.g.
@@ -75,6 +76,7 @@ export const framePreview: PreviewRenderer = {
         if (loaded.scrollingElement !== null) {
           loaded.scrollingElement.scrollTop = scrollTop;
         }
+        resolvePreviewImages(loaded);
         host.didLoadFrame(loaded);
       }, { once: true });
       frame.srcdoc = html;

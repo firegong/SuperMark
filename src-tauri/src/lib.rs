@@ -641,8 +641,11 @@ pub fn report_open_failure(path: &std::path::Path, error: &str) {
 #[tauri::command]
 async fn document_content(window: WebviewWindow, doc_mgr: State<'_, DocumentManager>) -> Result<Value, String> {
     let label = window.label().to_string();
-    let text = doc_mgr.with_session(&label, |s| s.content_cache.clone());
-    Ok(serde_json::json!({ "text": text }))
+    let (text, file_path) = doc_mgr.with_session(&label, |s| (s.content_cache.clone(), s.file_path.clone()));
+    Ok(serde_json::json!({
+        "text": text,
+        "filePath": file_path.map(|p| p.to_string_lossy().into_owned()),
+    }))
 }
 
 /// Installed extensions as data, for reloading them (`window.__markeditReloadExtensions__`).

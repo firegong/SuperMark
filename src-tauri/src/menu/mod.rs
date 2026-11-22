@@ -1673,6 +1673,7 @@ pub fn open_document_path<R: Runtime>(app: &AppHandle<R>, path: PathBuf) {
         match loaded {
             Ok((text, title)) => {
                 crate::diagnostics::log(&format!("opened {} in window {target_label} ({} chars)", path.display(), text.chars().count()));
+                let _ = webview.eval(&WebBridge::set_document_path(Some(&path)));
                 doc_mgr.push_recent(path);
                 refresh_app_menu(app);
                 let _ = webview.set_title(&title);

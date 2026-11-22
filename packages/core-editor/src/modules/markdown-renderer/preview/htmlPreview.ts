@@ -1,4 +1,5 @@
 import { removePreviewFrame } from './framePreview';
+import { resolvePreviewImages } from '../../../common/documentPath';
 import type { PreviewRenderer } from '../types';
 
 /**
@@ -10,6 +11,7 @@ export const htmlPreview: PreviewRenderer = {
   render(body, text, engine, host) {
     removePreviewFrame(body);
     body.innerHTML = engine.render(text);
+    resolvePreviewImages(body);
     host.didRenderHtml(body);
   },
 };

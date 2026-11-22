@@ -71,6 +71,14 @@ impl WebBridge {
         "window.__markeditReloadDocument__?.();".to_string()
     }
 
+    pub fn set_document_path(path: Option<&std::path::Path>) -> String {
+        let serialized = match path {
+            Some(p) => serde_json::to_string(&p.to_string_lossy().into_owned()).unwrap_or_else(|_| "null".to_string()),
+            None => "null".to_string(),
+        };
+        format!("window.__markeditSetDocumentPath?.({serialized});")
+    }
+
     pub fn notify_app_ready() -> String {
         Self::format_call("api", "notifyAppReady", None)
     }
@@ -144,6 +152,7 @@ fn handle_core_module(
                     "text": initial_text,
                     "restoreText": pending_restore,
                     "extensions": extensions,
+                    "filePath": path.map(|p| p.to_string_lossy().into_owned()),
                 }),
                 None,
             ))

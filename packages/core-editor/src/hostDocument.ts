@@ -1,4 +1,5 @@
 import { replaceText, resetEditor, ReplaceGranularity } from './core';
+import { setDocumentPath } from './common/documentPath';
 import { notifyAppReady } from './api/methods';
 import {
   applyThemeSelection,
@@ -67,6 +68,8 @@ export interface HostDocument {
   /** Unsaved text recovered from a backup, applied as an undoable edit. */
   restoreText?: string | null;
   extensions?: ExtensionBootstrap;
+  /** Absolute path of the document on disk, if it has been saved. */
+  filePath?: string | null;
 }
 
 interface ScriptHooks {
@@ -177,6 +180,9 @@ export async function loadHostDocument(reply: unknown): Promise<void> {
   }
 
   const document = reply as HostDocument;
+  if (typeof document.filePath === 'string' || document.filePath === null) {
+    setDocumentPath(document.filePath ?? null);
+  }
   if (isObject(document.extensions)) {
     applyExtensions({
       styles: Array.isArray(document.extensions.styles) ? document.extensions.styles : [],
@@ -211,8 +217,13 @@ export async function reloadDocumentFromHost(): Promise<void> {
   }
 
   const reply = await invoke('document_content');
-  if (isObject(reply) && typeof reply.text === 'string') {
-    await resetEditor(reply.text);
+  if (isObject(reply)) {
+    if (typeof reply.filePath === 'string' || reply.filePath === null) {
+      setDocumentPath((reply.filePath as string | null) ?? null);
+    }
+    if (typeof reply.text === 'string') {
+      await resetEditor(reply.text);
+    }
   }
 }
 
