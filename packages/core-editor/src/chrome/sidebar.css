@@ -1,0 +1,96 @@
+.markedit-sidebar-container {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+}
+
+.markedit-sidebar {
+  width: 260px;
+  min-width: 200px;
+  max-width: 400px;
+  border-right: 1px solid var(--chrome-border, #ddd);
+  display: flex;
+  flex-direction: column;
+  background: var(--chrome-bg, #f5f5f5);
+  font-size: 13px;
+  overflow: hidden;
+}
+
+.markedit-sidebar-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--chrome-border, #ddd);
+}
+
+.markedit-sidebar-tab {
+  flex: 1;
+  padding: 8px 4px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--chrome-text, #333);
+}
+
+.markedit-sidebar-tab.is-active {
+  font-weight: 600;
+  border-bottom: 2px solid var(--chrome-accent, #007aff);
+}
+
+.markedit-sidebar-pane {
+  display: none;
+  flex: 1;
+  overflow: auto;
+  padding: 4px 0;
+}
+
+.markedit-sidebar-pane.is-active {
+  display: block;
+}
+
+.markedit-filetree-dir {
+  font-weight: 600;
+  padding: 4px 8px;
+  color: var(--chrome-text, #333);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.markedit-filetree-file {
+  padding: 4px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--chrome-text, #333);
+}
+
+.markedit-filetree-file:hover {
+  background: var(--chrome-hover, rgba(0,0,0,0.05));
+}
+
+.markedit-outline-item {
+  padding: 4px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--chrome-text, #333);
+}
+
+.markedit-outline-item:hover {
+  background: var(--chrome-hover, rgba(0,0,0,0.05));
+}
+
+.markedit-sidebar-empty {
+  padding: 12px;
+  color: var(--chrome-muted, #888);
+  font-style: italic;
+}
+
+#editor {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}

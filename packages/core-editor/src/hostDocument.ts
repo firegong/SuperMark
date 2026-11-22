@@ -209,6 +209,20 @@ export async function loadHostDocument(reply: unknown): Promise<void> {
   }
 }
 
+// Reload prompt when the open file changes on disk (triggered by the Rust file watcher).
+let externalChangePending = false;
+(window as unknown as { __markeditExternalFileChanged?: (path: string) => void }).__markeditExternalFileChanged = (_path: string) => {
+  if (externalChangePending) {
+    return;
+  }
+  externalChangePending = true;
+  const reload = window.confirm('The file has been changed on disk. Reload it?');
+  externalChangePending = false;
+  if (reload) {
+    void reloadDocumentFromHost();
+  }
+};
+
 /** Fetches the window's document again (after File > Open, Reopen with Encoding, …). */
 export async function reloadDocumentFromHost(): Promise<void> {
   const invoke = invokeHost();

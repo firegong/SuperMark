@@ -166,8 +166,12 @@ fn handle_core_module(
             Ok((Value::Null, None))
         }
         "notifyEditorDidBecomeIdle" => {
-            let is_dirty = doc_mgr.with_session(window_label, |s| s.is_dirty);
-            if is_dirty {
+            let (is_dirty, has_path) = doc_mgr.with_session(window_label, |s| (s.is_dirty, s.file_path.is_some()));
+            if is_dirty && has_path {
+                // Auto-save to disk when the document already has a file path.
+                let script = "window.__TAURI_INTERNALS__?.invoke('save_document_content', { text: window.webModules?.core?.getEditorText?.() ?? '', saveAs: false });".to_string();
+                Ok((Value::Null, Some(script)))
+            } else if is_dirty {
                 let script = "window.__TAURI_INTERNALS__?.invoke('save_idle_backup', { text: window.webModules?.core?.getEditorText?.() ?? '' });".to_string();
                 Ok((Value::Null, Some(script)))
             } else {

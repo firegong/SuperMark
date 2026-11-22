@@ -638,6 +638,83 @@ pub fn report_open_failure(path: &std::path::Path, error: &str) {
 
 /// The window's current document text, pulled by the editor after File > Open and similar
 /// (`window.__markeditReloadDocument__`), so large files are not pushed through `eval`.
+#[derive(serde::Serialize)]
+struct FolderNode {
+    name: String,
+    path: String,
+    is_dir: bool,
+    children: Vec<FolderNode>,
+}
+
+fn is_markdown(path: &std::path::Path) -> bool {
+    match path.extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase()) {
+        Some(ext) => matches!(ext.as_str(), "md" | "markdown" | "mdown" | "mkd" | "mkdn" | "txt"),
+        None => false,
+    }
+}
+
+fn build_folder_tree(root: &std::path::Path) -> FolderNode {
+    let mut children = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(root) {
+        let mut dirs: Vec<std::path::PathBuf> = Vec::new();
+        let mut files: Vec<std::path::PathBuf> = Vec::new();
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if name.starts_with('.') {
+                continue;
+            }
+            if path.is_dir() {
+                dirs.push(path);
+            } else if is_markdown(&path) {
+                files.push(path);
+            }
+        }
+        dirs.sort();
+        files.sort();
+        for d in dirs {
+            children.push(build_folder_tree(&d));
+        }
+        for f in files {
+            children.push(FolderNode {
+                name: f.file_name().unwrap_or_default().to_string_lossy().into_owned(),
+                path: f.to_string_lossy().into_owned(),
+                is_dir: false,
+                children: Vec::new(),
+            });
+        }
+    }
+    FolderNode {
+        name: root.file_name().unwrap_or_default().to_string_lossy().into_owned(),
+        path: root.to_string_lossy().into_owned(),
+        is_dir: true,
+        children,
+    }
+}
+
+#[tauri::command]
+async fn list_folder_tree(folder: String) -> Result<FolderNode, String> {
+    let root = std::path::PathBuf::from(&folder);
+    if !root.is_dir() {
+        return Err("not a directory".to_string());
+    }
+    Ok(build_folder_tree(&root))
+}
+
+#[tauri::command]
+async fn open_document(app: AppHandle, path: String) -> Result<(), String> {
+    menu::open_document_path(&app, std::path::PathBuf::from(path));
+    Ok(())
+}
+
+#[tauri::command]
+async fn watch_document(app: AppHandle, path: String) -> Result<(), String> {
+    if let Some(watcher) = app.try_state::<crate::document::watcher::ExternalFileWatcher>() {
+        let _ = watcher.watch(std::path::PathBuf::from(path));
+    }
+    Ok(())
+}
+
 #[tauri::command]
 async fn document_content(window: WebviewWindow, doc_mgr: State<'_, DocumentManager>) -> Result<Value, String> {
     let label = window.label().to_string();
@@ -783,7 +860,10 @@ pub fn create_editor_window<R: Runtime>(
     }
 
     if let Some(p) = initial_path {
-        doc_mgr.push_recent(p);
+        doc_mgr.push_recent(p.clone());
+        if let Some(watcher) = app.try_state::<crate::document::watcher::ExternalFileWatcher>() {
+            let _ = watcher.watch(&p);
+        }
     }
 
     let window = WebviewWindowBuilder::new(app, &label, WebviewUrl::App("index.html".into()))
@@ -894,6 +974,44 @@ pub fn run() {
             fit_window_to_screen(&main_window, true);
 
             let doc_mgr = app.state::<DocumentManager>();
+
+            // Watch open documents for external changes so the editor can offer to reload.
+            let watcher_app = app_handle.clone();
+            if let Ok(watcher) = crate::document::watcher::ExternalFileWatcher::new(move |path: PathBuf| {
+                let app = watcher_app.clone();
+                let doc_mgr = app.state::<DocumentManager>();
+                // Find the window whose document is this file.
+                let target_label = app
+                    .webview_windows()
+                    .keys()
+                    .cloned()
+                    .find(|label| {
+                        doc_mgr
+                            .with_session(label, |s| {
+                                s.file_path.as_deref() == Some(path.as_path())
+                            })
+                    });
+                let Some(label) = target_label else {
+                    return;
+                };
+                // Ignore changes that match what we last saved (our own writes).
+                let cached = doc_mgr.with_session(&label, |s| s.content_cache.clone());
+                if let Ok(disk) = std::fs::read_to_string(&path) {
+                    if disk == cached {
+                        return;
+                    }
+                }
+                if let Some(window) = app.get_webview_window(&label) {
+                    let path_json = serde_json::to_string(&path.to_string_lossy().into_owned())
+                        .unwrap_or_else(|_| "null".to_string());
+                    let _ = window.eval(&format!(
+                        "window.__markeditExternalFileChanged?.({path_json});"
+                    ));
+                }
+            }) {
+                app.manage(watcher);
+            }
+
             // macOS double-click: leave pending opens queued; `notifyWindowDidLoad`
             // loads the first one into this window when the frontend is ready, so
             // the content is reliably displayed (calling open_document_path here
@@ -1117,6 +1235,9 @@ pub fn run() {
             diagram_render_local,
             view_state_changed,
             document_content,
+            open_document,
+            watch_document,
+            list_folder_tree,
             extensions_bootstrap,
             diagram_tools_status,
             install_extension_from_url,

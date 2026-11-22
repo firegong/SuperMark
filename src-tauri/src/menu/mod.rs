@@ -352,6 +352,10 @@ pub fn build_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> 
                 .accelerator("CmdOrCtrl+O")
                 .build(app)?,
         )
+        .item(
+            &MenuItemBuilder::with_id("file.open_folder", "Open Folder...")
+                .build(app)?,
+        )
         .item(&recent_submenu)
         .item(&reopen_encoding_submenu)
         .separator()
@@ -1165,6 +1169,23 @@ pub fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, menu_id: &str) {
         return;
     }
 
+    if menu_id == "file.open_folder" {
+        if let Some(path) = rfd::FileDialog::new().pick_folder() {
+            // Notify the focused window's frontend to show the folder in the sidebar.
+            let doc_mgr = app.state::<DocumentManager>();
+            let target_label = focused_webview(app)
+                .map(|w| w.label().to_string())
+                .unwrap_or_else(|| "main".to_string());
+            if let Some(webview) = app.get_webview_window(&target_label) {
+                let path_json = serde_json::to_string(&path.to_string_lossy().into_owned())
+                    .unwrap_or_else(|_| "null".to_string());
+                let _ = webview.eval(&format!("window.__markeditOpenFolder?.({path_json});"));
+            }
+            let _ = doc_mgr; // keep
+        }
+        return;
+    }
+
     if menu_id == "file.new" {
         let doc_mgr = app.state::<DocumentManager>();
         let is_busy = doc_mgr.with_session(&active_label, |s| {
@@ -1674,7 +1695,10 @@ pub fn open_document_path<R: Runtime>(app: &AppHandle<R>, path: PathBuf) {
             Ok((text, title)) => {
                 crate::diagnostics::log(&format!("opened {} in window {target_label} ({} chars)", path.display(), text.chars().count()));
                 let _ = webview.eval(&WebBridge::set_document_path(Some(&path)));
-                doc_mgr.push_recent(path);
+                doc_mgr.push_recent(path.clone());
+                if let Some(watcher) = app.try_state::<crate::document::watcher::ExternalFileWatcher>() {
+                    let _ = watcher.watch(&path);
+                }
                 refresh_app_menu(app);
                 let _ = webview.set_title(&title);
                 let _ = webview.set_focus();

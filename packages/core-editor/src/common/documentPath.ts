@@ -13,6 +13,16 @@ export function getDocumentPath(): string | null {
 
 export function setDocumentPath(path: string | null): void {
   (window as unknown as { __markeditDocumentPath?: string | null }).__markeditDocumentPath = path;
+  const invoke = (window as unknown as { __TAURI_INTERNALS__?: { invoke?: (cmd: string, args?: Record<string, unknown>) => Promise<unknown> } }).__TAURI_INTERNALS__?.invoke;
+  if (typeof invoke === 'function' && typeof path === 'string' && path.length > 0) {
+    void (async () => {
+      try {
+        await invoke('watch_document', { path });
+      } catch {
+        // ignore
+      }
+    })();
+  }
 }
 
 /** Parent directory of a file path (handles both / and \). */

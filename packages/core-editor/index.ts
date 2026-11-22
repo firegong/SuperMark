@@ -34,6 +34,7 @@ import { startObserving } from './src/modules/events';
 import { createScriptRunner } from './src/scriptContext';
 import { setUpQuickLook } from './src/@quicklook';
 import { initChromeUI } from './src/chrome';
+import { initSidebar } from './src/chrome/sidebar';
 
 // In release mode, window.config = "{{EDITOR_CONFIG}}" is replaced with a JSON literal
 // by the build (vite transformIndexHtml) and further extended by the native host bootstrap.
@@ -181,6 +182,7 @@ function setUpMainApp(config: Config) {
   setUp(config, loadTheme(config.theme).colors);
   startObserving();
   initChromeUI();
+  initSidebar();
 
   // Respond to reduced motion preference changes
   const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
