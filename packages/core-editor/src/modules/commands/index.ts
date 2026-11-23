@@ -19,7 +19,7 @@ import {
 } from '@codemirror/commands';
 
 import { EditCommand } from './types';
-import { scrollIntoView } from '../selection';
+// scrollIntoView no longer used here
 import formatContent from './formatContent';
 import toggleBlockWithMarks from './toggleBlockWithMarks';
 import toggleLineLeadingMark from './toggleLineLeadingMark';
@@ -172,20 +172,6 @@ export function performEditCommand(command: EditCommand) {
 }
 
 export const customizedCommandsKeymap: KeyBinding[] = [
-  {
-    key: 'Home',
-    run: () => {
-      scrollIntoView(0, 'center', 0);
-      return true;
-    },
-  },
-  {
-    key: 'End',
-    run: editor => {
-      scrollIntoView(editor.state.doc.length, 'center', 0);
-      return true;
-    },
-  },
   {
     key: 'Mod-/',
     run: toggleLineComment,

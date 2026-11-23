@@ -184,6 +184,25 @@ function setUpMainApp(config: Config) {
   initChromeUI();
   initSidebar();
 
+  // Ensure Ctrl/Cmd+S saves on all platforms (Windows WebView2 may not fire the menu accelerator).
+  let lastSaveAt = 0;
+  document.addEventListener('keydown', (event) => {
+    const mod = event.metaKey || event.ctrlKey;
+    if (!mod || event.key.toLowerCase() !== 's' || event.altKey) {
+      return;
+    }
+    event.preventDefault();
+    const now = Date.now();
+    if (now - lastSaveAt < 500) {
+      return;
+    }
+    lastSaveAt = now;
+    const invoke = (window as unknown as { __TAURI_INTERNALS__?: { invoke?: (c: string, a?: Record<string, unknown>) => Promise<unknown> } }).__TAURI_INTERNALS__?.invoke;
+    if (typeof invoke === 'function') {
+      void invoke('save_document_content', { text: (window as unknown as { webModules?: { core?: { getEditorText?: () => string } } }).webModules?.core?.getEditorText?.() ?? '', saveAs: false });
+    }
+  });
+
   // Respond to reduced motion preference changes
   const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
   reducedMotionQuery.addEventListener('change', event => applyReducedMotion(event.matches));

@@ -132,7 +132,7 @@ export function extensions(options: { lineBreak?: string }) {
         }
 
         // We use customizedCommandsKeymap instead
-        if (['Home', 'End', 'Mod-/', 'PageUp', 'PageDown'].includes(keymap.key ?? '')) {
+        if (['Mod-/', 'PageUp', 'PageDown'].includes(keymap.key ?? '')) {
           return false;
         }
 
