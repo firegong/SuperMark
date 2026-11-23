@@ -186,13 +186,13 @@ function renderFolderNode(node: FolderNode, parent: HTMLElement, depth: number):
 
     dirWrap = document.createElement('div');
     dirWrap.className = 'markedit-filetree-dirwrap';
-    dirWrap.style.paddingLeft = `${depth * 8}px`;
+    dirWrap.style.paddingLeft = `${depth * 10}px`;
     dirWrap.append(dirEl);
 
     // Children container with a vertical guide line on the left.
     childrenWrap = document.createElement('div');
     childrenWrap.className = 'markedit-filetree-children';
-    childrenWrap.style.marginLeft = `${(depth + 1) * 8 - 4}px`;
+    childrenWrap.style.marginLeft = `${(depth + 1) * 10 - 5}px`;
 
     let collapsed = false;
     const toggle = () => {
