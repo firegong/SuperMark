@@ -757,7 +757,11 @@ pub fn build_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> 
                 .build(app)?,
         )
         .separator()
-        .item(&MenuItemBuilder::with_id("view.toggle_sidebar", "Toggle Sidebar").build(app)?)
+        .item(
+            &MenuItemBuilder::with_id("view.toggle_sidebar", "Toggle Sidebar")
+                .accelerator("CmdOrCtrl+B")
+                .build(app)?,
+        )
         .separator()
         .item(&line_endings_submenu)
         .build()?;

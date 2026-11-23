@@ -10,12 +10,12 @@
   display: none;
 }
 
-/* In full preview mode the sidebar collapses; hamburger toggles it as an overlay. */
-.markedit-mode-preview .markedit-sidebar {
+/* In split mode the sidebar collapses; hamburger toggles it as an overlay. */
+.markedit-mode-split .markedit-sidebar {
   display: none;
 }
 
-.markedit-mode-preview .markedit-sidebar.is-open {
+.markedit-mode-split .markedit-sidebar.is-open {
   display: flex;
   position: fixed;
   left: 0;
@@ -42,7 +42,7 @@
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
 }
 
-.markedit-mode-preview .markedit-sidebar-hamburger {
+.markedit-mode-split .markedit-sidebar-hamburger {
   display: block;
 }
 
