@@ -112,8 +112,8 @@
 
 .markedit-filetree-children {
   border-left: 1px solid var(--chrome-border, rgba(0, 0, 0, 0.14));
-  margin-left: 6px;
-  padding-left: 8px;
+  margin-left: 4px;
+  padding-left: 6px;
   padding-top: 2px;
   padding-bottom: 2px;
 }
@@ -144,9 +144,9 @@
 .markedit-filetree-file::before {
   content: '';
   position: absolute;
-  left: -8px;
+  left: -6px;
   top: 50%;
-  width: 12px;
+  width: 10px;
   height: 1px;
   background: var(--chrome-border, rgba(0, 0, 0, 0.14));
 }
