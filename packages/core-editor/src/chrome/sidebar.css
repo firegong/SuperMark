@@ -21,6 +21,9 @@
   font-size: 13px;
   overflow: hidden;
   color: var(--chrome-text, #1d1d1f);
+  /* Keep the sidebar above the markdown preview pane so it stays accessible. */
+  position: relative;
+  z-index: 60;
 }
 
 .markedit-sidebar-tabs {
