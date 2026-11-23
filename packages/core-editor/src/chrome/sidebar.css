@@ -28,7 +28,6 @@
   overflow: hidden;
   color: var(--chrome-text, #1d1d1f);
   /* Sidebar in normal flow (no overlay). */
-  position: relative;
   opacity: 1;
 }
 
