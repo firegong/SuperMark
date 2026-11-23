@@ -84,6 +84,7 @@ function loadMermaid(): Promise<MermaidApi> {
         htmlLabels: false,
         flowchart: { htmlLabels: false },
         theme: 'default',
+        themeVariables: { background: 'transparent' },
         fontFamily: sansStack,
         // Do not draw Mermaid's error graphic into the page; errors are shown by the plugin.
         suppressErrorRendering: true,

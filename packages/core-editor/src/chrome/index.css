@@ -2319,15 +2319,15 @@ li.markedit-preview-task-item > p {
   margin: 0 auto;
 }
 
-/* Kroki SVGs have transparent backgrounds drawn for light themes. */
+/* Diagrams blend with the preview theme background. */
 .markedit-preview-body .markedit-diagram-image {
-  background: #ffffff;
+  background: var(--preview-background, Canvas);
   border-radius: 4px;
 }
 
 .markedit-preview-body svg.markedit-drawio {
-  --drawio-label-bg: #ffffff;
-  background: #ffffff;
+  --drawio-label-bg: var(--preview-background, Canvas);
+  background: var(--preview-background, Canvas);
   border-radius: 4px;
 }
 
