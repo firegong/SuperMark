@@ -170,18 +170,29 @@ function renderFolderNode(node: FolderNode, parent: HTMLElement, depth: number):
   if (node.is_dir && depth > 0) {
     const dirEl = document.createElement('div');
     dirEl.className = 'markedit-filetree-dir';
-    dirEl.style.paddingLeft = `${depth * 12}px`;
-    dirEl.textContent = `▸ ${node.name}`;
-    parent.append(dirEl);
+    dirEl.textContent = node.name;
+    const dirWrap = document.createElement('div');
+    dirWrap.className = 'markedit-filetree-dirwrap';
+    dirWrap.style.paddingLeft = `${depth * 14}px`;
+    dirWrap.append(dirEl);
+    parent.append(dirWrap);
   }
+
+  // Children container with a vertical guide line on the left.
+  const childrenWrap = document.createElement('div');
+  childrenWrap.className = 'markedit-filetree-children';
+  if (depth >= 0) {
+    childrenWrap.style.marginLeft = `${(depth + 1) * 14 - 7}px`;
+  }
+
   for (const child of node.children) {
     if (child.is_dir) {
-      renderFolderNode(child, parent, depth + 1);
+      renderFolderNode(child, childrenWrap, depth + 1);
     } else {
       const fileEl = document.createElement('div');
       fileEl.className = 'markedit-filetree-file';
-      fileEl.style.paddingLeft = `${(depth + 1) * 12}px`;
       fileEl.textContent = child.name;
+      fileEl.style.paddingLeft = '14px';
       fileEl.addEventListener('click', () => {
         const inv = invoke();
         if (inv !== undefined) {
@@ -194,8 +205,12 @@ function renderFolderNode(node: FolderNode, parent: HTMLElement, depth: number):
           })();
         }
       });
-      parent.append(fileEl);
+      childrenWrap.append(fileEl);
     }
+  }
+
+  if (node.children.length > 0) {
+    parent.append(childrenWrap);
   }
 }
 

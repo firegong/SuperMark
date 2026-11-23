@@ -75,7 +75,7 @@
 
 .markedit-filetree-dir {
   font-weight: 600;
-  padding: 5px 10px;
+  padding: 5px 8px;
   color: var(--chrome-text, #1d1d1f);
   white-space: nowrap;
   overflow: hidden;
@@ -83,17 +83,30 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  cursor: default;
+  user-select: none;
 }
 
 .markedit-filetree-dir::before {
   content: '▸';
   font-size: 10px;
-  opacity: 0.6;
+  opacity: 0.55;
   flex-shrink: 0;
+  transition: transform 0.12s ease;
+}
+
+.markedit-filetree-dirwrap {
+  display: block;
+}
+
+.markedit-filetree-children {
+  border-left: 1px solid var(--chrome-border, rgba(0, 0, 0, 0.12));
+  margin-left: 0;
+  padding-left: 0;
 }
 
 .markedit-filetree-file {
-  padding: 5px 10px 5px 22px;
+  padding: 4px 8px 4px 14px;
   cursor: pointer;
   white-space: nowrap;
   overflow: hidden;
@@ -103,14 +116,34 @@
   align-items: center;
   gap: 6px;
   border-radius: 4px;
-  margin: 1px 6px;
+  margin: 1px 6px 1px 0;
   transition: background 0.1s ease;
+  position: relative;
 }
 
 .markedit-filetree-file::before {
+  content: '';
+  position: absolute;
+  left: -7px;
+  top: 50%;
+  width: 12px;
+  height: 1px;
+  background: var(--chrome-border, rgba(0, 0, 0, 0.12));
+}
+
+.markedit-filetree-file::after {
   content: '📄';
   font-size: 12px;
   flex-shrink: 0;
+}
+
+.markedit-filetree-file:hover {
+  background: var(--chrome-hover, rgba(0, 0, 0, 0.06));
+}
+
+.markedit-filetree-file.is-active {
+  background: var(--chrome-accent-soft, rgba(0, 122, 255, 0.12));
+  color: var(--chrome-accent, #007aff);
 }
 
 .markedit-filetree-file:hover {
