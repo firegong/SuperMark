@@ -90,12 +90,20 @@
   user-select: none;
 }
 
+.markedit-filetree-dir .markedit-filetree-icon {
+  font-size: 13px;
+  flex-shrink: 0;
+  width: 16px;
+  text-align: center;
+}
+
 .markedit-filetree-dir::before {
   content: '▸';
   font-size: 10px;
   opacity: 0.55;
   flex-shrink: 0;
   transition: transform 0.12s ease;
+  order: -1;
 }
 
 .markedit-filetree-dirwrap {
@@ -103,13 +111,15 @@
 }
 
 .markedit-filetree-children {
-  border-left: 1px solid var(--chrome-border, rgba(0, 0, 0, 0.12));
-  margin-left: 0;
-  padding-left: 0;
+  border-left: 1px solid var(--chrome-border, rgba(0, 0, 0, 0.14));
+  margin-left: 6px;
+  padding-left: 8px;
+  padding-top: 2px;
+  padding-bottom: 2px;
 }
 
 .markedit-filetree-file {
-  padding: 4px 8px 4px 14px;
+  padding: 4px 8px;
   cursor: pointer;
   white-space: nowrap;
   overflow: hidden;
@@ -124,20 +134,30 @@
   position: relative;
 }
 
+.markedit-filetree-file .markedit-filetree-icon {
+  font-size: 13px;
+  flex-shrink: 0;
+  width: 16px;
+  text-align: center;
+}
+
 .markedit-filetree-file::before {
   content: '';
   position: absolute;
-  left: -7px;
+  left: -8px;
   top: 50%;
   width: 12px;
   height: 1px;
-  background: var(--chrome-border, rgba(0, 0, 0, 0.12));
+  background: var(--chrome-border, rgba(0, 0, 0, 0.14));
 }
 
-.markedit-filetree-file::after {
-  content: '📄';
-  font-size: 12px;
-  flex-shrink: 0;
+.markedit-filetree-file:hover {
+  background: var(--chrome-hover, rgba(0, 0, 0, 0.06));
+}
+
+.markedit-filetree-file.is-active {
+  background: var(--chrome-accent-soft, rgba(0, 122, 255, 0.12));
+  color: var(--chrome-accent, #007aff);
 }
 
 .markedit-filetree-file:hover {

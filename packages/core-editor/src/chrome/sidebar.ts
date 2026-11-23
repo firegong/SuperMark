@@ -170,7 +170,13 @@ function renderFolderNode(node: FolderNode, parent: HTMLElement, depth: number):
   if (node.is_dir && depth > 0) {
     const dirEl = document.createElement('div');
     dirEl.className = 'markedit-filetree-dir';
-    dirEl.textContent = node.name;
+    const icon = document.createElement('span');
+    icon.className = 'markedit-filetree-icon';
+    icon.textContent = '📁';
+    const label = document.createElement('span');
+    label.className = 'markedit-filetree-label';
+    label.textContent = node.name;
+    dirEl.append(icon, label);
     const dirWrap = document.createElement('div');
     dirWrap.className = 'markedit-filetree-dirwrap';
     dirWrap.style.paddingLeft = `${depth * 14}px`;
@@ -191,7 +197,13 @@ function renderFolderNode(node: FolderNode, parent: HTMLElement, depth: number):
     } else {
       const fileEl = document.createElement('div');
       fileEl.className = 'markedit-filetree-file';
-      fileEl.textContent = child.name;
+      const icon = document.createElement('span');
+      icon.className = 'markedit-filetree-icon';
+      icon.textContent = '📄';
+      const label = document.createElement('span');
+      label.className = 'markedit-filetree-label';
+      label.textContent = child.name;
+      fileEl.append(icon, label);
       fileEl.style.paddingLeft = '14px';
       fileEl.addEventListener('click', () => {
         const inv = invoke();
