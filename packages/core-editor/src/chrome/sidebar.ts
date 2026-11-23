@@ -19,9 +19,10 @@ function invoke(): ((cmd: string, args?: Record<string, unknown>) => Promise<unk
 }
 
 export function initSidebar(): void {
-  if (sidebarRoot !== null) {
+  if (sidebarRoot?.isConnected === true) {
     return;
   }
+  sidebarRoot = null;
   const body = document.body;
   const editor = document.getElementById('editor');
   if (editor === null) {
@@ -137,6 +138,9 @@ function setActiveTab(tab: SidebarTab): void {
 }
 
 export async function openFolder(path: string): Promise<void> {
+  if (sidebarRoot?.isConnected !== true) {
+    initSidebar();
+  }
   const inv = invoke();
   if (inv === undefined) {
     return;
@@ -238,6 +242,27 @@ export function refreshOutline(): void {
 // Register global hook used by Rust menu "Open Folder...".
 (window as unknown as { __markeditOpenFolder?: (path: string) => void }).__markeditOpenFolder = (path: string) => {
   void openFolder(path);
+};
+
+// Register global hook used by Rust menu "Toggle Sidebar".
+(window as unknown as { __markeditToggleSidebar?: () => void }).__markeditToggleSidebar = () => {
+  if (sidebarRoot?.isConnected !== true) {
+    initSidebar();
+  }
+  if (sidebarRoot === null) {
+    return;
+  }
+  const container = sidebarRoot.parentElement;
+  if (container === null) {
+    return;
+  }
+  const hidden = container.classList.toggle('sidebar-hidden');
+  sidebarRoot.style.display = hidden ? 'none' : '';
+  // adjust editor flex
+  const editor = document.getElementById('editor');
+  if (editor !== null) {
+    editor.style.flex = hidden ? '1' : '1';
+  }
 };
 
 // Register sidebar init on load.

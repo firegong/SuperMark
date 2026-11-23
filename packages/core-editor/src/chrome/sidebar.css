@@ -6,6 +6,10 @@
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI Variable Text', 'Segoe UI', 'Apple SD Gothic Neo', 'Pretendard Variable', 'Malgun Gothic', system-ui, sans-serif;
 }
 
+.markedit-sidebar-container.sidebar-hidden .markedit-sidebar {
+  display: none;
+}
+
 .markedit-sidebar {
   width: 260px;
   min-width: 200px;
