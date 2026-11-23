@@ -70,7 +70,7 @@ export function initSidebar(): void {
   const hamburger = document.createElement('button');
   hamburger.id = 'markedit-sidebar-hamburger';
   hamburger.className = 'markedit-sidebar-hamburger';
-  hamburger.textContent = '☰';
+  hamburger.textContent = '›';
   hamburger.setAttribute('aria-label', 'Toggle sidebar');
   hamburger.addEventListener('click', () => {
     if (sidebarRoot !== null) {
@@ -334,13 +334,15 @@ export function refreshOutline(): void {
 };
 
 export function sidebarVisibleWidth(): number {
-  if (sidebarRoot?.isConnected !== true) {
+  const el = sidebarRoot ?? document.getElementById('markedit-sidebar');
+  if (el?.isConnected !== true) {
     return 0;
   }
-  if (sidebarRoot.style.display === 'none') {
+  const style = window.getComputedStyle(el);
+  if (style.display === 'none') {
     return 0;
   }
-  if (sidebarRoot.classList.contains('is-open') === false && document.body.classList.contains('markedit-mode-split')) {
+  if (el.classList.contains('is-open') === false && document.body.classList.contains('markedit-mode-split')) {
     // collapsed in split mode
     return 0;
   }
