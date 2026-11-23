@@ -23,6 +23,12 @@ export function setDocumentPath(path: string | null): void {
       }
     })();
   }
+  // Re-resolve images now that the document path is known (covers late renders).
+  try {
+    resolvePreviewImages(document);
+  } catch {
+    // ignore
+  }
 }
 
 /** Parent directory of a file path (handles both / and \). */
@@ -69,13 +75,16 @@ export function resolveImageUrl(src: string): string | null {
 
 /** Walks `container` and rewrites relative `<img src>` to asset URLs. */
 export function resolvePreviewImages(container: ParentNode): void {
+  const path = getDocumentPath();
   const images = container.querySelectorAll('img');
+  console.log('[documentPath] resolvePreviewImages: docPath=', path, 'imgCount=', images.length);
   images.forEach(img => {
     const src = img.getAttribute('src');
     if (src === null) {
       return;
     }
     const resolved = resolveImageUrl(src);
+    console.log('[documentPath] img src=', src, '->', resolved);
     if (resolved !== null) {
       img.setAttribute('src', resolved);
     }
