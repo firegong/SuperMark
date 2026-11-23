@@ -333,6 +333,25 @@ export function refreshOutline(): void {
   }
 };
 
+export function sidebarVisibleWidth(): number {
+  if (sidebarRoot?.isConnected !== true) {
+    return 0;
+  }
+  if (sidebarRoot.style.display === 'none') {
+    return 0;
+  }
+  if (sidebarRoot.classList.contains('is-open') === false && document.body.classList.contains('markedit-mode-split')) {
+    // collapsed in split mode
+    return 0;
+  }
+  return 260;
+}
+
+// Expose sidebar width to the preview layout.
+if (typeof window !== 'undefined') {
+  (window as unknown as { __markeditSidebarWidth?: () => number }).__markeditSidebarWidth = sidebarVisibleWidth;
+}
+
 // Register sidebar init on load.
 if (typeof window !== 'undefined') {
   window.addEventListener('DOMContentLoaded', () => {

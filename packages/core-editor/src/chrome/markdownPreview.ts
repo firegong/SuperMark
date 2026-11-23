@@ -772,7 +772,19 @@ function applyLayout(): void {
   createPreviewPane();
   if (previewState.pane !== null) {
     previewState.pane.style.display = '';
-    previewState.pane.style.width = previewState.mode === 'preview' ? '100%' : `${(1 - previewState.splitRatio) * 100}%`;
+    if (previewState.mode === 'preview') {
+      const sidebarWidth = (window as unknown as { __markeditSidebarWidth?: () => number }).__markeditSidebarWidth?.() ?? 0;
+      if (sidebarWidth > 0) {
+        previewState.pane.style.left = `${sidebarWidth}px`;
+        previewState.pane.style.width = `calc(100% - ${sidebarWidth}px)`;
+      } else {
+        previewState.pane.style.left = '0px';
+        previewState.pane.style.width = '100%';
+      }
+    } else {
+      previewState.pane.style.left = '';
+      previewState.pane.style.width = `${(1 - previewState.splitRatio) * 100}%`;
+    }
   }
 
   body.classList.add(previewState.mode === 'split' ? 'markedit-mode-split' : 'markedit-mode-preview');
@@ -788,7 +800,7 @@ function applyLayout(): void {
     }
   } else if (editor !== null) {
     editor.style.width = '';
-    editor.style.display = '';
+    editor.style.display = 'none';
   }
 
   syncEditorStyles();
