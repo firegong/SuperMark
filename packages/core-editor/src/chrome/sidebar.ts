@@ -54,8 +54,12 @@ export function initSidebar(): void {
   outlineContainer.className = 'markedit-sidebar-pane';
 
   sidebar.append(tabs, filesContainer, outlineContainer);
+  const chromeRoot = document.querySelector('.markedit-chrome-root');
   container.append(sidebar, editor);
   body.replaceChildren(container);
+  if (chromeRoot !== null) {
+    body.appendChild(chromeRoot);
+  }
 
   sidebarRoot = sidebar;
 }

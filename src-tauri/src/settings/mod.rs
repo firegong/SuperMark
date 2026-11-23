@@ -479,7 +479,7 @@ impl SettingsManager {
     pub fn new() -> Self {
         let base = dirs::config_dir().unwrap_or_else(|| PathBuf::from("."));
         Self {
-            config_dir: base.join("MarkEdit"),
+            config_dir: base.join("SuperMark"),
         }
     }
 
