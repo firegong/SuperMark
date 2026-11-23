@@ -315,11 +315,14 @@ export function refreshOutline(): void {
   }
   const hidden = container.classList.toggle('sidebar-hidden');
   sidebar.style.display = hidden ? 'none' : '';
-  // Let the editor take the freed space.
+  // Hide the opaque container background so no empty panel remains.
+  container.style.background = hidden ? 'transparent' : '';
+  // Let the editor take the freed space and notify CodeMirror to re-measure.
   const editor = document.getElementById('editor');
   if (editor !== null) {
     editor.style.flex = hidden ? '1 1 100%' : '';
   }
+  window.dispatchEvent(new Event('resize'));
 };
 
 export function sidebarVisibleWidth(): number {
