@@ -333,7 +333,7 @@ pub fn build_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> 
     }
     let pandoc_submenu = pandoc_builder
         .separator()
-        .item(&MenuItemBuilder::with_id("file.pandoc.learn", "Learn More...").build(app)?)
+        // (MarkEdit wiki link removed)
         .build()?;
 
     let file_menu = SubmenuBuilder::new(app, "File")
@@ -835,17 +835,9 @@ pub fn build_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> 
         .build()?;
 
     let help_menu = SubmenuBuilder::new(app, "Help")
-        .item(&MenuItemBuilder::with_id("help.wiki", "MarkEdit Wiki & User Manual").build(app)?)
-        .item(&MenuItemBuilder::with_id("help.customization", "Customization Guide").build(app)?)
-        .item(
-            &MenuItemBuilder::with_id("help.development", "Extension Development Guide")
-                .build(app)?,
-        )
-        .separator()
         .item(&MenuItemBuilder::with_id("help.homepage", "SuperMark Home Page").build(app)?)
         .item(&MenuItemBuilder::with_id("help.releases", "Version History & Releases").build(app)?)
         .item(&MenuItemBuilder::with_id("help.issue", "Report an Issue...").build(app)?)
-        .item(&MenuItemBuilder::with_id("help.upstream", "About Upstream MarkEdit").build(app)?)
         .build()?;
 
     MenuBuilder::new(app)
@@ -1165,6 +1157,9 @@ pub fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, menu_id: &str) {
     }
 
     if menu_id == "file.open" {
+        // Capture the window that had focus before the modal dialog steals it,
+        // so the chosen file opens in the window the user is actually working in.
+        let target = focused_webview(app);
         if let Some(path) = rfd::FileDialog::new()
             .add_filter(
                 "Markdown & TextPack",
@@ -1172,7 +1167,41 @@ pub fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, menu_id: &str) {
             )
             .pick_file()
         {
-            open_document_path(app, path);
+            // Open directly into the captured window instead of creating a new one.
+            if let Some(w) = target {
+                let label = w.label().to_string();
+                let doc_mgr = app.state::<DocumentManager>();
+                let is_dirty = doc_mgr.with_session(&label, |s| s.is_dirty);
+                if is_dirty {
+                    let result = rfd::MessageDialog::new()
+                        .set_title("SuperMark")
+                        .set_description("The current document has unsaved changes. Discard them and open the selected file?")
+                        .set_level(rfd::MessageLevel::Warning)
+                        .set_buttons(rfd::MessageButtons::OkCancel)
+                        .show();
+                    if result != rfd::MessageDialogResult::Ok {
+                        return;
+                    }
+                }
+                let loaded = doc_mgr.with_session(&label, |s| {
+                    let text = s.load_from_path(&path)?;
+                    Ok::<(String, String), String>((text, s.display_title()))
+                });
+                if let Ok((text, title)) = loaded {
+                    doc_mgr.push_recent(path.clone());
+                    if let Some(watcher) = app.try_state::<crate::document::watcher::ExternalFileWatcher>() {
+                        let _ = watcher.watch(&path);
+                    }
+                    let _ = w.set_title(&title);
+                    let _ = w.set_focus();
+                    let _ = w.eval(&crate::bridge::WebBridge::set_document_path(Some(&path)));
+                    let _ = w.eval(&crate::bridge::WebBridge::reset_editor(&text));
+                    let _ = w.eval(&crate::bridge::WebBridge::reload_document());
+                    crate::persist_last_session(app, None);
+                }
+            } else {
+                open_document_path(app, path);
+            }
         }
         return;
     }
@@ -1407,10 +1436,6 @@ pub fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, menu_id: &str) {
     }
 
     if let Some(pandoc_fmt) = menu_id.strip_prefix("file.pandoc.") {
-        if pandoc_fmt == "learn" {
-            open_in_shell("https://github.com/MarkEdit-app/MarkEdit/wiki/Manual#copy-pandoc-command");
-            return;
-        }
         let doc_mgr = app.state::<DocumentManager>();
         if let Some(path) = doc_mgr.with_session(&active_label, |s| s.file_path.clone()) {
             let cmd = build_pandoc_command(&path, pandoc_fmt);
@@ -1539,21 +1564,6 @@ pub fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, menu_id: &str) {
         return;
     }
 
-    if menu_id == "help.wiki" {
-        open_in_shell("https://github.com/MarkEdit-app/MarkEdit/wiki");
-        return;
-    }
-
-    if menu_id == "help.customization" {
-        open_in_shell("https://github.com/MarkEdit-app/MarkEdit/wiki/Customization");
-        return;
-    }
-
-    if menu_id == "help.development" {
-        open_in_shell("https://github.com/MarkEdit-app/MarkEdit-api");
-        return;
-    }
-
     if menu_id == "help.homepage" {
         open_in_shell("https://github.com/firegong/SuperMark");
         return;
@@ -1561,11 +1571,6 @@ pub fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, menu_id: &str) {
 
     if menu_id == "help.issue" {
         open_in_shell("https://github.com/firegong/SuperMark/issues");
-        return;
-    }
-
-    if menu_id == "help.upstream" {
-        open_in_shell("https://github.com/MarkEdit-app/MarkEdit");
         return;
     }
 
