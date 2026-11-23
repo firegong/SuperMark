@@ -308,16 +308,17 @@ export function refreshOutline(): void {
   if (sidebarRoot === null) {
     return;
   }
-  const container = sidebarRoot.parentElement;
-  if (container === null) {
+  const sidebar = document.getElementById('markedit-sidebar');
+  const container = sidebar?.parentElement ?? null;
+  if (sidebar === null || container === null) {
     return;
   }
   const hidden = container.classList.toggle('sidebar-hidden');
-  sidebarRoot.style.display = hidden ? 'none' : '';
-  // adjust editor flex
+  sidebar.style.display = hidden ? 'none' : '';
+  // Let the editor take the freed space.
   const editor = document.getElementById('editor');
   if (editor !== null) {
-    editor.style.flex = hidden ? '1' : '1';
+    editor.style.flex = hidden ? '1 1 100%' : '';
   }
 };
 
