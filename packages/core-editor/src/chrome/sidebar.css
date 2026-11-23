@@ -155,6 +155,34 @@
   text-align: center;
 }
 
+.markedit-sidebar-empty-state {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 12px;
+}
+
+.markedit-sidebar-action-btn {
+  padding: 8px 12px;
+  border: 1px solid var(--chrome-border, rgba(0, 0, 0, 0.15));
+  border-radius: 6px;
+  background: var(--chrome-bg, #ffffff);
+  color: var(--chrome-text, #1d1d1f);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.1s ease, border-color 0.1s ease;
+}
+
+.markedit-sidebar-action-btn:hover {
+  background: var(--chrome-hover, rgba(0, 0, 0, 0.06));
+  border-color: var(--chrome-accent, #007aff);
+}
+
+.markedit-sidebar-action-btn.secondary {
+  background: transparent;
+}
+
 #editor {
   flex: 1;
   min-width: 0;

@@ -75,7 +75,7 @@ function renderGsync(markdown: string, options?: GsyncOptions): string {
 
 export const gsyncEngine: MarkdownRendererEngine = {
   id: 'gsync',
-  name: 'gsync Markdown',
+  name: 'gmarkdown set',
   standard: 'gsync',
   render(markdown: string, options?: MarkdownRenderOptions): string {
     return renderGsync(markdown, options as GsyncOptions | undefined);

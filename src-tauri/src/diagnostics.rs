@@ -13,7 +13,7 @@ const MAX_LOG_BYTES: u64 = 1024 * 1024;
 pub fn log_dir() -> PathBuf {
     dirs::config_dir()
         .unwrap_or_else(|| PathBuf::from("."))
-        .join("MarkEdit")
+        .join("SuperMark")
         .join("logs")
 }
 

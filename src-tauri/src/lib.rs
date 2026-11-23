@@ -702,6 +702,19 @@ async fn list_folder_tree(folder: String) -> Result<FolderNode, String> {
 }
 
 #[tauri::command]
+async fn pick_folder() -> Result<Option<String>, String> {
+    Ok(rfd::FileDialog::new().pick_folder().map(|p| p.to_string_lossy().into_owned()))
+}
+
+#[tauri::command]
+async fn pick_file() -> Result<Option<String>, String> {
+    Ok(rfd::FileDialog::new()
+        .add_filter("Markdown", &["md", "markdown", "mdown", "mkd", "txt"])
+        .pick_file()
+        .map(|p| p.to_string_lossy().into_owned()))
+}
+
+#[tauri::command]
 async fn open_document(window: WebviewWindow, app: AppHandle, path: String) -> Result<(), String> {
     let path = std::path::PathBuf::from(path);
     let label = window.label().to_string();
@@ -1119,7 +1132,7 @@ pub fn run() {
             std::thread::spawn(move || {
                 let base = dirs::config_dir()
                     .unwrap_or_else(|| std::path::PathBuf::from("."))
-                    .join("MarkEdit");
+                    .join("SuperMark");
                 let mgr = crate::extensions::ExtensionManager::new(base);
                 let config = mgr.config();
                 let behavior = config.read().update_behavior();
@@ -1279,6 +1292,8 @@ pub fn run() {
             view_state_changed,
             document_content,
             open_document,
+            pick_folder,
+            pick_file,
             watch_document,
             list_folder_tree,
             extensions_bootstrap,

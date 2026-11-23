@@ -62,6 +62,58 @@ export function initSidebar(): void {
   }
 
   sidebarRoot = sidebar;
+
+  showFilesEmptyState();
+}
+
+function showFilesEmptyState(): void {
+  if (filesContainer === null) {
+    return;
+  }
+  filesContainer.innerHTML = '';
+  const wrap = document.createElement('div');
+  wrap.className = 'markedit-sidebar-empty-state';
+
+  const openFolderBtn = document.createElement('button');
+  openFolderBtn.className = 'markedit-sidebar-action-btn';
+  openFolderBtn.textContent = 'Open Folder…';
+  openFolderBtn.addEventListener('click', () => {
+    const inv = invoke();
+    if (inv !== undefined) {
+      void (async () => {
+        try {
+          const result = await inv('pick_folder');
+          if (typeof result === 'string' && result.length > 0) {
+            await openFolder(result);
+          }
+        } catch {
+          // ignore
+        }
+      })();
+    }
+  });
+
+  const openFileBtn = document.createElement('button');
+  openFileBtn.className = 'markedit-sidebar-action-btn secondary';
+  openFileBtn.textContent = 'Open File…';
+  openFileBtn.addEventListener('click', () => {
+    const inv = invoke();
+    if (inv !== undefined) {
+      void (async () => {
+        try {
+          const result = await inv('pick_file');
+          if (typeof result === 'string' && result.length > 0) {
+            await inv('open_document', { path: result });
+          }
+        } catch {
+          // ignore
+        }
+      })();
+    }
+  });
+
+  wrap.append(openFolderBtn, openFileBtn);
+  filesContainer.append(wrap);
 }
 
 function setActiveTab(tab: SidebarTab): void {

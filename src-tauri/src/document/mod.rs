@@ -389,7 +389,7 @@ impl DocumentManager {
     pub fn new() -> Self {
         let base = dirs::config_dir()
             .unwrap_or_else(|| PathBuf::from("."))
-            .join("MarkEdit");
+            .join("SuperMark");
         Self::with_data_dir(base)
     }
 
