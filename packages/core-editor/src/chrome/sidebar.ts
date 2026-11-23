@@ -65,6 +65,19 @@ export function initSidebar(): void {
   sidebarRoot = sidebar;
 
   showFilesEmptyState();
+
+  // Hamburger button to toggle the sidebar in preview mode.
+  const hamburger = document.createElement('button');
+  hamburger.id = 'markedit-sidebar-hamburger';
+  hamburger.className = 'markedit-sidebar-hamburger';
+  hamburger.textContent = '☰';
+  hamburger.setAttribute('aria-label', 'Toggle sidebar');
+  hamburger.addEventListener('click', () => {
+    if (sidebarRoot !== null) {
+      sidebarRoot.classList.toggle('is-open');
+    }
+  });
+  document.body.appendChild(hamburger);
 }
 
 function showFilesEmptyState(): void {
