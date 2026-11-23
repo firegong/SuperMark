@@ -1450,8 +1450,8 @@ body.markedit-mode-preview #editor {
 }
 
 .markedit-mode-preview .markedit-markdown-preview-pane {
-  width: 100vw;
-  left: 0;
+  left: 260px;
+  width: calc(100vw - 260px);
 }
 
 .markedit-preview-resizer {

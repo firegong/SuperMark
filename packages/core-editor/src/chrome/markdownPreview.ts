@@ -773,14 +773,10 @@ function applyLayout(): void {
   if (previewState.pane !== null) {
     previewState.pane.style.display = '';
     if (previewState.mode === 'preview') {
-      const sidebarWidth = (window as unknown as { __markeditSidebarWidth?: () => number }).__markeditSidebarWidth?.() ?? 0;
-      if (sidebarWidth > 0) {
-        previewState.pane.style.left = `${sidebarWidth}px`;
-        previewState.pane.style.width = `calc(100% - ${sidebarWidth}px)`;
-      } else {
-        previewState.pane.style.left = '0px';
-        previewState.pane.style.width = '100%';
-      }
+      // Keep the sidebar visible on the left, like in edit mode.
+      const sidebarWidth = 260;
+      previewState.pane.style.left = `${sidebarWidth}px`;
+      previewState.pane.style.width = `calc(100% - ${sidebarWidth}px)`;
     } else {
       previewState.pane.style.left = '';
       previewState.pane.style.width = `${(1 - previewState.splitRatio) * 100}%`;
