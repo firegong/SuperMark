@@ -97,13 +97,14 @@
   text-align: center;
 }
 
-.markedit-filetree-dir::before {
-  content: '▸';
+.markedit-filetree-dir .markedit-filetree-arrow {
   font-size: 10px;
   opacity: 0.55;
   flex-shrink: 0;
   transition: transform 0.12s ease;
-  order: -1;
+  display: inline-block;
+  width: 10px;
+  text-align: center;
 }
 
 .markedit-filetree-dirwrap {
@@ -112,8 +113,8 @@
 
 .markedit-filetree-children {
   border-left: 1px solid var(--chrome-border, rgba(0, 0, 0, 0.14));
-  margin-left: 4px;
-  padding-left: 6px;
+  margin-left: 3px;
+  padding-left: 5px;
   padding-top: 2px;
   padding-bottom: 2px;
 }
@@ -144,9 +145,9 @@
 .markedit-filetree-file::before {
   content: '';
   position: absolute;
-  left: -6px;
+  left: -5px;
   top: 50%;
-  width: 10px;
+  width: 8px;
   height: 1px;
   background: var(--chrome-border, rgba(0, 0, 0, 0.14));
 }

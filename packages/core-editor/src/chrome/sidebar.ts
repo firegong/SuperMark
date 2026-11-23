@@ -167,33 +167,57 @@ function renderFolderTree(node: FolderNode): void {
 }
 
 function renderFolderNode(node: FolderNode, parent: HTMLElement, depth: number): void {
+  let dirWrap: HTMLElement | null = null;
+  let childrenWrap: HTMLElement | null = null;
+
   if (node.is_dir && depth > 0) {
     const dirEl = document.createElement('div');
     dirEl.className = 'markedit-filetree-dir';
+    const arrow = document.createElement('span');
+    arrow.className = 'markedit-filetree-arrow';
+    arrow.textContent = '▸';
     const icon = document.createElement('span');
     icon.className = 'markedit-filetree-icon';
     icon.textContent = '📁';
     const label = document.createElement('span');
     label.className = 'markedit-filetree-label';
     label.textContent = node.name;
-    dirEl.append(icon, label);
-    const dirWrap = document.createElement('div');
+    dirEl.append(arrow, icon, label);
+
+    dirWrap = document.createElement('div');
     dirWrap.className = 'markedit-filetree-dirwrap';
-    dirWrap.style.paddingLeft = `${depth * 10}px`;
+    dirWrap.style.paddingLeft = `${depth * 8}px`;
     dirWrap.append(dirEl);
+
+    // Children container with a vertical guide line on the left.
+    childrenWrap = document.createElement('div');
+    childrenWrap.className = 'markedit-filetree-children';
+    childrenWrap.style.marginLeft = `${(depth + 1) * 8 - 4}px`;
+
+    let collapsed = false;
+    const toggle = () => {
+      collapsed = !collapsed;
+      if (childrenWrap !== null) {
+        childrenWrap.style.display = collapsed ? 'none' : '';
+      }
+      arrow.style.transform = collapsed ? 'rotate(0deg)' : 'rotate(90deg)';
+      dirWrap?.classList.toggle('is-collapsed', collapsed);
+    };
+    // Start expanded.
+    arrow.style.transform = 'rotate(90deg)';
+    dirEl.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggle();
+    });
+
     parent.append(dirWrap);
   }
 
-  // Children container with a vertical guide line on the left.
-  const childrenWrap = document.createElement('div');
-  childrenWrap.className = 'markedit-filetree-children';
-  if (depth >= 0) {
-    childrenWrap.style.marginLeft = `${(depth + 1) * 10 - 5}px`;
-  }
+  const targetParent = childrenWrap !== null ? childrenWrap : parent;
 
   for (const child of node.children) {
     if (child.is_dir) {
-      renderFolderNode(child, childrenWrap, depth + 1);
+      renderFolderNode(child, targetParent, depth + 1);
     } else {
       const fileEl = document.createElement('div');
       fileEl.className = 'markedit-filetree-file';
@@ -204,7 +228,7 @@ function renderFolderNode(node: FolderNode, parent: HTMLElement, depth: number):
       label.className = 'markedit-filetree-label';
       label.textContent = child.name;
       fileEl.append(icon, label);
-      fileEl.style.paddingLeft = '10px';
+      fileEl.style.paddingLeft = '8px';
       fileEl.addEventListener('click', () => {
         const inv = invoke();
         if (inv !== undefined) {
@@ -217,12 +241,16 @@ function renderFolderNode(node: FolderNode, parent: HTMLElement, depth: number):
           })();
         }
       });
-      childrenWrap.append(fileEl);
+      targetParent.append(fileEl);
     }
   }
 
-  if (node.children.length > 0) {
-    parent.append(childrenWrap);
+  if (childrenWrap !== null && node.children.length > 0) {
+    if (dirWrap !== null) {
+      dirWrap.append(childrenWrap);
+    } else {
+      parent.append(childrenWrap);
+    }
   }
 }
 
