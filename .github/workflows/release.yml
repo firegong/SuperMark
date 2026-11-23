@@ -63,10 +63,9 @@ jobs:
         id: tauri
         uses: tauri-apps/tauri-action@v0
         env:
-          # Releases are published to the public firegong/SuperMark-releases repository (the source
-          # stays private), so in-app updates can download them without credentials.
-          # RELEASES_TOKEN: a fine-grained token with "Contents: Read and write" on that repository.
-          GITHUB_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          # Releases are published to this repository (now public), so in-app updates can download
+          # them without credentials.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Signs the update files; the matching public key is plugins.updater.pubkey in
           # src-tauri/tauri.conf.json.
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -75,7 +74,7 @@ jobs:
           projectPath: src-tauri
           args: ${{ matrix.target != '' && format('--target {0}', matrix.target) || '' }}
           owner: firegong
-          repo: SuperMark-releases
+          repo: SuperMark
           # The tag is created in the releases repository, on its default branch.
           releaseCommitish: main
           tagName: ${{ github.event_name == 'workflow_dispatch' && 'v__VERSION__' || github.ref_name }}
@@ -103,4 +102,4 @@ jobs:
         run: |
           cargo build --release --features "tauri/custom-protocol portable"
           cp target/release/SuperMark.exe "SuperMark_${VERSION}_x64_portable.exe"
-          gh release upload "$TAG" "SuperMark_${VERSION}_x64_portable.exe" -R firegong/SuperMark-releases --clobber
+          gh release upload "$TAG" "SuperMark_${VERSION}_x64_portable.exe" -R firegong/SuperMark --clobber
