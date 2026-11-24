@@ -195,6 +195,12 @@ async fn save_document_content(
         return Ok(false);
     };
 
+    // Mark this path as ignored so our own write doesn't trigger a reload prompt.
+    let app = window.app_handle();
+    if let Some(watcher) = app.try_state::<crate::document::watcher::ExternalFileWatcher>() {
+        watcher.ignore(&path);
+    }
+
     let saved_editor_text = text.clone();
     let mut formatted_text = text;
     if user_settings.trim_trailing_whitespace {
@@ -1036,7 +1042,17 @@ pub fn run() {
             if let Ok(watcher) = crate::document::watcher::ExternalFileWatcher::new(move |path: PathBuf| {
                 let app = watcher_app.clone();
                 let doc_mgr = app.state::<DocumentManager>();
-                // Find the window whose document is this file.
+                let watcher = app.try_state::<crate::document::watcher::ExternalFileWatcher>();
+
+                // Double filter: ignore self-saves.
+                if let Some(w) = &watcher {
+                    if w.is_ignored(&path) {
+                        return;
+                    }
+                }
+
+                // Find the window whose document is this file (compare normalized paths).
+                let norm = crate::document::watcher::normalize_path(&path);
                 let target_label = app
                     .webview_windows()
                     .keys()
@@ -1044,12 +1060,13 @@ pub fn run() {
                     .find(|label| {
                         doc_mgr
                             .with_session(label, |s| {
-                                s.file_path.as_deref() == Some(path.as_path())
+                                s.file_path.as_ref().map(|p| crate::document::watcher::normalize_path(p)) == Some(norm.clone())
                             })
                     });
                 let Some(label) = target_label else {
                     return;
                 };
+
                 // Ignore changes that match what we last saved (our own writes).
                 let cached = doc_mgr.with_session(&label, |s| s.content_cache.clone());
                 if let Ok(disk) = std::fs::read_to_string(&path) {
@@ -1057,6 +1074,14 @@ pub fn run() {
                         return;
                     }
                 }
+
+                // Second filter: re-check ignored before notifying.
+                if let Some(w) = &watcher {
+                    if w.is_ignored(&path) {
+                        return;
+                    }
+                }
+
                 if let Some(window) = app.get_webview_window(&label) {
                     let path_json = serde_json::to_string(&path.to_string_lossy().into_owned())
                         .unwrap_or_else(|_| "null".to_string());

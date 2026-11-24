@@ -759,7 +759,7 @@ pub fn build_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> 
         .separator()
         .item(
             &MenuItemBuilder::with_id("view.toggle_sidebar", "Toggle Sidebar")
-                .accelerator("CmdOrCtrl+B")
+                .accelerator("CmdOrCtrl+Shift+B")
                 .build(app)?,
         )
         .separator()

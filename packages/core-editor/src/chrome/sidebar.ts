@@ -314,17 +314,12 @@ export function refreshOutline(): void {
     return;
   }
   const hidden = container.classList.toggle('sidebar-hidden');
-  // Hide the entire sidebar element (all dimensions).
-  sidebar.style.display = hidden ? 'none' : '';
-  sidebar.style.width = hidden ? '0' : '';
-  sidebar.style.minWidth = hidden ? '0' : '';
-  sidebar.style.maxWidth = hidden ? '0' : '';
-  sidebar.style.padding = hidden ? '0' : '';
-  sidebar.style.margin = hidden ? '0' : '';
-  sidebar.style.border = hidden ? 'none' : '';
-  sidebar.style.overflow = hidden ? 'hidden' : '';
-  // Hide the opaque container background so no empty panel remains.
-  container.style.background = hidden ? 'transparent' : '';
+  // Remove the sidebar from the DOM entirely so no space remains.
+  if (hidden) {
+    sidebar.remove();
+  } else {
+    container.insertBefore(sidebar, container.firstChild);
+  }
   // Let the editor take the freed space and notify CodeMirror to re-measure.
   const editor = document.getElementById('editor');
   if (editor !== null) {
