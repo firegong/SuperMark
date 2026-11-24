@@ -1,127 +1,127 @@
-# SuperMark 요구사항 명세서 (SRS)
+# SuperMark Software Requirements Specification (SRS)
 
-- **문서 번호**: `REQ-002`
-- **작성일**: 2026-11-08 (최초), 2026-11-21 (현재 구현 기준으로 개정)
-- **상태**: v2.0
-- **관련 문서**: `ARCH-001`, `ARCH-002`, `DES-001`~`DES-003`
+- **Document ID**: `REQ-002`
+- **Date**: 2026-11-08 (initial), 2026-11-21 (revised based on current implementation)
+- **Status**: v2.0
+- **Related Documents**: `ARCH-001`, `ARCH-002`, `DES-001`–`DES-003`
 
-상태 표기: ✅ 구현 · ⚠️ 부분 구현 · ⛔ 미구현
-
----
-
-## 1. 목적 및 범위
-
-**SuperMark**(구 MarkEdit-Win)는 macOS 마크다운 에디터 `MarkEdit`를 Windows 10/11로 포팅하고(macOS 빌드도 지원), 마크다운 프리뷰와 확장 문법(**Markdown Super Set**)을 더한 데스크톱 에디터다. 본 문서는 기능·비기능 요구사항과 각 항목의 현재 구현 상태를 정의한다.
+Status Legend: ✅ Implemented · ⚠️ Partially Implemented · ⛔ Not Implemented
 
 ---
 
-## 2. 기능 요구사항
+## 1. Purpose & Scope
 
-### FR-01: 마크다운 에디터 코어 (`CoreEditor`)
-
-| ID | 요구사항 | 상태 | 비고 |
-| --- | --- | --- | --- |
-| FR-01.1 | GFM 문법 하이라이팅: 코드 블록, 표, 체크리스트, 각주, 수식, YAML front matter | ✅ | |
-| FR-01.2 | 멀티 커서, 폴딩, 스마트 따옴표, 괄호 쌍, 줄바꿈(LF/CRLF) 감지·전환 | ✅ | |
-| FR-01.3 | 줄 번호, 현재 줄 강조, 보이지 않는 문자, 타자기·포커스 모드, 읽기 전용 | ✅ | |
-| FR-01.4 | 코드 펜스 안의 코드를 언어별로 강조(약 60개 언어, 현재 테마 색) | ✅ | 신규. `src/codeLanguages.ts` |
-| FR-01.5 | 에디터 안 라이브 프리뷰(표·체크박스 등 인라인 표시) | ✅ | 신규, 기본 꺼짐 |
-
-### FR-02: 문서·파일 수명주기 (`NSDocument` 대체, `DES-001`)
-
-| ID | 요구사항 | 상태 | 비고 |
-| --- | --- | --- | --- |
-| FR-02.1 | `.md`, `.markdown`, `.txt`, `.textbundle`, `.textpack` 열기·저장·다른 이름으로 저장 | ⚠️ | 열기·저장은 구현. TextBundle은 대화상자에서 폴더 선택·필터 미지원 |
-| FR-02.2 | 수정 여부를 창 제목(`●`)에 표시, 미저장 상태로 닫을 때 저장 확인 | ✅ | |
-| FR-02.3 | 외부 프로그램의 파일 변경 감지: 수정 없으면 다시 읽기, 수정 중이면 알림·비교·병합 | ⛔ | 워처 코드만 있고 미연결 |
-| FR-02.4 | 미저장 문서 자동 백업과 비정상 종료 후 복구 | ✅ | 기본 설정에서도 복구 제안, 거절 시 보관 |
-| FR-02.5 | 최근 문서 목록 | ✅ | 최대 15개 |
-| FR-02.6 | 인코딩 감지(BOM, UTF-8, 추정)와 인코딩 지정해 다시 열기, 원래 형식으로 저장 | ✅ | |
-| FR-02.7 | 이미 열린 파일은 그 창을 앞으로, 두 번째 실행은 실행 중인 앱에 파일 전달(단일 인스턴스) | ✅ | 신규 |
-| FR-02.8 | 저장할 때마다 로컬 버전 기록, 보기·복원·삭제 | ⚠️ | 오래된 버전 정리 없음 |
-| FR-02.9 | 지난 세션 복원(시작 동작 설정) | ✅ | |
-
-### FR-03: 셸과 UI
-
-| ID | 요구사항 | 상태 | 비고 |
-| --- | --- | --- | --- |
-| FR-03.1 | 네이티브 메뉴 바와 Windows 표준 단축키 | ✅ | |
-| FR-03.2 | 검색·바꾸기: 대소문자, 단어 단위, 정규식, 선택 영역 안에서 모두 바꾸기 | ✅ | |
-| FR-03.3 | 목차 이동, 글자·단어·문단·읽기 시간 통계 | ✅ | |
-| FR-03.4 | 설정을 `settings.json`에 저장하고 모든 창에 실시간 반영 | ✅ | 설정 화면(5개 탭), 형식 변경 시 일회성 마이그레이션 (`DES-003`) |
-| FR-03.5 | 상태 표시줄(줄/열) | ⛔ | |
-| FR-03.6 | 인쇄와 PDF 내보내기 | ⚠️ | 인쇄만. PDF·DOCX 내보내기 없음 |
-| FR-03.7 | 앱 자체 업데이트: 메뉴의 업데이트 확인, 시작 시 자동 확인(설정으로 끄기), 이 버전 건너뛰기, 서명 검증 후 설치·재시작, 미저장 문서가 있으면 설치하지 않음. Windows 단일 실행 파일(설치 없이 실행) 제공, 이 경우 업데이트는 다운로드 페이지로 안내 | ✅ | 공개 저장소 `firegong/SuperMark-releases`의 릴리스. 서명 키 등록 후 첫 릴리스에서 실제 동작 검증 필요 (`ARCH-001` §8) |
-
-### FR-04: 확장 시스템 (`markedit-api` 호환)
-
-| ID | 요구사항 | 상태 | 비고 |
-| --- | --- | --- | --- |
-| FR-04.1 | 사용자 스크립트·CSS 로드, `MarkEdit` 전역 API | ✅ | |
-| FR-04.2 | 확장용 네이티브 API: 컨텍스트 메뉴, 알림, 입력창, 열기/저장 패널, 클립보드, 파일 | ⚠️ | 알림은 표준 버튼만, 입력창은 입력 전에 반환, 열기/저장 패널 미구현 (`ARCH-002`) |
-| FR-04.3 | 확장 관리자: 레지스트리 탐색·설치·업데이트·제거·끄기, sha256 검증, 업데이트 동작 선택 | ✅ | 신규 |
-| FR-04.4 | 테마 확장을 설정에서 선택(선택한 확장만 적용) | ✅ | 신규 |
-| FR-04.5 | 확장용 비밀 저장소 | ⚠️ | 평문 파일. Credential Manager 연동 필요 |
-
-### FR-05: 마크다운 프리뷰와 파서 (`DES-002`)
-
-| ID | 요구사항 | 상태 | 비고 |
-| --- | --- | --- | --- |
-| FR-05.1 | 분할/마크다운 보기 프리뷰, 편집 시 자동 갱신 | ✅ | |
-| FR-05.2 | 파서 선택: CommonMark, GFM, Extended(기본), Markdown Super Set, micromark, gsync Markdown, markdown-it(확장) | ✅ | 형식마다 모듈(폴더) 하나가 파서와 프리뷰를 함께 가져 형식별로 추가·교체 가능, 공통 기능은 공유 모듈. 프리뷰 마크업 약속을 모든 파서에 대해 테스트 |
-| FR-05.3 | Markdown Super Set 문법(`MarkdownSuperSetGrammar.md` §0~30) | ⚠️ | 실행 청크(§13) 실행과 청크 캐시, 다이어그램 PNG 형식, 노트 임베드 미구현 |
-| FR-05.4 | 다이어그램(Mermaid, PlantUML, D2, Graphviz, draw.io): 로컬 도구 → Kroki 서버 대체 | ✅ | |
-| FR-05.5 | 수식(LaTeX → MathML, 오프라인) | ✅ | |
-| FR-05.6 | 코드 블록 언어별 강조(테마 색), 코드 복사 | ✅ | |
-| FR-05.7 | 에디터 ⇄ 프리뷰 스크롤 동기화(편집·선택 중 일시 정지), 블록 더블클릭으로 원본 이동, 체크박스 토글 | ✅ | |
-| FR-05.8 | 링크 클릭: 웹은 브라우저, 문서는 앱, 그 밖의 파일은 탐색기 표시만 | ✅ | Ctrl+클릭(에디터)도 동일 |
-
-### FR-06: 테마와 표시 (`DES-003`)
-
-| ID | 요구사항 | 상태 | 비고 |
-| --- | --- | --- | --- |
-| FR-06.1 | 내장 테마 16종, 색상 견본이 있는 테마 선택, 밝게/어둡게 짝 전환 | ✅ | |
-| FR-06.2 | 테마별 프리뷰 기본 스타일(글꼴·크기·색·표 형태) | ✅ | 공식 팔레트 조사 기반 |
-| FR-06.3 | 테마별 프리뷰 스타일 사용자 지정(본문·H1~H6·링크·코드·인용) | ✅ | |
-
-### FR-07: Windows 표시 품질 (`DES-003` §6~7)
-
-| ID | 요구사항 | 상태 | 비고 |
-| --- | --- | --- | --- |
-| FR-07.1 | 한글을 포함한 글꼴이 계단 현상 없이 표시 | ✅ | Pretendard·D2Coding 번들, 한글 글꼴을 일반 계열보다 앞에 |
-| FR-07.2 | 편집기 기본 글꼴은 고정폭이며 한글도 2칸 폭으로 정렬 | ✅ | D2Coding |
-| FR-07.3 | 기본 불투명 패널(ClearType 유지) | ✅ | |
-| FR-07.4 | 화면 크기에 맞는 창 크기, Windows 스타일 스크롤바 | ✅ | |
+**SuperMark** (formerly MarkEdit-Win) is a desktop Markdown editor that ports the macOS editor `MarkEdit` to Windows 10/11 (with macOS build support), while adding live preview and an extended syntax (**Markdown Super Set**). This document defines the functional and non-functional requirements alongside the current implementation status for each item.
 
 ---
 
-## 3. 플랫폼 기능 매핑
+## 2. Functional Requirements
 
-| macOS 원본 기능 | 처리 방침 | 우선순위 | 상태 |
+### FR-01: Markdown Editor Core (`CoreEditor`)
+
+| ID | Requirement | Status | Notes |
+| --- | --- | --- | --- |
+| FR-01.1 | GFM syntax highlighting: code blocks, tables, checklists, footnotes, math, YAML front matter | ✅ | |
+| FR-01.2 | Multi-cursor, folding, smart quotes, bracket matching, line ending (LF/CRLF) detection and conversion | ✅ | |
+| FR-01.3 | Line numbers, active line highlight, invisible characters, typewriter/focus mode, read-only mode | ✅ | |
+| FR-01.4 | Per-language syntax highlighting inside fenced code blocks (~60 languages, theme colors) | ✅ | Added. `src/codeLanguages.ts` |
+| FR-01.5 | In-editor live preview (inline tables, checkboxes, etc.) | ✅ | Added, disabled by default |
+
+### FR-02: Document & File Lifecycle (`NSDocument` Replacement, `DES-001`)
+
+| ID | Requirement | Status | Notes |
+| --- | --- | --- | --- |
+| FR-02.1 | Open, save, save-as for `.md`, `.markdown`, `.txt`, `.textbundle`, `.textpack` | ⚠️ | Open/save implemented. TextBundle folder picker/filter in dialog not yet fully supported |
+| FR-02.2 | Modified indicator in window title (`●`), prompt to save on closing dirty documents | ✅ | |
+| FR-02.3 | External file change detection: reload if clean, notify/diff/merge if dirty | ⛔ | Watcher code present but unlinked |
+| FR-02.4 | Auto-backup of unsaved documents and crash recovery | ✅ | Prompt on startup, preserved on decline |
+| FR-02.5 | Recent documents list | ✅ | Up to 15 items |
+| FR-02.6 | Encoding detection (BOM, UTF-8, heuristic), reopen with encoding, save in original format | ✅ | |
+| FR-02.7 | Bring existing window to front if file already open; forward CLI file open to running instance (single instance) | ✅ | Added |
+| FR-02.8 | Local version history on each save, view/restore/delete versions | ⚠️ | Auto-cleanup of aged versions pending |
+| FR-02.9 | Restore previous session (configurable startup behavior) | ✅ | |
+
+### FR-03: Shell & UI
+
+| ID | Requirement | Status | Notes |
+| --- | --- | --- | --- |
+| FR-03.1 | Native menu bar and Windows standard keyboard shortcuts | ✅ | |
+| FR-03.2 | Find & Replace: case sensitivity, whole word, regex, replace all within selection | ✅ | |
+| FR-03.3 | Table of contents navigation; character, word, paragraph, reading time statistics | ✅ | |
+| FR-03.4 | Settings saved in `settings.json` with real-time sync across all windows | ✅ | 5-tab settings modal, one-time schema migration (`DES-003`) |
+| FR-03.5 | Status bar (line / column) | ⛔ | |
+| FR-03.6 | Print and PDF export | ⚠️ | Print implemented. PDF/DOCX export pending |
+| FR-03.7 | Self-updater: check for updates menu, auto-check at startup (toggleable), skip version, signature verification before install/restart, abort if unsaved documents. Portable single-executable fallback links to release page | ✅ | Public repository `firegong/SuperMark-releases`. Live validation on first signed release (`ARCH-001` §8) |
+
+### FR-04: Extension System (`markedit-api` Compatible)
+
+| ID | Requirement | Status | Notes |
+| --- | --- | --- | --- |
+| FR-04.1 | Load user scripts and styles, global `MarkEdit` API | ✅ | |
+| FR-04.2 | Native APIs for extensions: context menu, alerts, text prompts, open/save panels, clipboard, files | ⚠️ | Alerts limited to standard buttons, text prompt returns early, open/save panels pending (`ARCH-002`) |
+| FR-04.3 | Extensions manager: discover, install, update, remove, disable, sha256 checksums, update behavior selection | ✅ | Added |
+| FR-04.4 | Theme extensions selectable in settings (only chosen theme applies) | ✅ | Added |
+| FR-04.5 | Secret storage for extensions | ⚠️ | Plaintext file; Windows Credential Manager integration pending |
+
+### FR-05: Markdown Preview & Parsers (`DES-002`)
+
+| ID | Requirement | Status | Notes |
+| --- | --- | --- | --- |
+| FR-05.1 | Split / Markdown view preview, auto-refresh on edit | ✅ | |
+| FR-05.2 | Pluggable parsers: CommonMark, GFM, Extended (default), Markdown Super Set, micromark, gsync Markdown, markdown-it (extension) | ✅ | Each format has its own module folder (parser + preview); shared features centralized. Parser contract test suite |
+| FR-05.3 | Markdown Super Set syntax (`MarkdownSuperSetGrammar.md` §0–30) | ⚠️ | Code execution chunks (§13), chunk cache, PNG diagrams, note embeds pending |
+| FR-05.4 | Diagrams (Mermaid, PlantUML, D2, Graphviz, draw.io): local tools with Kroki server fallback | ✅ | |
+| FR-05.5 | Math rendering (LaTeX → MathML, offline) | ✅ | |
+| FR-05.6 | Syntax highlighting in preview code blocks (theme colors), code copy button | ✅ | |
+| FR-05.7 | Editor ⇄ Preview bidirectional scroll sync (paused during edit/selection), double-click block to source line, checkbox toggle | ✅ | |
+| FR-05.8 | Link clicks: web links open in browser, document links open in app, other files show in explorer | ✅ | Matches Ctrl+click behavior in editor |
+
+### FR-06: Themes & Appearance (`DES-003`)
+
+| ID | Requirement | Status | Notes |
+| --- | --- | --- | --- |
+| FR-06.1 | 16 built-in themes with color swatch picker, light/dark paired switching | ✅ | |
+| FR-06.2 | Per-theme preview default styles (font, size, colors, table appearance) | ✅ | Mapped from official palettes |
+| FR-06.3 | Per-theme preview custom styling (body, H1–H6, links, code, blockquotes) | ✅ | |
+
+### FR-07: Windows Display Quality (`DES-003` §6–7)
+
+| ID | Requirement | Status | Notes |
+| --- | --- | --- | --- |
+| FR-07.1 | Crisp font rendering without aliasing or stepping | ✅ | Pretendard and D2Coding bundled; Korean font stacks prioritized |
+| FR-07.2 | Fixed-width editor font aligning Korean characters to exactly 2 columns | ✅ | D2Coding |
+| FR-07.3 | Default opaque panels (preserves ClearType subpixel antialiasing) | ✅ | |
+| FR-07.4 | DPI-aware initial window sizing, Windows-native scrollbars | ✅ | |
+
+---
+
+## 3. Platform Feature Mapping
+
+| Upstream macOS Feature | Porting Policy | Priority | Status |
 | --- | --- | :---: | :---: |
-| `WKWebView` + 메시지 핸들러 | WebView2 + Tauri IPC 폴리필 | P0 | ✅ |
-| `NSDocument` 수명주기 | Rust `DocumentManager` | P0 | ⚠️ (외부 변경 감지 미구현) |
-| AppKit 메뉴 / 컨텍스트 메뉴 | Tauri 메뉴(muda) / 앱 UI 컨텍스트 메뉴 | P0 | ✅ |
-| Keychain (`secretStorage`) | Windows Credential Manager | P1 | ⚠️ (평문 파일) |
-| TextBundle | Rust 폴더·zip 리더/라이터 | P1 | ⚠️ |
-| `NSSpellChecker` (단어 제안) | ISpellChecker 또는 내장 토크나이저 | P2 | ⛔ (토크나이저만) |
-| FileVersion | 로컬 스냅샷 기록 | P2 | ✅ |
-| Quick Look | 제외 | — | — |
-| FoundationModels / WritingTools | 제외(무동작) | — | — |
+| `WKWebView` + message handlers | WebView2 + Tauri IPC polyfill | P0 | ✅ |
+| `NSDocument` lifecycle | Rust `DocumentManager` | P0 | ⚠️ (external watcher pending) |
+| AppKit menu / context menu | Tauri menu (`muda`) / app UI context menu | P0 | ✅ |
+| Keychain (`secretStorage`) | Windows Credential Manager | P1 | ⚠️ (plaintext file) |
+| TextBundle | Rust folder/zip reader and writer | P1 | ⚠️ |
+| `NSSpellChecker` (word suggestions) | ISpellChecker or built-in tokenizer | P2 | ⛔ (tokenizer only) |
+| FileVersion | Local snapshot version history | P2 | ✅ |
+| Quick Look | Excluded | — | — |
+| FoundationModels / WritingTools | Excluded (no-ops) | — | — |
 
 ---
 
-## 4. 비기능 요구사항
+## 4. Non-Functional Requirements
 
-| ID | 요구사항 | 상태 |
+| ID | Requirement | Status |
 | --- | --- | --- |
-| NFR-01 | 설치 파일 크기 | **재설정 필요**: 최초 목표 10MB 이하. 번들 자산만 약 11MB(Mermaid 5.5MB, 폰트 5.1MB, 에디터 1.2MB). 설치 파일 크기는 미측정 |
-| NFR-02 | 콜드 스타트 후 편집 가능까지 300ms 이내 | 미측정 |
-| NFR-03 | 10MB 마크다운 파일에서 스크롤·입력 시 멈춤 없음 | 미측정. 프리뷰 렌더러는 긴 문단·깊은 중첩에서 선형 시간·스택 안전을 테스트로 보장 |
-| NFR-04 | 업스트림 추적성: CoreEditor 수정 범위 최소화 | ⚠️ 앱 UI·프리뷰는 `chrome/`, `modules/markdown-renderer/`로 분리했으나 스타일·설정 등 일부 공유 파일 수정 |
-| NFR-05 | 보안: 프리뷰에서 스크립트 실행 불가, 위험 링크 차단, 실행 파일을 링크로 실행하지 않음, 확장 무결성 검증 | ✅ (`ARCH-001` §6) |
-| NFR-06 | 강건성: 깨진·적대적·무작위 입력에서 예외·멈춤 없음, 손상된 설정 파일 허용 | ✅ (`test/robustness.test.ts`, `docs/05-testing/samples/malformed/`) |
-| NFR-07 | 한국어: 한글 메타데이터 키·변수, 한글 파일 이름 링크, 한글 글꼴 품질 | ✅ |
-| NFR-08 | 사용자 데이터 호환: 앱 이름이 바뀌어도 설정·백업·버전 위치 유지, 설정 형식 변경은 마이그레이션 | ✅ |
-| NFR-09 | 유지보수성: 마크다운 형식(파서 + 프리뷰)을 다른 형식에 영향 없이 추가·교체, 형식 간 공통 기능은 복제하지 않고 공유 | ✅ (`DES-002` §2, §3.3) |
-| NFR-10 | 배포: 서명된 릴리스와 앱 자체 업데이트, 문서화된 릴리스 절차 | ✅ (`ARCH-001` §8.1, `docs/06-release/01-release-procedure.md`) |
+| NFR-01 | Installer Size | **Target Re-evaluation**: Initial target < 10 MB. Bundled assets alone total ~11 MB (Mermaid 5.5 MB, fonts 5.1 MB, editor 1.2 MB). Installer size unmeasured |
+| NFR-02 | Cold start to editable within 300ms | Unmeasured |
+| NFR-03 | No UI freezing while typing or scrolling 10 MB Markdown documents | Unmeasured. Preview renderers tested for linear time complexity and stack safety on long/deep content |
+| NFR-04 | Upstream traceability: minimize `CoreEditor` modifications | ⚠️ App chrome and preview split into `chrome/` and `modules/markdown-renderer/`, but some shared styles and config touched |
+| NFR-05 | Security: no script execution in preview, dangerous links blocked, executable files not launched via links, extension integrity verified | ✅ (`ARCH-001` §6) |
+| NFR-06 | Robustness: zero unhandled crashes on malformed, hostile, or randomized input; resilient to corrupted config | ✅ (`test/robustness.test.ts`, `docs/05-testing/samples/malformed/`) |
+| NFR-07 | Korean language support: Hangul metadata keys, Hangul file link resolution, high-quality Korean typography | ✅ |
+| NFR-08 | User data backward compatibility: preserve settings, backups, versions across app renames; one-time settings migration | ✅ |
+| NFR-09 | Maintainability: add or replace Markdown formats (parser + preview) without side effects on others; shared features centralized | ✅ (`DES-002` §2, §3.3) |
+| NFR-10 | Distribution: signed releases, self-updating app, documented release workflow | ✅ (`ARCH-001` §8.1, `docs/06-release/01-release-procedure.md`) |
