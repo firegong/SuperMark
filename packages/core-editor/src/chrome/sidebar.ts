@@ -66,6 +66,36 @@ export function initSidebar(): void {
 
   showFilesEmptyState();
 
+  // Toggle button (opencode-style) fixed at top-left.
+  const toggleBtn = document.createElement('button');
+  toggleBtn.id = 'markedit-sidebar-toggle';
+  toggleBtn.className = 'markedit-sidebar-toggle';
+  toggleBtn.textContent = '◀';
+  toggleBtn.setAttribute('aria-label', 'Toggle sidebar');
+  toggleBtn.addEventListener('click', () => {
+    const sidebarEl = document.getElementById('markedit-sidebar');
+    const container = sidebarEl?.parentElement ?? null;
+    if (sidebarEl === null || container === null) {
+      return;
+    }
+    const hidden = container.classList.toggle('sidebar-hidden');
+    sidebarEl.style.display = hidden ? 'none' : '';
+    sidebarEl.style.width = hidden ? '0' : '';
+    sidebarEl.style.minWidth = hidden ? '0' : '';
+    sidebarEl.style.maxWidth = hidden ? '0' : '';
+    sidebarEl.style.padding = hidden ? '0' : '';
+    sidebarEl.style.margin = hidden ? '0' : '';
+    sidebarEl.style.border = hidden ? 'none' : '';
+    sidebarEl.style.overflow = hidden ? 'hidden' : '';
+    container.style.background = hidden ? 'transparent' : '';
+    const editor = document.getElementById('editor');
+    if (editor !== null) {
+      editor.style.flex = hidden ? '1 1 100%' : '';
+    }
+    toggleBtn.textContent = hidden ? '▶' : '◀';
+    window.dispatchEvent(new Event('resize'));
+  });
+  document.body.appendChild(toggleBtn);
 }
 
 function showFilesEmptyState(): void {
