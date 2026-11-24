@@ -1,3 +1,4 @@
+import { detectWindowControlsPlatform } from './utils';
 import type { WebModuleCore } from '../bridge/web/core';
 import type { WebModuleSelection } from '../bridge/web/selection';
 import type { WebModuleSearch } from '../bridge/web/search';
@@ -20,17 +21,49 @@ import {
   getMarkdownStandard,
   registerMarkdownRenderer,
   setMarkdownRenderer,
-  ensureChromeUIModeSwitcher,
+  refreshMarkdownPreview,
+  publishViewState,
+  togglePreviewSyncScroll,
+  copyPreviewHtml,
   MarkdownPreviewMode,
 } from './markdownPreview';
-import type { MarkdownRendererEngine } from '../modules/markdown-renderer';
+import { isEditorLivePreview, setEditorLivePreview } from './liveEditorPreview';
+import { setThemeExtension } from './themeExtensions';
+import { applyPreviewThemeStyles, initPreviewThemeStyles, setPreviewThemeStyles } from './previewThemeStyles';
+import { setUserCodeLanguages } from '../modules/markdown-renderer/plugins/syntaxHighlight';
+import { userCodeLanguages } from '../api/methods';
+
+async function saveLivePreview(enabled: boolean): Promise<void> {
+  try {
+    await window.__TAURI_INTERNALS__?.invoke('settings_update', { patch: { livePreview: enabled } });
+  } catch (error) {
+    console.error('Failed to save the live preview setting:', error);
+  }
+}
+import type { MarkdownRendererEngine, DiagramPlugin, MathPlugin } from '../modules/markdown-renderer';
+import {
+  registerDiagramPlugin,
+  registerMathPlugin,
+  listDiagramPlugins,
+  setDiagramServer,
+  setDiagramRendering,
+  clearDiagramCache,
+  diagramPlaceholder,
+  markDiagramRendered,
+  markDiagramFailed,
+} from '../modules/markdown-renderer';
 
 const rootId = 'markedit-chrome-root';
+
+let chromeKeydownHandler: ((event: KeyboardEvent) => void) | undefined;
 
 export function initChromeUI(): void {
   if (document.getElementById(rootId) !== null) {
     return;
   }
+
+  // Platform-specific styling (scrollbars and such on Windows), see index.css.
+  document.documentElement.dataset.platform = detectWindowControlsPlatform();
 
   const webModules = window.webModules as unknown as {
     core: WebModuleCore;
@@ -43,7 +76,7 @@ export function initChromeUI(): void {
   root.id = rootId;
   root.className = 'markedit-chrome-root';
   document.body.appendChild(root);
-  ensureChromeUIModeSwitcher();
+  publishViewState();
 
   let activePanel: HTMLElement | null = null;
   let activeFindBar: FindBarApi | null = null;
@@ -197,18 +230,99 @@ export function initChromeUI(): void {
     setMarkdownRenderer(id) {
       setMarkdownRenderer(id);
     },
+    setDiagramServer(url) {
+      setDiagramServer(url);
+      refreshMarkdownPreview();
+    },
+    togglePreviewSyncScroll() {
+      togglePreviewSyncScroll();
+    },
+    setEditorLivePreview(enabled) {
+      if (setEditorLivePreview(enabled)) {
+        publishViewState();
+      }
+    },
+    setThemeExtension(capability) {
+      (window.config as { themeExtension?: string }).themeExtension = capability;
+      setThemeExtension(capability);
+      applyPreviewThemeStyles();
+    },
+    setPreviewThemeStyles(styles) {
+      setPreviewThemeStyles(styles);
+    },
+    toggleEditorLivePreview() {
+      const enabled = !isEditorLivePreview();
+      setEditorLivePreview(enabled);
+      publishViewState();
+      // Saved, and applied to the other windows by the settings live sync.
+      void saveLivePreview(enabled);
+    },
+    copyPreviewHtml() {
+      void copyPreviewHtml();
+    },
+    setDiagramRendering(mode) {
+      setDiagramRendering(mode);
+      refreshMarkdownPreview();
+    },
   };
 
   window.chromeUI = chromeUI;
+
+  // Restore the saved parser choice (`preview.markdownRenderer`) injected with the user settings.
+  const savedSettings = (MarkEdit as unknown as { userSettings?: Record<string, unknown> } | undefined)?.userSettings;
+  const savedRenderer = savedSettings?.markdownRenderer ?? savedSettings?.['preview.markdownRenderer'];
+  const savedDiagramServer = savedSettings?.diagramServer ?? savedSettings?.['preview.diagramServer'];
+  if (typeof savedDiagramServer === 'string') {
+    setDiagramServer(savedDiagramServer);
+  }
+  const savedDiagramRendering = savedSettings?.diagramRendering ?? savedSettings?.['preview.diagramRendering'];
+  if (typeof savedDiagramRendering === 'string') {
+    setDiagramRendering(savedDiagramRendering);
+  }
+  if (typeof savedRenderer === 'string' && savedRenderer.length > 0) {
+    setMarkdownRenderer(savedRenderer);
+  }
+  initPreviewThemeStyles(savedSettings?.previewThemeStyles ?? savedSettings?.['preview.themeStyles']);
+  // Preview code blocks use the code languages extensions add to the editor.
+  setUserCodeLanguages(userCodeLanguages);
 
   const markEdit = MarkEdit as unknown as Record<string, unknown>;
   markEdit.setMarkdownStandard = (standard: string) => chromeUI.setMarkdownStandard(standard);
   markEdit.getMarkdownStandard = () => chromeUI.getMarkdownStandard();
   markEdit.registerMarkdownRenderer = (engine: MarkdownRendererEngine) => chromeUI.registerMarkdownRenderer(engine);
+  // Renderer plugins for diagrams (```lang blocks) and LaTeX math, see modules/markdown-renderer/plugins.
+  markEdit.registerDiagramPlugin = (plugin: DiagramPlugin) => {
+    registerDiagramPlugin(plugin);
+    refreshMarkdownPreview();
+  };
+  markEdit.registerMathPlugin = (plugin: MathPlugin, activate = true) => {
+    registerMathPlugin(plugin, activate);
+    refreshMarkdownPreview();
+  };
+  markEdit.listDiagramPlugins = () => listDiagramPlugins().map(plugin => ({ id: plugin.id, name: plugin.name, languages: [...plugin.languages] }));
+  markEdit.diagramPlaceholder = diagramPlaceholder;
+  markEdit.clearDiagramCache = () => {
+    clearDiagramCache();
+    refreshMarkdownPreview();
+  };
+  markEdit.markDiagramRendered = markDiagramRendered;
+  markEdit.markDiagramFailed = markDiagramFailed;
   markEdit.setMarkdownRenderer = (id: string) => chromeUI.setMarkdownRenderer(id);
 
-  window.addEventListener('keydown', event => {
+  // Re-initialising (tests, editor resets) must not stack listeners: a toggle shortcut handled
+  // twice would cancel itself.
+  if (chromeKeydownHandler !== undefined) {
+    window.removeEventListener('keydown', chromeKeydownHandler, true);
+  }
+  chromeKeydownHandler = (event: KeyboardEvent) => {
     if (event.key === 'Escape') {
+      // An open drop-down inside a dialog closes first; the dialog stays.
+      const popup = document.querySelector('.markedit-theme-picker.is-open');
+      if (popup !== null) {
+        popup.dispatchEvent(new Event('markedit-close-popup'));
+        event.preventDefault();
+        return;
+      }
       chromeUI.closeAll();
       webModules.core.restoreFocus();
       event.preventDefault();
@@ -235,15 +349,14 @@ export function initChromeUI(): void {
     } else if (event.shiftKey && !event.altKey && event.key === 'I') {
       chromeUI.toggleStatistics();
       event.preventDefault();
-    } else if (event.shiftKey && !event.altKey && event.key === 'X') {
-      chromeUI.openExtensionsManager('discover');
-      event.preventDefault();
     } else if (event.shiftKey && !event.altKey && (event.key === 'P' || event.key === 'p')) {
       chromeUI.toggleMarkdownPreview('split');
       event.preventDefault();
-    } else if (event.altKey && (event.key === 'p' || event.key === 'P')) {
+    } else if (event.shiftKey && !event.altKey && (event.key === 'V' || event.key === 'v')) {
+      // Ctrl+Shift+V (as in VS Code). Ctrl+Alt+P was avoided: Ctrl+Alt is AltGr on many layouts.
       chromeUI.toggleMarkdownPreview('preview');
       event.preventDefault();
     }
-  }, true);
+  };
+  window.addEventListener('keydown', chromeKeydownHandler, true);
 }

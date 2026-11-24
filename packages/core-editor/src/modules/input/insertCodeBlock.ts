@@ -3,6 +3,7 @@ import { EditorView } from '@codemirror/view';
 import { syntaxTree } from '@codemirror/language';
 import { SyntaxNode } from '@lezer/common';
 import insertSnippet from '../snippets/insertSnippet';
+import { documentLength } from '../../common/utils';
 
 const mark = '`';
 const pair = mark.repeat(2);
@@ -48,7 +49,7 @@ export default function insertCodeBlock(editor: EditorView) {
 
     const selected = state.sliceDoc(from, to);
     return {
-      range: EditorSelection.range(anchor, anchor + selected.length),
+      range: EditorSelection.range(anchor, anchor + documentLength(state, selected)),
       changes: { from, to, insert: `${mark}${selected}${mark}` },
     };
   }));

@@ -2,6 +2,7 @@ import { EditorSelection, SelectionRange } from '@codemirror/state';
 import { syntaxTree } from '@codemirror/language';
 import selectedRanges from '../selection/selectedRanges';
 import selectWithRanges from '../selection/selectWithRanges';
+import { documentLength } from '../../common/utils';
 
 /**
  * Toggle selection with mark pairs, such as **bold**, _italic_.
@@ -86,7 +87,7 @@ export default function toggleBlockWithMarks(leftMark: string, rightMark: string
     if (matched) {
       newPos = startTestPos;
       return {
-        range: EditorSelection.range(newPos, newPos + selectedText.length),
+        range: EditorSelection.range(newPos, newPos + documentLength(state, selectedText)),
         changes: {
           from: startTestPos, to: endTestPos, insert: selectedText,
         },
@@ -94,7 +95,7 @@ export default function toggleBlockWithMarks(leftMark: string, rightMark: string
     } else {
       newPos = startPos + leftMark.length;
       return {
-        range: EditorSelection.range(newPos, newPos + selectedText.length),
+        range: EditorSelection.range(newPos, newPos + documentLength(state, selectedText)),
         changes: {
           from: startPos, to: endPos, insert: `${leftMark}${selectedText}${rightMark}`,
         },

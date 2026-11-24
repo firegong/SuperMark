@@ -1,5 +1,6 @@
 import SearchOptions from '../modules/search/options';
 import SearchCounterInfo from '../modules/search/counterInfo';
+import { SearchOperation } from '../modules/search/operations';
 import { createButton, createElement, createToggle } from './utils';
 
 export interface FindBarApi {
@@ -15,6 +16,7 @@ interface SearchModule {
   findPrevious: (args: { search: string }) => boolean;
   replaceNext: () => void;
   replaceAll: () => void;
+  performOperation?: (args: { operation: SearchOperation }) => void;
   getCounterInfo: () => SearchCounterInfo;
 }
 
@@ -27,6 +29,8 @@ export function createFindBar(withReplace: boolean, onClose: () => void): FindBa
     caseSensitive: false,
     wholeWord: false,
     regexp: false,
+    // Replace All works only inside the selection.
+    inSelection: false,
   };
 
   let replaceVisible = withReplace;
@@ -84,9 +88,13 @@ export function createFindBar(withReplace: boolean, onClose: () => void): FindBa
   wordButton.title = 'Match Whole Word';
   const regexButton = createToggle('.*', () => state.regexp, () => { state.regexp = !state.regexp; refreshQuery(); refreshCounter(); });
   regexButton.title = 'Use Regular Expression';
+  const selectionButton = createToggle('⌶', () => state.inSelection, () => { state.inSelection = !state.inSelection; });
+  selectionButton.title = 'Replace All in Selection';
+  selectionButton.classList.add('markedit-chrome-findbar-in-selection');
   optionsRow.appendChild(caseButton);
   optionsRow.appendChild(wordButton);
   optionsRow.appendChild(regexButton);
+  optionsRow.appendChild(selectionButton);
 
   search.setState({ enabled: true });
 
@@ -126,7 +134,9 @@ export function createFindBar(withReplace: boolean, onClose: () => void): FindBa
 
   function performReplace(all: boolean) {
     refreshQuery();
-    if (all) {
+    if (all && state.inSelection && search.performOperation !== undefined) {
+      search.performOperation({ operation: SearchOperation.replaceAllInSelection });
+    } else if (all) {
       search.replaceAll();
     } else {
       search.replaceNext();

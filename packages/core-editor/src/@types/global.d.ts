@@ -75,7 +75,7 @@ declare global {
     showTextBox(options?: { title?: string; defaultValue?: string; placeholder?: string }): Promise<string | undefined>;
     showContextMenu(options: { items: WebMenuItem[]; location?: WebPoint }): void;
     openExtensionsManager(initialTab?: 'discover' | 'installed' | 'updates'): void;
-    openSettings(initialTab?: 'editor' | 'assistant' | 'general' | 'window'): void;
+    openSettings(initialTab?: 'editor' | 'preview' | 'assistant' | 'general' | 'window'): void;
     openVersionHistory(): void;
     toggleMarkdownPreview(preferredMode?: 'split' | 'preview'): void;
     setMarkdownPreviewMode(mode: 'editor' | 'split' | 'preview'): void;
@@ -84,6 +84,15 @@ declare global {
     getMarkdownStandard(): string;
     registerMarkdownRenderer(engine: MarkdownRendererEngine): void;
     setMarkdownRenderer(id: string): void;
+    setDiagramServer(url: string): void;
+    setDiagramRendering(mode: string): void;
+    togglePreviewSyncScroll(): void;
+    setEditorLivePreview(enabled: boolean): void;
+    setThemeExtension(capability: string): void;
+    /** Preview typography per theme (`preview.themeStyles`). */
+    setPreviewThemeStyles(styles: unknown): void;
+    toggleEditorLivePreview(): void;
+    copyPreviewHtml(): void;
     closeAll(): void;
   }
 }

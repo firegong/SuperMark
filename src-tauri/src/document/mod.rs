@@ -64,6 +64,21 @@ pub struct BackupMetadata {
     pub timestamp_secs: u64,
 }
 
+/// One window of the previous session (`last-session.json`).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LastSessionEntry {
+    pub label: String,
+    pub path: Option<PathBuf>,
+}
+
+/// A document to reopen at startup: the file to load and/or unsaved text from a backup.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RestoreItem {
+    pub previous_label: String,
+    pub path: Option<PathBuf>,
+    pub backup_text: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DocumentSession {
     pub window_label: String,
@@ -74,6 +89,11 @@ pub struct DocumentSession {
     pub is_dirty: bool,
     pub content_cache: String,
     pub last_modified_secs: Option<u64>,
+    /// Unsaved text recovered from a backup. It is applied as an edit on top of
+    /// `content_cache` once the editor has loaded, so the document shows as modified and the
+    /// user can undo back to the file on disk.
+    #[serde(default)]
+    pub pending_restore_text: Option<String>,
 }
 
 impl DocumentSession {
@@ -87,6 +107,7 @@ impl DocumentSession {
             is_dirty: false,
             content_cache: String::new(),
             last_modified_secs: None,
+            pending_restore_text: None,
         }
     }
 
@@ -99,9 +120,9 @@ impl DocumentSession {
             .unwrap_or("Untitled");
 
         if self.is_dirty {
-            format!("● {file_name} — MarkEdit-Rust")
+            format!("● {file_name} — SuperMark")
         } else {
-            format!("{file_name} — MarkEdit-Rust")
+            format!("{file_name} — SuperMark")
         }
     }
 
@@ -348,6 +369,9 @@ fn file_mtime_secs(path: &Path) -> Option<u64> {
 pub struct DocumentManager {
     sessions: Mutex<HashMap<String, DocumentSession>>,
     recent_files: Mutex<Vec<PathBuf>>,
+    /// Files handed over by macOS via `RunEvent::Opened` before the main window
+    /// (see `setup`); they are opened into it instead of creating a second window.
+    pending_opens: Mutex<Vec<PathBuf>>,
     user_menu_items: Mutex<Vec<crate::bridge::generated::MenuItem>>,
     app_data_dir: PathBuf,
     versions: VersionManager,
@@ -365,7 +389,7 @@ impl DocumentManager {
     pub fn new() -> Self {
         let base = dirs::config_dir()
             .unwrap_or_else(|| PathBuf::from("."))
-            .join("MarkEdit");
+            .join("SuperMark");
         Self::with_data_dir(base)
     }
 
@@ -392,6 +416,7 @@ impl DocumentManager {
             versions,
             extensions,
             secrets,
+            pending_opens: Mutex::new(Vec::new()),
         }
     }
 
@@ -410,6 +435,32 @@ impl DocumentManager {
 
     pub fn versions(&self) -> &VersionManager {
         &self.versions
+    }
+
+    /// Restores a saved version of `path` through `DocumentSession::save_as`, so the file keeps
+    /// its encoding, BOM and line endings, and `.textbundle`/`.textpack` containers keep their
+    /// assets (a raw write would replace a `.textpack` zip with plain Markdown).
+    ///
+    /// When `path` is the window's own document, that session is updated (and marked clean);
+    /// otherwise a temporary session loads the file first to learn its format.
+    pub fn restore_version(&self, label: &str, path: &Path, version_id: &str) -> Result<String, String> {
+        let content = self
+            .versions
+            .get_version_content(path, version_id)
+            .ok_or_else(|| format!("Version '{version_id}' not found"))?;
+
+        let is_current = self.with_session(label, |s| s.file_path.as_deref() == Some(path));
+        if is_current {
+            self.with_session(label, |s| s.save_as(path, &content))?;
+        } else {
+            let mut session = DocumentSession::new("version-restore");
+            if path.exists() {
+                session.load_from_path(path)?;
+            }
+            session.save_as(path, &content)?;
+        }
+
+        Ok(content.replace("\r\n", "\n").replace('\r', "\n"))
     }
 
     pub fn extensions(&self) -> &ExtensionManager {
@@ -431,6 +482,33 @@ impl DocumentManager {
         f(session)
     }
 
+    /// Windows (labels) whose document is `path`, compared after resolving `.`/`..`, links and,
+    /// on Windows, letter case.
+    pub fn windows_for_path(&self, path: &Path) -> Vec<String> {
+        let wanted = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+        let guard = self.sessions.lock().expect("DocumentManager lock");
+        guard
+            .iter()
+            .filter(|(_, session)| {
+                session.file_path.as_ref().is_some_and(|open| {
+                    let open = std::fs::canonicalize(open).unwrap_or_else(|_| open.clone());
+                    if cfg!(windows) {
+                        open.to_string_lossy().to_lowercase() == wanted.to_string_lossy().to_lowercase()
+                    } else {
+                        open == wanted
+                    }
+                })
+            })
+            .map(|(label, _)| label.clone())
+            .collect()
+    }
+
+    /// Whether any open document has unsaved changes.
+    pub fn has_unsaved_changes(&self) -> bool {
+        let guard = self.sessions.lock().expect("DocumentManager lock");
+        guard.values().any(|session| session.is_dirty)
+    }
+
     pub fn next_window_label(&self) -> String {
         let guard = self.sessions.lock().expect("DocumentManager lock");
         for idx in 2..=1000 {
@@ -440,6 +518,37 @@ impl DocumentManager {
             }
         }
         "doc-extra".to_string()
+    }
+
+    /// Queue a document the OS handed over via `RunEvent::Opened` before the main
+    /// window exists; `setup` opens them into it instead of creating a second window.
+    pub fn push_pending_open(&self, path: PathBuf) {
+        if let Ok(mut guard) = self.pending_opens.lock() {
+            if !guard.contains(&path) {
+                guard.push(path);
+            }
+        }
+    }
+
+    pub fn take_pending_opens(&self) -> Vec<PathBuf> {
+        self.pending_opens
+            .lock()
+            .map(|mut guard| std::mem::take(&mut *guard))
+            .unwrap_or_default()
+    }
+
+    /// Takes a single pending open (if any) without draining the whole queue.
+    pub fn take_one_pending_open(&self) -> Option<PathBuf> {
+        self.pending_opens
+            .lock()
+            .ok()
+            .and_then(|mut guard| {
+                if guard.is_empty() {
+                    None
+                } else {
+                    Some(guard.remove(0))
+                }
+            })
     }
 
     pub fn push_recent(&self, path: PathBuf) {
@@ -518,6 +627,139 @@ impl DocumentManager {
         let _ = fs::remove_file(dir.join(format!("{label}.json")));
     }
 
+    pub fn last_session_path(&self) -> PathBuf {
+        self.app_data_dir.join("last-session.json")
+    }
+
+    /// Records the documents shown in `labels` (the open windows, in order) so they can be
+    /// reopened with the `lastSession` startup behavior. Untitled windows are kept only while
+    /// they have an unsaved backup.
+    pub fn write_last_session(&self, labels: &[String]) -> Result<(), String> {
+        let entries: Vec<LastSessionEntry> = labels
+            .iter()
+            .filter_map(|label| {
+                let path = self.with_session(label, |s| s.file_path.clone());
+                let has_backup = self.backups_dir().join(format!("{label}.md")).exists();
+                (path.is_some() || has_backup).then(|| LastSessionEntry {
+                    label: label.clone(),
+                    path,
+                })
+            })
+            .collect();
+
+        fs::create_dir_all(&self.app_data_dir).map_err(|e| e.to_string())?;
+        let json = serde_json::to_string_pretty(&entries).map_err(|e| e.to_string())?;
+        let target = self.last_session_path();
+        let tmp = target.with_extension("json.tmp");
+        fs::write(&tmp, json).map_err(|e| e.to_string())?;
+        fs::rename(&tmp, &target).map_err(|e| e.to_string())
+    }
+
+    pub fn read_last_session(&self) -> Vec<LastSessionEntry> {
+        fs::read_to_string(self.last_session_path())
+            .ok()
+            .and_then(|raw| serde_json::from_str(&raw).ok())
+            .unwrap_or_default()
+    }
+
+    /// Works out what to reopen for the `lastSession` startup behavior: every window of the last
+    /// session whose file still exists or that has an unsaved backup. Backups of windows that
+    /// were not recorded (e.g. a crash before the first snapshot) are included as well.
+    pub fn plan_session_restore(&self) -> Vec<RestoreItem> {
+        let mut items: Vec<RestoreItem> = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+
+        for entry in self.read_last_session() {
+            let backup = self.load_backup_snapshot(&entry.label);
+            let path = entry
+                .path
+                .or_else(|| backup.as_ref().and_then(|(meta, _)| meta.original_path.clone()))
+                .filter(|p| p.exists());
+            let backup_text = backup.map(|(_, text)| text);
+            if path.is_none() && backup_text.is_none() {
+                continue;
+            }
+            seen.insert(entry.label.clone());
+            items.push(RestoreItem { previous_label: entry.label, path, backup_text });
+        }
+
+        let mut orphan_labels = self.list_backup_labels();
+        orphan_labels.sort();
+        for label in orphan_labels {
+            if seen.contains(&label) {
+                continue;
+            }
+            if let Some((meta, text)) = self.load_backup_snapshot(&label) {
+                items.push(RestoreItem {
+                    previous_label: label,
+                    path: meta.original_path.filter(|p| p.exists()),
+                    backup_text: Some(text),
+                });
+            }
+        }
+
+        items
+    }
+
+    /// Unsaved work left by a crash: backups only exist while a document has unsaved changes
+    /// (they are removed on save or when changes are discarded), so any found at startup were
+    /// never saved.
+    pub fn plan_unsaved_recovery(&self) -> Vec<RestoreItem> {
+        self.plan_session_restore()
+            .into_iter()
+            .filter(|item| item.backup_text.is_some())
+            .collect()
+    }
+
+    /// Moves the backups of `labels` out of the way (Backups/Discarded/<time>/) instead of
+    /// deleting them, so declining recovery never loses text. Returns the folder.
+    pub fn archive_backups(&self, labels: &[String]) -> Result<PathBuf, String> {
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0);
+        let target = self.backups_dir().join("Discarded").join(stamp.to_string());
+        fs::create_dir_all(&target).map_err(|e| e.to_string())?;
+        for label in labels {
+            for extension in ["md", "json"] {
+                let file = self.backups_dir().join(format!("{label}.{extension}"));
+                if file.exists() {
+                    fs::rename(&file, target.join(format!("{label}.{extension}"))).map_err(|e| e.to_string())?;
+                }
+            }
+        }
+        Ok(target)
+    }
+
+    /// Loads a planned item into the session of `label` (a freshly created window).
+    /// The backup is moved to the new label so a later save clears the right file.
+    pub fn apply_restore_item(&self, label: &str, item: &RestoreItem) -> String {
+        let title = self.with_session(label, |s| {
+            if let Some(path) = &item.path {
+                if s.load_from_path(path).is_err() {
+                    s.file_path = Some(path.clone());
+                }
+            }
+            if let Some(text) = &item.backup_text {
+                s.pending_restore_text = Some(text.clone());
+                s.is_dirty = true;
+            }
+            s.display_title()
+        });
+
+        if let Some(text) = &item.backup_text {
+            if item.previous_label != label {
+                let _ = self.save_backup_snapshot(label, text);
+                self.clear_backup_snapshot(&item.previous_label);
+            }
+        }
+
+        if let Some(path) = &item.path {
+            self.push_recent(path.clone());
+        }
+        title
+    }
+
     pub fn list_backup_labels(&self) -> Vec<String> {
         let dir = self.backups_dir();
         let Ok(entries) = fs::read_dir(&dir) else {
@@ -541,7 +783,106 @@ impl DocumentManager {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn last_session_round_trip_and_restore_plan() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let mgr = DocumentManager::with_data_dir(tmp.path().join("data"));
+        let doc = tmp.path().join("a.md");
+        fs::write(&doc, "saved").expect("write doc");
+
+        mgr.with_session("main", |s| s.load_from_path(&doc)).expect("load");
+        mgr.with_session("doc-2", |_| ()); // untitled, no backup → not recorded
+        mgr.with_session("doc-3", |_| ()); // untitled with backup → recorded
+        mgr.save_backup_snapshot("doc-3", "draft").expect("backup");
+        mgr.save_backup_snapshot("main", "saved + edits").expect("backup main");
+
+        mgr.write_last_session(&["main".into(), "doc-2".into(), "doc-3".into()])
+            .expect("write session");
+        let entries = mgr.read_last_session();
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].path.as_deref(), Some(doc.as_path()));
+
+        let plan = mgr.plan_session_restore();
+        assert_eq!(plan.len(), 2);
+        assert_eq!(plan[0].path.as_deref(), Some(doc.as_path()));
+        assert_eq!(plan[0].backup_text.as_deref(), Some("saved + edits"));
+        assert_eq!(plan[1].path, None);
+        assert_eq!(plan[1].backup_text.as_deref(), Some("draft"));
+
+        // Applying to a new window label loads the file, keeps the edits pending and moves the backup.
+        let fresh = DocumentManager::with_data_dir(tmp.path().join("data"));
+        let title = fresh.apply_restore_item("doc-9", &plan[1]);
+        assert!(title.starts_with("● Untitled"));
+        assert_eq!(fresh.with_session("doc-9", |s| s.pending_restore_text.clone()).as_deref(), Some("draft"));
+        assert!(fresh.load_backup_snapshot("doc-3").is_none());
+        assert!(fresh.load_backup_snapshot("doc-9").is_some());
+
+        fresh.apply_restore_item("main", &plan[0]);
+        assert_eq!(fresh.with_session("main", |s| s.content_cache.clone()), "saved");
+
+        // A file that disappeared and has no backup is skipped.
+        fs::remove_file(&doc).expect("remove doc");
+        fresh.clear_backup_snapshot("main");
+        fresh.clear_backup_snapshot("doc-9");
+        fresh.write_last_session(&["main".into()]).expect("write");
+        assert!(fresh.plan_session_restore().is_empty());
+    }
+
+    #[test]
+    fn restore_version_keeps_encoding_line_endings_and_textpack() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let mgr = DocumentManager::with_data_dir(tmp.path().join("data"));
+
+        // UTF-16LE + BOM + CRLF file
+        let doc = tmp.path().join("doc.md");
+        let mut bytes = vec![0xFF, 0xFE];
+        for unit in "# v1\r\nline\r\n".encode_utf16() {
+            bytes.extend_from_slice(&unit.to_le_bytes());
+        }
+        fs::write(&doc, &bytes).expect("write doc");
+        mgr.with_session("main", |s| s.load_from_path(&doc)).expect("load");
+        let v1 = mgr.versions().record_version(&doc, "# v1\nline\n").expect("record");
+        mgr.with_session("main", |s| s.save_as(&doc, "# v2\n")).expect("save v2");
+
+        let restored = mgr.restore_version("main", &doc, &v1).expect("restore");
+        assert_eq!(restored, "# v1\nline\n");
+        assert_eq!(fs::read(&doc).expect("read"), bytes);
+        assert!(!mgr.with_session("main", |s| s.is_dirty));
+
+        // A .textpack keeps being a zip after restore, even when it is not the open document.
+        let pack = tmp.path().join("notes.textpack");
+        mgr.with_session("other", |s| s.save_as(&pack, "# pack v1")).expect("write pack");
+        let p1 = mgr.versions().record_version(&pack, "# pack v2").expect("record pack");
+        mgr.restore_version("main", &pack, &p1).expect("restore pack");
+        assert_eq!(&fs::read(&pack).expect("read pack")[..2], b"PK");
+        let mut check = DocumentSession::new("check");
+        assert_eq!(check.load_from_path(&pack).expect("reload pack"), "# pack v2");
+    }
+
     use super::*;
+
+    #[test]
+    fn unsaved_work_from_a_crash_is_offered_and_kept_when_declined() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let mgr = DocumentManager::with_data_dir(tmp.path().to_path_buf());
+        // A crash left the unsaved text of an untitled window; another window had none.
+        mgr.save_backup_snapshot("doc-3", "unsaved draft").expect("backup");
+        let saved = tmp.path().join("saved.md");
+        fs::write(&saved, "saved").unwrap();
+        mgr.with_session("main", |s| s.file_path = Some(saved.clone()));
+        mgr.write_last_session(&["main".to_string(), "doc-3".to_string()]).expect("session");
+
+        let plan = mgr.plan_unsaved_recovery();
+        assert_eq!(plan.len(), 1);
+        assert_eq!(plan[0].previous_label, "doc-3");
+        assert_eq!(plan[0].backup_text.as_deref(), Some("unsaved draft"));
+
+        // Declined: moved aside, not deleted, and not offered again.
+        let folder = mgr.archive_backups(&["doc-3".to_string()]).expect("archive");
+        assert_eq!(fs::read_to_string(folder.join("doc-3.md")).unwrap(), "unsaved draft");
+        assert!(mgr.plan_unsaved_recovery().is_empty());
+        assert!(mgr.list_backup_labels().is_empty());
+    }
 
     #[test]
     fn detects_and_preserves_crlf_and_utf8_bom() {
@@ -558,10 +899,10 @@ mod tests {
         assert_eq!(session.bom, BomKind::Utf8);
         assert_eq!(session.line_endings, LineEndings::CRLF);
         assert_eq!(loaded, "# Title\n\n- [ ] Task 1\n");
-        assert_eq!(session.display_title(), "note.md — MarkEdit-Rust");
+        assert_eq!(session.display_title(), "note.md — SuperMark");
 
         session.is_dirty = true;
-        assert_eq!(session.display_title(), "● note.md — MarkEdit-Rust");
+        assert_eq!(session.display_title(), "● note.md — SuperMark");
 
         session
             .save_to_disk("# Title\n\n- [x] Task 1\n")

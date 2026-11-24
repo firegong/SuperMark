@@ -2,8 +2,9 @@ import { describe, expect, test, beforeEach, afterEach, jest } from '@jest/globa
 import { EditorView } from '@codemirror/view';
 import type { ExtensionUpdateBehavior, ExtensionsManagerState } from '../src/chrome/extensionsModal';
 import type { UserSettings } from '../src/chrome/settingsModal';
-import { getMarkdownPreviewMode, setMarkdownPreviewMode, syncScroll } from '../src/chrome/markdownPreview';
-import { createLivePreviewExtension } from '../src/chrome/liveEditorPreview';
+import { setMarkdownPreviewMode, syncScroll } from '../src/chrome/markdownPreview';
+import { createLivePreviewExtension, livePreviewExtension } from '../src/chrome/liveEditorPreview';
+import { beginExtensionScript, endExtensionScript, resetThemeContributions } from '../src/chrome/themeExtensions';
 import {
   renderMarkdownToHtml,
   setMarkdownSyntaxStandard,
@@ -396,6 +397,40 @@ describe('Extensions Manager', () => {
     expect(document.querySelectorAll('.markedit-ext-theme-pane').length).toBe(2);
   });
 
+  test('built-in extensions are listed in Installed with a toggle and no Uninstall', async () => {
+    invokeMock.mockImplementation(async (_cmd: string, args?: Record<string, unknown>) => ({
+      ...sampleState,
+      builtins: [{
+        id: 'supermarkdown',
+        name: 'SuperMarkdown',
+        description: 'Markdown parser',
+        version: '0.1.0',
+        enabled: args?.id === 'supermarkdown' ? Boolean(args.enabled) : true,
+      }],
+    }));
+    await openAndRender('installed');
+
+    const row = document.querySelector('[data-builtin-id="supermarkdown"]') as HTMLElement;
+    expect(row).not.toBeNull();
+    expect(row.textContent).toContain('SuperMarkdown');
+    expect(row.textContent).toContain('Built-in');
+    expect(row.querySelector('[data-action="uninstall"]')).toBeNull();
+    // Built-in first, then the installed extension.
+    const rows = document.querySelectorAll('.markedit-chrome-extensions-row');
+    expect(rows[0]).toBe(row);
+    expect(rows.length).toBe(2);
+
+    const toggle = row.querySelector('[data-action="toggle-enabled"]') as HTMLInputElement;
+    expect(toggle.checked).toBe(true);
+    toggle.checked = false;
+    toggle.dispatchEvent(new Event('change', { bubbles: true }));
+    await tick();
+
+    expect(invokeMock).toHaveBeenCalledWith('extensions_set_enabled', { id: 'supermarkdown', enabled: false });
+    const updated = document.querySelector('[data-builtin-id="supermarkdown"] [data-action="toggle-enabled"]') as HTMLInputElement;
+    expect(updated.checked).toBe(false);
+  });
+
   test('search filters Discover cards', async () => {
     await openAndRender('discover');
 
@@ -524,10 +559,10 @@ describe('Extensions Manager', () => {
     expect(invokeMock).toHaveBeenCalledWith('extensions_open_folder', {});
   });
 
-  test('Ctrl+Shift+X opens Extensions Manager', () => {
+  test('Ctrl+Shift+X is left to Format > Strikethrough', () => {
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'X', ctrlKey: true, shiftKey: true, bubbles: true }));
 
-    expect(document.querySelector('.markedit-chrome-extensions-backdrop')).not.toBeNull();
+    expect(document.querySelector('.markedit-chrome-extensions-backdrop')).toBeNull();
   });
 
   test('Escape closes Extensions Manager and restores focus', async () => {
@@ -587,6 +622,7 @@ describe('Settings Modal', () => {
 
   const sampleSettings: UserSettings = {
     theme: 'github-light',
+    themeExtension: '',
     fontFamily: 'ui-monospace',
     fontSize: 16,
     showLineNumbers: true,
@@ -594,6 +630,7 @@ describe('Settings Modal', () => {
     invisiblesBehavior: 'selection',
     typewriterMode: false,
     focusMode: false,
+    livePreview: false,
     lineWrapping: true,
     lineHeight: 1.5,
     tabKeyBehavior: 2,
@@ -607,10 +644,26 @@ describe('Settings Modal', () => {
     newFilenameExtension: 'md',
     defaultTextEncoding: 'UTF-8',
     defaultLineBreak: '\n',
+    startupBehavior: 'newDocument',
+    checkForUpdates: true,
     reduceTransparency: false,
+    markdownRenderer: 'extended',
+    diagramServer: 'https://kroki.io',
+    diagramRendering: 'auto',
+    plantumlCommand: 'plantuml',
+    d2Command: 'd2',
+    previewThemeStyles: {},
   };
 
   const tick = () => new Promise(resolve => { setTimeout(resolve, 0); });
+  const themeButton = () => document.querySelector('.markedit-theme-picker-button') as HTMLButtonElement;
+  const themeOptions = () => Array.from(document.querySelectorAll<HTMLElement>('.markedit-theme-picker-option'));
+  const selectTheme = (value: string) => {
+    themeButton().click();
+    const option = themeOptions().find(element => element.dataset.value === value);
+    expect(option).toBeDefined();
+    option?.click();
+  };
 
   beforeEach(() => {
     document.body.innerHTML = '';
@@ -657,7 +710,7 @@ describe('Settings Modal', () => {
     initChromeUI();
   });
 
-  test('openSettings renders tabs and theme grid', async () => {
+  test('openSettings renders tabs and theme drop-down', async () => {
     (window.chromeUI as ChromeUI).openSettings('editor');
     await tick();
 
@@ -665,28 +718,92 @@ describe('Settings Modal', () => {
     expect(document.querySelector('.markedit-chrome-settings-title')?.textContent).toBe('Settings');
 
     const tabs = document.querySelectorAll('.markedit-chrome-settings-tab');
-    expect(tabs.length).toBe(4);
-    expect(Array.from(tabs).map(tab => tab.textContent)).toEqual(['Editor', 'Assistant', 'General', 'Window']);
+    expect(tabs.length).toBe(5);
+    expect(Array.from(tabs).map(tab => tab.textContent)).toEqual(['Editor', 'Preview', 'Assistant', 'General', 'Window']);
 
-    const themeCards = document.querySelectorAll('.markedit-settings-theme-card');
-    expect(themeCards.length).toBe(16);
+    // A drop-down whose button and options show each theme's colors.
+    expect(themeButton().dataset.value).toBe(sampleSettings.theme);
+    expect(themeButton().querySelector('.markedit-theme-swatch')).not.toBeNull();
+    expect(themeOptions().length).toBe(16);
+    expect(themeOptions().every(option => option.querySelector('.markedit-theme-swatch') !== null)).toBe(true);
+    expect(themeOptions().find(option => option.getAttribute('aria-selected') === 'true')?.dataset.value).toBe(sampleSettings.theme);
 
     expect(document.querySelector('.markedit-settings-more-themes')).not.toBeNull();
+  });
+
+  test('theme drop-down works with the keyboard, and Escape closes only the list', async () => {
+    (window.chromeUI as ChromeUI).openSettings('editor');
+    await tick();
+
+    themeButton().dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    expect(themeButton().getAttribute('aria-expanded')).toBe('true');
+    const list = document.querySelector('.markedit-theme-picker-list') as HTMLElement;
+    expect(list.getAttribute('aria-activedescendant')).toBe(themeOptions()[0].id);
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(themeButton().getAttribute('aria-expanded')).toBe('false');
+    expect(document.querySelector('.markedit-chrome-settings-backdrop')).not.toBeNull();
+
+    themeButton().click();
+    list.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    list.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await tick();
+    expect(settingsInvokeMock).toHaveBeenCalledWith('settings_update', { patch: { theme: 'github-dark' } });
   });
 
   test('selecting a theme invokes settings_update and config.setTheme', async () => {
     (window.chromeUI as ChromeUI).openSettings('editor');
     await tick();
 
-    const themeCards = document.querySelectorAll('.markedit-settings-theme-card');
-    const darkCard = Array.from(themeCards).find(card => card.textContent.includes('GitHub (Dark)'));
-    expect(darkCard).toBeDefined();
-    (darkCard as HTMLButtonElement).click();
+    selectTheme('github-dark');
 
     await tick();
 
     expect(settingsInvokeMock).toHaveBeenCalledWith('settings_update', { patch: { theme: 'github-dark' } });
     expect(configSetters.setTheme).toHaveBeenCalledWith({ name: 'github-dark' });
+  });
+
+  test('installed theme extensions are offered as themes and saved as the theme extension', async () => {
+    // A theme extension recorded while extension scripts ran (see themeExtensions.ts).
+    const theming = window as unknown as { __markeditTheming__?: { customThemes: Record<string, unknown> } };
+    theming.__markeditTheming__ = { customThemes: {} };
+    resetThemeContributions();
+    beginExtensionScript();
+    theming.__markeditTheming__.customThemes.dark = 'one-dark';
+    endExtensionScript('markedit-theme-one-dark.js');
+
+    // The host keeps what was saved.
+    let saved: UserSettings = { ...sampleSettings };
+    settingsInvokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+      if (cmd === 'settings_update') {
+        saved = { ...saved, ...(args?.patch as Partial<UserSettings>) };
+      }
+      return saved;
+    });
+
+    try {
+      (window.chromeUI as ChromeUI).openSettings('editor');
+      await tick();
+
+      const option = themeOptions()
+        .find(element => element.closest('[role="group"]')?.textContent.startsWith('Extensions') === true && element.textContent.includes('One Dark'));
+      expect(option).toBeDefined();
+      selectTheme(option?.dataset.value ?? '');
+      await tick();
+      expect(themeButton().dataset.value).toBe('extension:markedit-theme-one-dark.js');
+
+      expect(settingsInvokeMock).toHaveBeenCalledWith('settings_update', { patch: { themeExtension: 'markedit-theme-one-dark.js' } });
+      expect(theming.__markeditTheming__.customThemes).toEqual({ dark: 'one-dark' });
+
+      // Back to a built-in theme: the extension's colors are removed.
+      selectTheme('github-light');
+      await tick();
+      expect(settingsInvokeMock).toHaveBeenCalledWith('settings_update', { patch: { themeExtension: '' } });
+      expect(theming.__markeditTheming__.customThemes).toEqual({});
+    } finally {
+      resetThemeContributions();
+      delete theming.__markeditTheming__;
+    }
   });
 
   test('toggle switch invokes settings_update and config setter', async () => {
@@ -735,6 +852,77 @@ describe('Settings Modal', () => {
     await tick();
 
     expect(document.body.textContent).toContain('Reduce Transparency');
+  });
+
+  test('Preview tab saves per-theme preview styles and applies them to the preview', async () => {
+    (window.config as { theme?: string }).theme = 'github-light';
+    // The host keeps what was saved.
+    let saved: UserSettings = { ...sampleSettings };
+    settingsInvokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+      if (cmd === 'settings_update') {
+        saved = { ...saved, ...(args?.patch as Partial<UserSettings>) };
+      }
+      return saved;
+    });
+    (window.chromeUI as ChromeUI).openSettings('preview');
+    await tick();
+
+    const themeSelect = document.querySelector('.markedit-chrome-settings-body select') as HTMLSelectElement;
+    expect(themeSelect.value).toBe('github-light');
+
+    const size = document.querySelector('input[data-element="h1"][data-property="fontSize"]') as HTMLInputElement;
+    size.value = '32';
+    size.dispatchEvent(new Event('change'));
+    await tick();
+
+    expect(settingsInvokeMock).toHaveBeenCalledWith('settings_update', {
+      patch: { previewThemeStyles: { 'github-light': { h1: { fontSize: 32 } } } },
+    });
+    expect(document.getElementById('markedit-preview-theme-styles')?.textContent)
+      .toContain('.markedit-preview-body h1 { font-size: 32px; }');
+
+    const color = document.querySelector('input[data-element="body"][data-property="color"]') as HTMLInputElement;
+    color.value = '#336699';
+    color.dispatchEvent(new Event('change'));
+    await tick();
+    expect(document.getElementById('markedit-preview-theme-styles')?.textContent)
+      .toContain('.markedit-preview-body { color: #336699; }');
+
+    // Styles of another theme are kept apart and not applied to this one.
+    const otherTheme = document.querySelector('.markedit-chrome-settings-body select') as HTMLSelectElement;
+    otherTheme.value = 'dracula';
+    otherTheme.dispatchEvent(new Event('change'));
+    await tick();
+    expect((document.querySelector('input[data-element="h1"][data-property="fontSize"]') as HTMLInputElement).value).toBe('');
+    expect(document.getElementById('markedit-preview-theme-styles')?.textContent).toContain('font-size: 32px');
+
+    window.chromeUI?.setPreviewThemeStyles({});
+  });
+
+  test('preview styles follow the theme in use', () => {
+    const config = window.config as { theme?: string; themeExtension?: string };
+    config.theme = 'github-light';
+    config.themeExtension = '';
+    window.chromeUI?.setPreviewThemeStyles({
+      'github-light': { h2: { color: '#112233', fontWeight: 700 } },
+      dracula: { h2: { fontFamily: 'Georgia; } body { display: none', fontSize: 500 } },
+      bogus: 'not an object',
+    });
+    const css = () => document.getElementById('markedit-preview-theme-styles')?.textContent ?? '';
+    expect(css()).toContain('h2 { font-weight: 700; color: #112233; }');
+
+    config.theme = 'dracula';
+    window.dispatchEvent(new Event('editor-colors-changed'));
+    // Values are sanitized: nothing escapes the declaration, sizes are clamped.
+    expect(css()).toContain('h2 { font-family: Georgia  body  display none; font-size: 96px; }');
+    expect(css()).not.toContain('}  body {');
+
+    config.theme = 'cobalt';
+    window.dispatchEvent(new Event('editor-colors-changed'));
+    expect(document.getElementById('markedit-preview-theme-styles')).toBeNull();
+
+    window.chromeUI?.setPreviewThemeStyles({});
+    config.theme = 'github-light';
   });
 
   test('Get More Themes opens Extensions Manager', async () => {
@@ -983,29 +1171,25 @@ describe('Markdown Preview', () => {
     expect(document.body.classList.contains('markedit-mode-preview')).toBe(false);
   });
 
-  test('mode switcher toolbar buttons change mode', async () => {
+  test('the preview pane has no view buttons; modes are set from the native View menu', async () => {
     (window.chromeUI as ChromeUI).setMarkdownPreviewMode('split');
     await tick();
 
-    const previewButton = document.querySelector('[data-mode="preview"]') as HTMLButtonElement;
-    previewButton.click();
-    await tick();
+    expect(document.querySelector('.markedit-markdown-preview-pane')).not.toBeNull();
+    expect(document.querySelector('.markedit-preview-toolbar')).toBeNull();
+    expect(document.querySelector('[data-mode]')).toBeNull();
+    expect(document.querySelector('.markedit-preview-standard-select')).toBeNull();
 
+    (window.chromeUI as ChromeUI).setMarkdownPreviewMode('preview');
+    await tick();
     expect((window.chromeUI as ChromeUI).getMarkdownPreviewMode()).toBe('preview');
-
-    const editorButton = document.querySelector('[data-mode="editor"]') as HTMLButtonElement;
-    editorButton.click();
-    await tick();
-
-    expect((window.chromeUI as ChromeUI).getMarkdownPreviewMode()).toBe('editor');
   });
 
-  test('close button returns to editor mode', async () => {
+  test('Escape returns from Markdown view to the editor', async () => {
     (window.chromeUI as ChromeUI).setMarkdownPreviewMode('preview');
     await tick();
 
-    const closeButton = document.querySelector('.markedit-preview-toolbar .markedit-chrome-close-button') as HTMLButtonElement;
-    closeButton.click();
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     await tick();
 
     expect((window.chromeUI as ChromeUI).getMarkdownPreviewMode()).toBe('editor');
@@ -1015,6 +1199,14 @@ describe('Markdown Preview', () => {
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'P', ctrlKey: true, shiftKey: true, bubbles: true }));
 
     expect((window.chromeUI as ChromeUI).getMarkdownPreviewMode()).toBe('split');
+  });
+
+  test('Ctrl+Shift+V toggles Markdown view; AltGr-like Ctrl+Alt+P does nothing', () => {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'p', ctrlKey: true, altKey: true, bubbles: true }));
+    expect((window.chromeUI as ChromeUI).getMarkdownPreviewMode()).toBe('editor');
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'V', ctrlKey: true, shiftKey: true, bubbles: true }));
+    expect((window.chromeUI as ChromeUI).getMarkdownPreviewMode()).toBe('preview');
   });
 });
 
@@ -1113,7 +1305,7 @@ describe('Markdown Syntax Standard Switching', () => {
   });
 });
 
-describe('Floating Mode Switcher', () => {
+describe('Native View menu state', () => {
   const tick = () => new Promise(resolve => { setTimeout(resolve, 0); });
 
   beforeEach(() => {
@@ -1134,43 +1326,71 @@ describe('Floating Mode Switcher', () => {
 
   afterEach(() => {
     setMarkdownPreviewMode('editor');
+    delete (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
   });
 
-  test('mode switcher pill is visible in editor mode', () => {
-    const pill = document.getElementById('markedit-mode-switcher');
-    expect(pill).not.toBeNull();
+  type Invoke = (cmd: string, args?: Record<string, unknown>) => Promise<unknown>;
+  const viewStates = (invoke: jest.Mock<Invoke>) => invoke.mock.calls
+    .filter(([cmd]) => cmd === 'view_state_changed')
+    .map(([, args]) => args);
 
-    const buttons = pill?.querySelectorAll('button');
-    expect(buttons?.length).toBe(3);
-    expect(buttons?.[0].textContent).toBe('Editor');
-    expect(buttons?.[0].classList.contains('is-active')).toBe(true);
+  test('no floating mode switcher is added to the page', () => {
+    expect(document.getElementById('markedit-mode-switcher')).toBeNull();
   });
 
-  test('mode switcher pill is hidden in split and preview modes', async () => {
+  test('mode, parser and scroll sync changes are reported to the View menu', async () => {
+    const invoke = jest.fn<Invoke>(async () => undefined);
+    (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = { invoke };
+
     setMarkdownPreviewMode('split');
     await tick();
+    expect(viewStates(invoke).at(-1)).toEqual({ mode: 'split', renderer: getActiveMarkdownRenderer().id, syncScroll: true, livePreview: false });
 
-    const pillSplit = document.getElementById('markedit-mode-switcher') as HTMLElement | null;
-    expect(pillSplit).not.toBeNull();
-    expect(window.getComputedStyle(pillSplit as HTMLElement).display).toBe('none');
-    expect(getMarkdownPreviewMode()).toBe('split');
+    (window.chromeUI as ChromeUI).togglePreviewSyncScroll();
+    expect(viewStates(invoke).at(-1)).toMatchObject({ mode: 'split', syncScroll: false });
+    (window.chromeUI as ChromeUI).togglePreviewSyncScroll();
 
-    setMarkdownPreviewMode('preview');
-    await tick();
+    (window.chromeUI as ChromeUI).setMarkdownRenderer('super');
+    expect(viewStates(invoke).at(-1)).toMatchObject({ renderer: 'super' });
+    (window.chromeUI as ChromeUI).setMarkdownRenderer('extended');
 
-    const pillPreview = document.getElementById('markedit-mode-switcher') as HTMLElement | null;
-    expect(pillPreview).not.toBeNull();
-    expect(window.getComputedStyle(pillPreview as HTMLElement).display).toBe('none');
-    expect(getMarkdownPreviewMode()).toBe('preview');
+    // The menu is shared by all windows: a focused window reports its own state.
+    const before = viewStates(invoke).length;
+    window.dispatchEvent(new Event('focus'));
+    expect(viewStates(invoke).length).toBe(before + 1);
   });
 
-  test('clicking mode switcher pill buttons changes mode', async () => {
-    const previewButton = document.querySelector('#markedit-mode-switcher [data-mode="preview"]') as HTMLButtonElement;
-    previewButton.click();
-    await tick();
+  test('live preview in the editor is off by default and toggled from the View menu', async () => {
+    const invoke = jest.fn<Invoke>(async () => undefined);
+    (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = { invoke };
+    // An editor with the app's live preview slot (the saved setting is off).
+    document.body.innerHTML = '';
+    editor.setUp('Intro\n\n| a | b |\n|---|---|\n| 1 | 2 |', livePreviewExtension());
+    const view = window.editor;
+    view.dispatch({ selection: { anchor: 0 } });
 
-    expect(getMarkdownPreviewMode()).toBe('preview');
-    expect(document.querySelector('#markedit-mode-switcher .is-active')?.textContent).toBe('Preview');
+    // Off: the table is plain source.
+    expect(view.dom.querySelector('.cm-live-table')).toBeNull();
+
+    (window.chromeUI as ChromeUI).toggleEditorLivePreview();
+    await tick();
+    expect(view.dom.querySelector('.cm-live-table')).not.toBeNull();
+    expect(viewStates(invoke).at(-1)).toMatchObject({ livePreview: true });
+    expect(invoke).toHaveBeenCalledWith('settings_update', { patch: { livePreview: true } });
+
+    (window.chromeUI as ChromeUI).toggleEditorLivePreview();
+    await tick();
+    expect(view.dom.querySelector('.cm-live-table')).toBeNull();
+    expect(viewStates(invoke).at(-1)).toMatchObject({ livePreview: false });
+  });
+
+  test('Copy Preview HTML copies the rendered document in any mode', async () => {
+    const writeText = jest.fn(async (_text: string) => undefined);
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+
+    (window.chromeUI as ChromeUI).copyPreviewHtml();
+    await tick();
+    expect(writeText.mock.calls[0][0]).toContain('<h1');
   });
 });
 
@@ -1191,53 +1411,161 @@ describe('Split View Sync Scroll', () => {
     setMarkdownPreviewMode('editor');
   });
 
+  // jsdom has no layout: give the preview blocks positions and both panes scroll metrics.
   function setupPreviewBody(): HTMLElement {
     const body = document.querySelector('.markedit-preview-body') as HTMLElement;
     body.innerHTML = `
-      <div class="markedit-preview-block" data-line="1"><h1 class="markedit-preview-heading">Heading</h1></div>
-      <div class="markedit-preview-block" data-line="2"><p>Spacer</p></div>
+      <div class="markedit-preview-block" data-line="0"><h1>Heading</h1></div>
       <ul class="markedit-preview-list">
-        <li class="markedit-preview-block" data-line="4">item 1</li>
-        <li class="markedit-preview-block" data-line="5">item 2</li>
+        <li class="markedit-preview-block" data-line="2">item 1</li>
+        <li class="markedit-preview-block" data-line="3">item 2</li>
       </ul>
-      <div class="markedit-preview-block" data-line="7"><p>More text.</p></div>
+      <div class="markedit-preview-block" data-line="5"><p>More text.</p></div>
     `;
 
-    const heading = body.querySelector('[data-line="1"]') as HTMLElement;
-    const listItem = body.querySelector('[data-line="4"]') as HTMLElement;
-
-    Object.defineProperty(heading, 'offsetTop', { value: 50, configurable: true });
-    Object.defineProperty(listItem, 'offsetTop', { value: 200, configurable: true });
-    Object.defineProperty(body, 'offsetTop', { value: 0, configurable: true });
-
+    const tops: Record<string, number> = { 0: 0, 2: 200, 3: 300, 5: 600 };
+    body.querySelectorAll<HTMLElement>('[data-line]').forEach(element => {
+      element.getBoundingClientRect = () => ({ top: tops[element.dataset.line ?? ''] - body.scrollTop, width: 100, height: 20 }) as DOMRect;
+    });
+    body.getBoundingClientRect = () => ({ top: 0, width: 100, height: 200 }) as DOMRect;
+    mockScroller(body, 1000, 200);
     return body;
   }
 
-  function setEditorScroll(scrollTop: number, scrollHeight: number, clientHeight: number): void {
-    const scroller = window.editor.scrollDOM;
-    Object.defineProperty(scroller, 'scrollTop', { value: scrollTop, configurable: true });
-    Object.defineProperty(scroller, 'scrollHeight', { value: scrollHeight, configurable: true });
-    Object.defineProperty(scroller, 'clientHeight', { value: clientHeight, configurable: true });
+  function mockScroller(element: HTMLElement, scrollHeight: number, clientHeight: number): void {
+    let top = 0;
+    Object.defineProperty(element, 'scrollTop', {
+      configurable: true,
+      get: () => top,
+      set: (value: number) => { top = Math.max(0, Math.min(value, scrollHeight - clientHeight)); },
+    });
+    Object.defineProperty(element, 'scrollHeight', { value: scrollHeight, configurable: true });
+    Object.defineProperty(element, 'clientHeight', { value: clientHeight, configurable: true });
   }
 
-  test('aligns preview to the topmost visible heading when a heading is in viewport', () => {
+  // Editor lines are 100px tall; the 6-line document is 600px in a 100px viewport.
+  function setupEditorScroller(): HTMLElement {
+    const view = window.editor;
+    const scroller = view.scrollDOM;
+    mockScroller(scroller, 600, 100);
+    const blockOf = (index: number) => {
+      const doc = view.state.doc;
+      const line = doc.line(Math.max(0, Math.min(index, doc.lines - 1)) + 1);
+      return { from: line.from, to: line.to, top: (line.number - 1) * 100, height: 100 };
+    };
+    Object.defineProperty(view, 'documentTop', { configurable: true, get: () => -scroller.scrollTop });
+    view.lineBlockAtHeight = ((height: number) => blockOf(Math.floor(height / 100))) as unknown as typeof view.lineBlockAtHeight;
+    view.lineBlockAt = ((pos: number) => blockOf(view.state.doc.lineAt(pos).number - 1)) as unknown as typeof view.lineBlockAt;
+    return scroller;
+  }
+
+  test('editor scrolling moves the preview to the interpolated position', () => {
     const body = setupPreviewBody();
-    // Make lines 1-2 visible so the heading (line 1) is in range
-    setEditorScroll(5, 100, 30);
+    const scroller = setupEditorScroller();
 
+    // Reference offset 300 of 600 → line 3 → preview offset 300 → scrollTop 300 × 800 / 1000.
+    scroller.scrollTop = 250;
+    scroller.dispatchEvent(new Event('scroll'));
+    expect(body.scrollTop).toBeCloseTo(240);
+
+    // Line 4.2 lies between line 3 (300) and line 5 (600): preview offset 480.
+    scroller.scrollTop = 350;
     syncScroll();
+    expect(body.scrollTop).toBeCloseTo(384);
 
-    expect(body.scrollTop).toBe(50);
+    scroller.scrollTop = 0;
+    syncScroll();
+    expect(body.scrollTop).toBe(0);
+
+    scroller.scrollTop = 500;
+    syncScroll();
+    expect(body.scrollTop).toBe(800);
   });
 
-  test('aligns preview to the topmost visible list item when no heading is in viewport', () => {
+  test('preview scrolling moves the editor', () => {
     const body = setupPreviewBody();
-    // Make lines 4-5 visible so list items are in range but the heading (line 1) is not
-    setEditorScroll(40, 100, 30);
+    const scroller = setupEditorScroller();
 
-    syncScroll();
+    body.dispatchEvent(new Event('wheel', { bubbles: true }));
+    body.scrollTop = 240; // reference offset 300 → line 3 → editor offset 300
+    body.dispatchEvent(new Event('scroll'));
+    expect(scroller.scrollTop).toBeCloseTo(250);
 
-    expect(body.scrollTop).toBe(200);
+    // The editor's own scroll event (caused by the sync) does not move the preview back.
+    scroller.dispatchEvent(new Event('scroll'));
+    expect(body.scrollTop).toBe(240);
+  });
+
+  // CodeMirror measures in animation frames and would reset the mocked editor scroll position.
+  const useFakeTimers = () => jest.useFakeTimers({ doNotFake: ['requestAnimationFrame', 'cancelAnimationFrame'] });
+
+  test('editing pauses sync until there has been no edit for a second', () => {
+    useFakeTimers();
+    try {
+      const body = setupPreviewBody();
+      const scroller = setupEditorScroller();
+      // The user works in the editor, so the editor leads when sync resumes.
+      window.editor.contentDOM.dispatchEvent(new Event('keydown', { bubbles: true }));
+
+      window.editor.dispatch({ changes: { from: 0, insert: 'x' } });
+      scroller.scrollTop = 250;
+      scroller.dispatchEvent(new Event('scroll'));
+      expect(body.scrollTop).toBe(0);
+
+      // Another edit 600 ms later restarts the quiet period.
+      jest.advanceTimersByTime(600);
+      window.editor.dispatch({ changes: { from: 0, insert: 'y' } });
+      scroller.dispatchEvent(new Event('scroll'));
+      jest.advanceTimersByTime(600);
+      expect(body.scrollTop).toBe(0);
+
+      // A second without edits: sync resumes and re-aligns the preview.
+      jest.advanceTimersByTime(500);
+      expect(body.scrollTop).toBeCloseTo(240);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test('a selection pauses sync until it has been cleared for a second', () => {
+    useFakeTimers();
+    try {
+      const body = setupPreviewBody();
+      const scroller = setupEditorScroller();
+      // The user works in the editor, so the editor leads when sync resumes.
+      window.editor.contentDOM.dispatchEvent(new Event('keydown', { bubbles: true }));
+
+      window.editor.dispatch({ selection: { anchor: 0, head: 5 } });
+      scroller.scrollTop = 250;
+      scroller.dispatchEvent(new Event('scroll'));
+      jest.advanceTimersByTime(3000);
+      expect(body.scrollTop).toBe(0);
+
+      window.editor.dispatch({ selection: { anchor: 0 } });
+      document.dispatchEvent(new Event('selectionchange'));
+      jest.advanceTimersByTime(800);
+      expect(body.scrollTop).toBe(0);
+
+      jest.advanceTimersByTime(400);
+      expect(body.scrollTop).toBeCloseTo(240);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test('preview scroll caused by the sync or by re-rendering does not move the editor', () => {
+    const body = setupPreviewBody();
+    const scroller = setupEditorScroller();
+
+    window.editor.contentDOM.dispatchEvent(new Event('wheel', { bubbles: true }));
+    scroller.scrollTop = 250;
+    scroller.dispatchEvent(new Event('scroll'));
+    body.dispatchEvent(new Event('scroll'));
+    expect(scroller.scrollTop).toBe(250);
+
+    body.scrollTop = 10;
+    body.dispatchEvent(new Event('scroll'));
+    expect(scroller.scrollTop).toBe(250);
   });
 });
 
@@ -1246,6 +1574,7 @@ describe('Settings Modal Window Controls', () => {
 
   const minimalSettings: UserSettings = {
     theme: 'github-light',
+    themeExtension: '',
     fontFamily: 'ui-monospace',
     fontSize: 16,
     showLineNumbers: true,
@@ -1253,6 +1582,7 @@ describe('Settings Modal Window Controls', () => {
     invisiblesBehavior: 'selection',
     typewriterMode: false,
     focusMode: false,
+    livePreview: false,
     lineWrapping: true,
     lineHeight: 1.5,
     tabKeyBehavior: 2,
@@ -1266,7 +1596,15 @@ describe('Settings Modal Window Controls', () => {
     newFilenameExtension: 'md',
     defaultTextEncoding: 'UTF-8',
     defaultLineBreak: '\n',
+    startupBehavior: 'newDocument',
+    checkForUpdates: true,
     reduceTransparency: false,
+    markdownRenderer: 'extended',
+    diagramServer: 'https://kroki.io',
+    diagramRendering: 'auto',
+    plantumlCommand: 'plantuml',
+    d2Command: 'd2',
+    previewThemeStyles: {},
   };
 
   beforeEach(() => {

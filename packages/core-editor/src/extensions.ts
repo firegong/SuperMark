@@ -29,9 +29,10 @@ import { paragraphIndentStyle, lineIndentStyle } from './styling/nodes/indent';
 import { gutterExtensions } from './styling/nodes/gutter';
 import { IndentBehavior } from './config';
 import { bundledLanguages } from './languages';
+import { streamCodeLanguages } from './codeLanguages';
 import { editingState } from './common/store';
 import { playSystemBeep } from './common/utils';
-import { createLivePreviewExtension } from './chrome/liveEditorPreview';
+import { livePreviewExtension } from './chrome/liveEditorPreview';
 
 import { isActive as isWritingToolsActive } from './modules/writingTools';
 import { localizePhrases } from './modules/localization';
@@ -131,7 +132,7 @@ export function extensions(options: { lineBreak?: string }) {
         }
 
         // We use customizedCommandsKeymap instead
-        if (['Home', 'End', 'Mod-/', 'PageUp', 'PageDown'].includes(keymap.key ?? '')) {
+        if (['Mod-/', 'PageUp', 'PageDown'].includes(keymap.key ?? '')) {
           return false;
         }
 
@@ -167,8 +168,8 @@ export function extensions(options: { lineBreak?: string }) {
     linkStyles, // Must after invisibles because whitespaces can break this
     selectedLines.of(window.config.focusMode ? selectedLinesDecoration : []),
 
-    // Live rendered preview inside the editor
-    createLivePreviewExtension(),
+    // Optional rendering of tables, math, diagrams… inside the editor (off by default)
+    livePreviewExtension(),
 
     // Input handling
     wordTokenizer(),
@@ -192,6 +193,8 @@ export function markdownConfigurations() {
     codeLanguages: [
       ...bundledLanguages(html()),
       ...userCodeLanguages(),
+      // After the extension's languages, which are more precise when installed.
+      ...streamCodeLanguages(),
     ],
     extensions: [
       ...markdownExtensions,

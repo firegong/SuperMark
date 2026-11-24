@@ -19,7 +19,7 @@ import {
 } from '@codemirror/commands';
 
 import { EditCommand } from './types';
-import { scrollIntoView } from '../selection';
+// scrollIntoView no longer used here
 import formatContent from './formatContent';
 import toggleBlockWithMarks from './toggleBlockWithMarks';
 import toggleLineLeadingMark from './toggleLineLeadingMark';
@@ -99,7 +99,7 @@ export function insertCodeBlock() {
   const selected = state.sliceDoc(main.from, main.to);
 
   // Snippets only handle a single, single-line selection, otherwise keep the plain wrapping behavior.
-  // Note: sliceDoc always uses LF regardless of state.lineBreak, so detect line breaks with '\n'.
+  // Note: sliceDoc joins lines with state.lineBreak; both LF and CRLF contain '\n'.
   if (ranges.length > 1 || selected.includes('\n')) {
     insertBlockWithMarks('```');
     return;
@@ -172,20 +172,6 @@ export function performEditCommand(command: EditCommand) {
 }
 
 export const customizedCommandsKeymap: KeyBinding[] = [
-  {
-    key: 'Home',
-    run: () => {
-      scrollIntoView(0, 'center', 0);
-      return true;
-    },
-  },
-  {
-    key: 'End',
-    run: editor => {
-      scrollIntoView(editor.state.doc.length, 'center', 0);
-      return true;
-    },
-  },
   {
     key: 'Mod-/',
     run: toggleLineComment,

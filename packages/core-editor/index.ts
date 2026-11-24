@@ -25,13 +25,16 @@ import { NativeModuleTranslation } from './src/bridge/native/translation';
 import { NativeModuleSecretStorage } from './src/bridge/native/secretStorage';
 
 import { resetEditor } from './src/core';
+import { loadHostDocument, reloadDocumentFromHost, reloadExtensionsFromHost } from './src/hostDocument';
 import { initThemeExtractors, initMarkEditModules } from './src/api/modules';
 import { setUp, applyReducedMotion } from './src/styling/config';
+import { installBundledFonts } from './src/styling/fonts';
 import { loadTheme } from './src/styling/themes';
 import { startObserving } from './src/modules/events';
 import { createScriptRunner } from './src/scriptContext';
 import { setUpQuickLook } from './src/@quicklook';
 import { initChromeUI } from './src/chrome';
+import { initSidebar } from './src/chrome/sidebar';
 
 // In release mode, window.config = "{{EDITOR_CONFIG}}" is replaced with a JSON literal
 // by the build (vite transformIndexHtml) and further extended by the native host bootstrap.
@@ -41,7 +44,7 @@ const defaultConfig = {
   host: Host.mainApp,
   text: pseudoDocument,
   theme: 'github-light',
-  fontFace: { family: 'ui-monospace' },
+  fontFace: { family: 'D2Coding' },
   fontSize: 17,
   showLineNumbers: true,
   showActiveLineIndicator: true,
@@ -82,11 +85,21 @@ window.nativeModules = {
   secretStorage: createNativeModule<NativeModuleSecretStorage>('secretStorage'),
 };
 
+// The native host re-runs the extension bootstrap after installing, removing, or reloading
+// extensions. Both globals are defined once (non-writable, non-configurable) and delegate to the
+// runner of the latest bootstrap; redefining them would throw "Cannot redefine property".
+let currentScriptRunner: ReturnType<typeof createScriptRunner> | undefined;
 Object.defineProperty(window, '__prepareScriptContexts__', {
   value: (scripts: Parameters<typeof createScriptRunner>[0]) => {
-    // Idempotent by design: the native host re-runs the extension bootstrap
-    // after installing, removing, or reloading extensions.
-    Object.defineProperty(window, '__runScriptWithContext__', { value: createScriptRunner(scripts) });
+    currentScriptRunner = createScriptRunner(scripts);
+  },
+});
+Object.defineProperty(window, '__runScriptWithContext__', {
+  value: (...args: Parameters<ReturnType<typeof createScriptRunner>>) => {
+    if (currentScriptRunner === undefined) {
+      throw new Error('Script contexts have not been prepared.');
+    }
+    currentScriptRunner(...args);
   },
 });
 
@@ -144,20 +157,54 @@ function setUpMainApp(config: Config) {
   }
 
   window.onload = () => {
-    window.nativeModules.core.notifyWindowDidLoad();
-
-    // On Prod, text is reset by the native code
     if (!isReleaseMode) {
+      window.nativeModules.core.notifyWindowDidLoad();
       window.config = config;
-      resetEditor(config.text);
+      void resetEditor(config.text);
+      return;
     }
+
+    // The desktop host replies with the document and installed extensions (see hostDocument.ts).
+    void (async () => {
+      try {
+        const reply = await (window.nativeModules.core.notifyWindowDidLoad as unknown as () => Promise<unknown>)();
+        await loadHostDocument(reply);
+      } catch (error) {
+        console.error('[MarkEdit] Loading the document failed:', error);
+      }
+    })();
   };
 
+  Object.defineProperty(window, '__markeditReloadDocument__', { value: reloadDocumentFromHost });
+  Object.defineProperty(window, '__markeditReloadExtensions__', { value: reloadExtensionsFromHost });
+
+  installBundledFonts();
   setUp(config, loadTheme(config.theme).colors);
   startObserving();
   initChromeUI();
+  initSidebar();
+
+  // Ensure Ctrl/Cmd+S saves on all platforms (Windows WebView2 may not fire the menu accelerator).
+  let lastSaveAt = 0;
+  document.addEventListener('keydown', (event) => {
+    const mod = event.metaKey || event.ctrlKey;
+    if (!mod || event.key.toLowerCase() !== 's' || event.altKey) {
+      return;
+    }
+    event.preventDefault();
+    const now = Date.now();
+    if (now - lastSaveAt < 500) {
+      return;
+    }
+    lastSaveAt = now;
+    const invoke = (window as unknown as { __TAURI_INTERNALS__?: { invoke?: (c: string, a?: Record<string, unknown>) => Promise<unknown> } }).__TAURI_INTERNALS__?.invoke;
+    if (typeof invoke === 'function') {
+      void invoke('save_document_content', { text: (window as unknown as { webModules?: { core?: { getEditorText?: () => string } } }).webModules?.core?.getEditorText?.() ?? '', saveAs: false });
+    }
+  });
 
   // Respond to reduced motion preference changes
   const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
   reducedMotionQuery.addEventListener('change', event => applyReducedMotion(event.matches));
 }
+

@@ -1,104 +1,142 @@
-# 양방향 브리지(Native ↔ Web) RPC 상세 명세서
+# 양방향 브리지(Native ↔ Web) RPC 명세서
 
 - **문서 번호**: `ARCH-002`
-- **작성일**: 2026-11-08
-- **기준 소스**: `CoreEditor/src/bridge/native/*.ts` (7개 모듈), `CoreEditor/src/bridge/web/*.ts` (12개 모듈)
+- **작성일**: 2026-11-08 (최초), 2026-11-21 (현재 구현 기준으로 개정)
+- **상태**: v2.0
+- **기준 소스**: `packages/core-editor/src/bridge/native/*.ts` (7개 모듈), `bridge/web/*.ts` (12개 모듈), `src-tauri/src/bridge/mod.rs`, `src-tauri/src/lib.rs`
+
+상태 표기: ✅ 구현 · ⚠️ 부분 구현 · ⛔ 미구현(무동작 또는 `null` 반환)
 
 ---
 
-## 1. 통신 프로토콜 규격
+## 1. 통신 규격
 
-### 1.1 Web → Native 요청 페이로드 (`NativeModule`)
-`CoreEditor/src/bridge/nativeModule.ts`가 생성하는 메시지 형식입니다.
+### 1.1 Web → Native (`NativeModule`)
+
+`bridge/nativeModule.ts`가 만드는 메시지:
 
 ```json
 {
   "moduleName": "core",
   "methodName": "notifyViewDidUpdate",
-  "parameters": "{\"contentEdited\":true,\"compositionEnded\":true,\"isDirty\":true,\"selectedLineColumn\":{\"lineNumber\":1,\"columnText\":\"# Hello\",\"selectionText\":\"\"}}"
+  "parameters": "{\"contentEdited\":true,\"isDirty\":true,\"selectedLineColumn\":{…}}"
 }
 ```
 
-- **Tauri IPC 어댑터 구현**:
-  ```typescript
-  // Windows WebView2 Bridge Polyfill
-  window.webkit = {
-    messageHandlers: {
-      bridge: {
-        postMessage: (message: { moduleName: string; methodName: string; parameters: string }) => {
-          return window.__TAURI_INTERNALS__.invoke('handle_bridge_message', { message });
-        },
-      },
-    },
-  };
-  ```
+부트스트랩 스크립트의 폴리필이 원본 CoreEditor의 WebKit 호출을 Tauri로 연결한다.
 
-### 1.2 Native → Web 호출 규격 (`WebModule`)
-Rust 호스트에서 WebView 내 `window.webModules.<invokePath>.<methodName>(args)`를 호출합니다.
-- **반환값이 없는(`void`) 메서드**: `webview.eval(...)`로 즉시 비동기 실행
-- **반환값이 있는 메서드**(`getEditorText()`, `getTableOfContents()`, `canUndo()` 등):
-  고유 `requestId`를 부여하여 실행 결과를 `invoke("resolve_web_call", { requestId, result })`로 회수하는 경량 RPC 래퍼를 사용합니다.
+```javascript
+window.webkit = { messageHandlers: { bridge: { postMessage: message =>
+  window.__TAURI_INTERNALS__.invoke('handle_bridge_message', { message }) } } };
+```
 
----
+호스트 처리 (`lib.rs` `handle_bridge_message` → `bridge/mod.rs` `dispatch_bridge_message`):
 
-## 2. Web → Native 모듈 전체 명세 (총 7개 모듈)
+1. **창 정보가 필요한 호출은 먼저 가로챈다**: `api.openDocument`(문서 열기 흐름), `api.showAlert`(비동기 네이티브 대화상자).
+2. 나머지는 `dispatch_bridge_message(창 레이블, 메시지, DocumentManager)`가 `(반환값, 후속 JS)`를 돌려준다. 순수 함수라 WebView 없이 테스트한다.
+3. 후처리: `core.notifyLinkClicked` → 링크 열기(`follow_link`), `core.notifyViewDidUpdate` → 창 제목, `api.addMainMenuItems`/`openDocument` → 메뉴 재구성, `core.notifyWindowClose` → 창 닫기(닫기 보호 적용). 후속 JS는 `window.eval`로 실행.
 
-### 2.1 `core` (`NativeModuleCore`) — **필수(P0)**
-| 메서드 | 파라미터 | 반환값 | Windows 호스트 동작 |
-| :--- | :--- | :--- | :--- |
-| `notifyWindowDidLoad` | 없음 | `void` | 초기 텍스트(`resetEditor`) 주입 및 `notifyAppReady` 호출 |
-| `notifyWindowResize` | `{ method: 'to'\|'by', width, height }` | `void` | Tauri `Window::set_size` 호출 |
-| `notifyWindowMove` | `{ method: 'to'\|'by', x, y }` | `void` | Tauri `Window::set_position` 호출 |
-| `notifyWindowClose` | 없음 | `void` | 미저장 변경사항 확인 후 창 닫기 |
-| `notifyEditorDidBecomeIdle` | 없음 | `void` | 백그라운드 자동 백업(Autosave) 및 TOC 갱신 트리거 |
-| `notifyBackgroundColorDidChange` | `{ color: Int, alpha: number }` | `void` | WebView2 및 창 배경색 동기화 (깜빡임 방지) |
-| `notifyViewportScaleDidChange` | 없음 | `void` | 확대/축소 배율 상태 업데이트 |
-| `notifyViewDidUpdate` | `{ contentEdited, compositionEnded, isDirty, selectedLineColumn }` | `void` | 창 타이틀의 Dirty 표시(`*`) 및 상태바 줄/열 번호 갱신 |
-| `notifyContentHeightDidChange` | `{ bottomPanelHeight }` | `void` | 레이아웃 여백 조정 |
-| `notifyContentOffsetDidChange` | 없음 | `void` | 스크롤 위치 변경 시 열린 팝오버/검색창 동기화 |
-| `notifyCompositionEnded` | `{ selectedLineColumn }` | `void` | 한국어/중국어/일본어(CJK) IME 조합 완료 상태 동기화 |
-| `notifyLinkClicked` | `{ link: string }` | `void` | 외부 URL은 기본 브라우저(`shell::open`), 로컬 상대경로는 새 창으로 열기 |
-| `notifyLightWarning` | 없음 | `void` | 검색 결과 없음 등 경량 경고음/시각 피드백 발생 |
+### 1.2 Native → Web (`WebModule`)
 
-### 2.2 `api` (`NativeModuleAPI`) — **필수(P0)**
-| 메서드 | 역할 | Windows 구현 매핑 |
-| :--- | :--- | :--- |
-| `openDocument` / `saveDocument` / `closeDocument` | 문서 열기/저장/닫기 | Rust 문서 매니저 및 파일 다이얼로그 |
-| `recentDocumentPaths` | 최근 문서 경로 배열 반환 | `%APPDATA%/MarkEdit/recent.json` 조회 |
-| `addMainMenuItems` / `showContextMenu` | 확장 플러그인 메뉴 추가 및 우클릭 메뉴 표시 | Tauri `muda` 동적 메뉴 생성 및 팝업 |
-| `showAlert` / `showTextBox` | 모달 알림창 및 텍스트 프롬프트 표시 | `rfd` 네이티브 메시지 박스 / 프롬프트 모달 |
-| `showOpenPanel` / `showSavePanel` / `showPrintPanel` | 열기/저장/인쇄 대화상자 | `tauri-plugin-dialog` + WebView2 `PrintToPdfAsync`/인쇄 |
-| `openFile` / `createFile` / `deleteFile` / `moveFile` / `revealFile` / `listFiles` / `getFileContent` / `getFileObject` / `getFileInfo` | 확장용 파일시스템 API | `std::fs` + Windows 탐색기 선택 표시(`explorer /select,`) |
-| `getFileVersions` / `getFileVersionContent` / `restoreFileVersion` / `deleteLocalFileVersions` | 로컬 파일 버전 히스토리 관리 | `%APPDATA%/MarkEdit/Versions` 스냅샷 저장소 연동 |
-| `getPasteboardItems` / `getPasteboardString` | 클립보드 조회 | `arboard` 또는 `tauri-plugin-clipboard-manager` |
-| `terminateApp` / `relaunchApp` / `playSystemBeep` | 앱 종료, 재시작, 시스템 비프음 | Tauri `AppHandle::exit` / `restart`, Win32 `MessageBeep` |
+Rust의 `WebBridge` 도우미가 스크립트를 만들어 `webview.eval`로 실행한다.
 
-### 2.3 기타 Native 모듈 (5종)
-| 모듈 | 메서드 | Windows 구현 전략 |
-| :--- | :--- | :--- |
-| **`secretStorage`** | `has`, `get`, `set`, `delete` | `keyring` 크레이트로 Windows Credential Locker에 안전하게 저장 |
-| **`completion`** | `requestCompletions`, `commitCompletion`, `cancelCompletion`, `selectPrevious/Next/Top/Bottom` | Phase 1에서는 No-op, Phase 3에서 Windows `ISpellChecker` 단어 추천 연동 |
-| **`tokenizer`** | `tokenize`, `moveWordBackward`, `moveWordForward` | Unicode Standard Annex #29 (`unicode-segmentation` 크레이트) 기반 단어 경계 계산 |
-| **`translation`** | `translate` | 스텁 처리 또는 추후 선택적 번역 API 연동 |
-| **`foundationModels`** | `availability`, `createSession`, `isResponding`, `respondTo`, `streamResponseTo` | `availability`에서 `"unavailable"` 반환 (macOS 전용 Apple Intelligence API) |
+| 도우미 | 생성 코드 |
+| --- | --- |
+| `format_call` | `window.webModules?.<module>?.<method>?.(<json>)` |
+| `format_chrome_call` | `window.chromeUI?.<method>?.(…)` |
+| `reset_editor`, `reload_document`, `notify_app_ready`, `mark_content_clean` | 자주 쓰는 호출 |
+
+반환값이 필요한 경우 웹 쪽이 직접 Tauri 명령을 호출해 결과를 보낸다(예: 저장 메뉴 → `invoke('save_document_content', { text: getEditorText() })`). 문서와 확장처럼 큰 데이터는 `eval` 대신 명령의 반환값으로 전달한다.
 
 ---
 
-## 3. Native → Web 모듈 전체 명세 (총 12개 모듈)
+## 2. Web → Native 모듈 (7개)
 
-Rust 호스트(메뉴바, 단축키, 파일 로더 등)가 `window.webModules`를 통해 호출하는 인터페이스입니다.
+### 2.1 `core`
 
-| 모듈 (`invokePath`) | 주요 메서드 | 호출 시점 |
-| :--- | :--- | :--- |
-| **`core`** | `resetEditor`, `getEditorState`, `getEditorText`, `getReadableContentPair`, `insertText`, `replaceText`, `performTextDrop`, `handleFocusLost`, `restoreFocus` | 파일 열기/저장 시 본문 추출, 포커스 복구, 드래그 앤 드롭 텍스트 삽입 |
-| **`config`** | `setTheme`, `setFontFace`, `setFontSize`, `setShowLineNumbers`, `setShowActiveLineIndicator`, `setInvisiblesBehavior`, `setReadOnlyMode`, `setTypewriterMode`, `setFocusMode`, `setLineWrapping`, `setLineHeight`, `setDefaultLineBreak`, `setTabKeyBehavior`, `setIndentUnit`, `setSuggestWhileTyping`, `setSmartQuotesEnabled` | 메뉴바 토글 또는 `settings.json` 수정 시 즉시 에디터에 반영 |
-| **`format`** | `toggleBold`, `toggleItalic`, `toggleStrikethrough`, `toggleHeading`, `toggleBullet`, `toggleNumbering`, `toggleTodo`, `toggleBlockquote`, `toggleInlineCode`, `toggleInlineMath`, `insertCodeBlock`, `insertMathBlock`, `insertHorizontalRule`, `insertHyperLink`, `insertTable`, `formatContent`, `performEditCommand` | 상단 `Format` 메뉴 및 단축키(`Ctrl+B`, `Ctrl+I`, `Ctrl+1~6` 등) 실행 시 호출 |
-| **`history`** | `undo`, `redo`, `canUndo`, `canRedo`, `markContentClean` | 파일 저장 완료 직후 `markContentClean()` 호출하여 `isDirty` 초기화 |
-| **`lineEndings`** | `getLineEndings`, `setLineEndings` | 문서의 줄바꿈(LF / CRLF) 확인 및 변환 시 호출 |
-| **`search`** | `setState`, `updateQuery`, `updateHasSelection`, `performOperation`, `findNext`, `findPrevious`, `replaceNext`, `replaceAll`, `selectAllOccurrences`, `selectNextOccurrence`, `getCounterInfo` | 검색/바꾸기 바(`Ctrl+F`, `Ctrl+H`) 조작 시 호출 |
-| **`selection`** | `selectWholeDocument`, `getText`, `getRect`, `scrollToSelection`, `gotoLine`, `refreshEditFocus`, `navigateGoBack` | 특정 줄 이동(`Ctrl+G`), 선택 영역 스크롤 시 호출 |
-| **`toc`** | `getTableOfContents`, `getDocumentOutline`, `selectPreviousSection`, `selectNextSection`, `gotoHeader` | 목차(TOC) 드롭다운 클릭 및 이전/다음 섹션 이동 시 호출 |
-| **`api`** | `notifyAppReady`, `handleMainMenuAction`, `handleContextMenuAction`, `getMenuItemState` | 확장 플러그인이 등록한 커스텀 메뉴 항목 클릭 시 호출 |
-| **`completion`** | `startCompletion`, `setState`, `acceptInlinePrediction` | 자동완성 패널 상태 제어 |
-| **`writingTools`** | `setActive`, `ensureSelectionRect` | macOS 전용 기능 (Windows에서는 호출 불필요) |
-| **`foundationModels`** | 스트림 응답 콜백 | macOS 전용 기능 (Windows에서는 호출 불필요) |
+| 메서드 | 상태 | 호스트 동작 |
+| --- | --- | --- |
+| `notifyWindowDidLoad` | ✅ | `{ text, restoreText, extensions }` 반환 (복구 텍스트는 한 번만), 진단 로그 |
+| `notifyViewDidUpdate` | ⚠️ | `is_dirty` 갱신 → 창 제목 `●` 표시. 줄/열 상태 표시줄은 없음 |
+| `notifyEditorDidBecomeIdle` | ✅ | 수정된 상태면 `save_idle_backup`을 호출하는 JS 반환 → 백업 기록 |
+| `notifyLinkClicked` | ✅ | Ctrl+클릭한 링크를 `links.rs` 규칙으로 열기 (http(s)/mailto → 시스템, 문서 → 앱, 그 밖의 파일 → 탐색기에서 표시만, 그 외 무시) |
+| `notifyWindowClose` | ✅ | 창 닫기 (수정된 경우 저장 확인) |
+| `notifyBackgroundColorDidChange`, `notifyViewportScaleDidChange`, `notifyContentHeightDidChange`, `notifyContentOffsetDidChange`, `notifyCompositionEnded`, `notifyLightWarning`, `notifyWindowResize`, `notifyWindowMove` | ⛔ | 무동작 |
+
+### 2.2 `api`
+
+| 메서드 | 상태 | 호스트 동작 |
+| --- | --- | --- |
+| `openDocument` | ✅ | `open_document_path`: 이미 열린 창 포커스 또는 새 창. 현재 창의 문서를 바꾸지 않음 |
+| `saveDocument` / `closeDocument` | ⚠️ | 저장·닫기 스크립트 실행. `saveDocument`는 저장 완료 전에 `true` 반환 |
+| `recentDocumentPaths` | ✅ | `recent.json` |
+| `addMainMenuItems` | ✅ | Extensions 메뉴에 항목 추가, 선택 시 `webModules.api.handleMainMenuAction`. `stateGetterID`는 미반영 |
+| `showContextMenu` | ✅ | 앱 UI의 컨텍스트 메뉴(`chromeUI`) |
+| `showAlert` | ⚠️ | 네이티브 대화상자, 누른 버튼의 순번 반환. 버튼 이름 지정은 표준 버튼(OK/Cancel/Yes/No)으로 대체 |
+| `showTextBox` | ⚠️ | 입력 상자는 띄우지만 입력 전에 기본값을 반환 |
+| `showPrintPanel` | ⚠️ | `window.print()`. 옵션·PDF 내보내기 없음 |
+| `showOpenPanel` / `showSavePanel` | ⛔ | `null` |
+| `openFile` / `revealFile` | ✅ | 기본 앱으로 열기 / 탐색기에서 표시 |
+| `createFile` / `deleteFile` / `moveFile` / `listFiles` / `getFileContent` / `getFileObject`(base64) / `getFileInfo` | ✅ | `std::fs`. 경로가 없으면 현재 문서 |
+| `getFileVersions` | ✅ | JSON 문자열 `[{ id, modificationDate(초), isLocal }]` |
+| `getFileVersionContent` / `restoreFileVersion` | ✅ | 매개변수 `id`(구 `version`도 허용). ID 형식 검증 |
+| `deleteLocalFileVersions` | ✅ | **지정한 `ids`만** 삭제. `ids`가 없으면 아무것도 지우지 않음 |
+| `getPasteboardItems` / `getPasteboardString` | ⚠️ | `arboard`로 텍스트만 |
+| `terminateApp` / `relaunchApp` / `playSystemBeep` / `runService` | ⛔ | `null` |
+
+### 2.3 그 밖의 모듈
+
+| 모듈 | 상태 | 구현 |
+| --- | --- | --- |
+| `tokenizer` | ✅ | `tokenize`, `moveWordBackward/Forward` — `unicode-segmentation`(UAX #29), UTF-16 위치 변환 |
+| `secretStorage` | ⚠️ | `has/get/set/delete` 동작. 저장은 `secrets.json` **평문** (Windows Credential Manager 연동 예정) |
+| `completion` | ⛔ | `null` (단어 제안 없음) |
+| `translation` | ⛔ | JSON 문자열 오류 `{"error": "Translation is not available on this platform."}` |
+| `foundationModels` | ⛔ | `availability` = unavailable, `isResponding` = false (macOS 전용 기능) |
+
+### 2.4 런타임 정보
+
+`MarkEdit.runtimeInfo()`: 부트스트랩이 `window.config.runtimeInfo = { appVersion, appBuild, osVersion }`을 넣고, `webkitVersion`은 웹 쪽에서 user agent(Chrome/AppleWebKit 버전)로 채운다.
+
+---
+
+## 3. Native → Web 모듈 (12개)
+
+| 모듈 | 주요 메서드 | 호출하는 곳 |
+| --- | --- | --- |
+| `core` | `resetEditor`, `getEditorText`, `insertText`, `replaceText`, `handleFocusLost`, `restoreFocus` … | 문서 로드·저장, 포커스 |
+| `config` | `setTheme`, `setFontFace`, `setFontSize`, `setShowLineNumbers`, `setInvisiblesBehavior`, `setLineWrapping`, `setLineHeight`, `setTabKeyBehavior`, `setIndentUnit`, `setSmartQuotesEnabled` … | 설정 변경, 모든 창 실시간 동기화 |
+| `format` | `toggleBold`, `toggleHeading`, `insertCodeBlock`, `insertTable`, `formatContent` … | Format 메뉴, 단축키 |
+| `history` | `undo`, `redo`, `markContentClean` | Edit 메뉴, 저장 완료 |
+| `lineEndings` | `getLineEndings`, `setLineEndings` | View → Line Endings |
+| `search` | `updateQuery`, `findNext`, `replaceAll`, `performOperation`(선택 영역 안에서 모두 바꾸기 등) | 검색 바 |
+| `selection` | `gotoLine`, `scrollToSelection`, `selectWholeDocument` … | Go 메뉴, 줄 이동 |
+| `toc` | `getTableOfContents`, `gotoHeader`, `selectPrevious/NextSection` | 목차 팝오버, Go 메뉴 |
+| `api` | `notifyAppReady`, `handleMainMenuAction`, `handleContextMenuAction`, `getMenuItemState` | 확장 메뉴 |
+| `completion` | `startCompletion`, `setState` | (단어 제안 미구현) |
+| `writingTools`, `foundationModels` | — | macOS 전용, 호출하지 않음 |
+
+이 밖에 앱 UI는 `window.chromeUI`(검색 바, 설정, 확장 관리자, 프리뷰 모드·파서·스크롤 동기화, 테마 확장, 프리뷰 스타일 등)를 메뉴와 설정 동기화에서 호출한다.
+
+---
+
+## 4. Tauri 명령 (앱 UI ↔ 호스트)
+
+브리지 밖에서 앱 UI가 직접 부르는 명령 27개 (`lib.rs` `generate_handler!`).
+
+| 범주 | 명령 |
+| --- | --- |
+| 브리지 | `handle_bridge_message` |
+| 문서 | `save_document_content`, `save_idle_backup`, `document_content`, `view_state_changed` |
+| 링크 | `open_link` |
+| 다이어그램 | `diagram_render_local`, `diagram_tools_status` |
+| 설정 | `settings_get_state`, `settings_update`, `settings_reset`, `settings_open_file` |
+| 버전 | `versions_list`, `versions_get_content`, `versions_restore`, `versions_delete_all` |
+| 확장 | `extensions_bootstrap`, `extensions_get_state`, `extensions_install`, `extensions_install_url`, `install_extension_from_url`, `extensions_uninstall`, `extensions_set_enabled`, `extensions_update`, `extensions_set_update_behavior`, `extensions_open_folder`, `extensions_open_homepage` |
+
+---
+
+## 5. 코드 생성과 과제
+
+- `src-tauri/src/bridge/generated/mod.rs`는 손으로 작성되었다. `@codegen/config.json`은 Swift만 렌더링한다. TypeScript 정의와 Rust 구현의 불일치(과거 `getFileVersions` 반환 형식, `translation` 형식)를 막으려면 Rust 대상 렌더링을 추가해야 한다.
+- 미구현 항목(⛔)과 부분 구현(⚠️)은 `docs/04-roadmap/01-implementation-roadmap.md`에서 우선순위를 관리한다.

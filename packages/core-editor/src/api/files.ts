@@ -28,32 +28,40 @@ export async function getFileContent(path?: string): Promise<string | undefined>
   return window.nativeModules.api.getFileContent({ path });
 }
 
+/** Parses a JSON string from the host; `null`/`undefined`/invalid JSON mean "not found". */
+function parseHostJson<T>(value: unknown): T | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return typeof parsed === 'object' && parsed !== null ? parsed as T : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function getFileObject(path?: string): Promise<FileObject | undefined> {
-  const object = await window.nativeModules.api.getFileObject({ path });
-  return object === undefined ? undefined : JSON.parse(object);
+  return parseHostJson<FileObject>(await window.nativeModules.api.getFileObject({ path }));
 }
 
 export async function getFileInfo(path?: string): Promise<FileInfo | undefined> {
-  const info = await window.nativeModules.api.getFileInfo({ path });
-  return info === undefined ? undefined : (() => {
-    const json: {
-      filePath: string;
-      fileSize: number;
-      creationDate: number;
-      modificationDate: number;
-      parentPath: string;
-      isDirectory: boolean;
-    } = JSON.parse(info);
-
-    return {
-      filePath: json.filePath,
-      fileSize: json.fileSize,
-      creationDate: new Date(json.creationDate * 1000),
-      modificationDate: new Date(json.modificationDate * 1000),
-      parentPath: json.parentPath,
-      isDirectory: json.isDirectory,
-    };
-  })();
+  const json = parseHostJson<{
+    filePath: string;
+    fileSize: number;
+    creationDate: number;
+    modificationDate: number;
+    parentPath: string;
+    isDirectory: boolean;
+  }>(await window.nativeModules.api.getFileInfo({ path }));
+  return json === undefined ? undefined : {
+    filePath: json.filePath,
+    fileSize: json.fileSize,
+    creationDate: new Date(json.creationDate * 1000),
+    modificationDate: new Date(json.modificationDate * 1000),
+    parentPath: json.parentPath,
+    isDirectory: json.isDirectory,
+  };
 }
 
 export function getDirectoryPath(type: DirectoryType): string {

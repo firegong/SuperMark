@@ -2,6 +2,7 @@ pub mod generated;
 pub mod secret_storage;
 
 use crate::document::DocumentManager;
+use crate::document::versions::VersionManager;
 use generated::{AlertConfiguration, FileInfo, LineColumnInfo, MenuItem};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -65,6 +66,19 @@ impl WebBridge {
         )
     }
 
+    /// Makes the editor fetch its document again (`document_content`) and reset to it.
+    pub fn reload_document() -> String {
+        "window.__markeditReloadDocument__?.();".to_string()
+    }
+
+    pub fn set_document_path(path: Option<&std::path::Path>) -> String {
+        let serialized = match path {
+            Some(p) => serde_json::to_string(&p.to_string_lossy().into_owned()).unwrap_or_else(|_| "null".to_string()),
+            None => "null".to_string(),
+        };
+        format!("window.__markeditSetDocumentPath?.({serialized});")
+    }
+
     pub fn notify_app_ready() -> String {
         Self::format_call("api", "notifyAppReady", None)
     }
@@ -92,7 +106,11 @@ pub fn dispatch_bridge_message(
         "tokenizer" => handle_tokenizer_module(&msg.method_name, &params),
         "completion" => Ok((Value::Null, None)),
         "secretStorage" => handle_secret_storage_module(&msg.method_name, &params, doc_mgr),
-        "translation" => Ok((json!({ "succeeded": false, "text": "" }), None)),
+        // The editor parses this as JSON text (api/translation.ts); there is no system translator.
+        "translation" => Ok((
+            json!(json!({ "error": "Translation is not available on this platform." }).to_string()),
+            None,
+        )),
         "foundationModels" => handle_foundation_models_module(&msg.method_name),
         other => Err(format!("Unknown native module: {other}")),
     }
@@ -106,23 +124,38 @@ fn handle_core_module(
 ) -> Result<(Value, Option<String>), String> {
     match method {
         "notifyWindowDidLoad" => {
-            let initial_text = doc_mgr.with_session(window_label, |s| s.content_cache.clone());
-            let ext_bootstrap = doc_mgr.extensions().build_extension_bootstrap_js();
-            let script = if ext_bootstrap.is_empty() {
-                format!(
-                    "{}\n{}",
-                    WebBridge::reset_editor(&initial_text),
-                    WebBridge::notify_app_ready()
-                )
-            } else {
-                format!(
-                    "{}\n{}\n{}",
-                    ext_bootstrap,
-                    WebBridge::reset_editor(&initial_text),
-                    WebBridge::notify_app_ready()
-                )
-            };
-            Ok((Value::Null, Some(script)))
+            // macOS double-click: if the OS handed over a document before this
+            // window loaded, open it into this session now so its content is
+            // returned to the frontend instead of an empty document.
+            if let Some(path) = doc_mgr.take_one_pending_open() {
+                let _ = doc_mgr.with_session(window_label, |s| {
+                    let _ = s.load_from_path(&path);
+                    Ok::<(), String>(())
+                });
+            }
+            let (initial_text, pending_restore, path) = doc_mgr.with_session(window_label, |s| {
+                (s.content_cache.clone(), s.pending_restore_text.take(), s.file_path.clone())
+            });
+            let extensions = doc_mgr.extensions().extension_bootstrap();
+            crate::diagnostics::log(&format!(
+                "window {window_label} loaded: document {:?} ({} chars), {} extension script(s), {} style(s)",
+                path,
+                initial_text.chars().count(),
+                extensions.scripts.len(),
+                extensions.styles.len()
+            ));
+
+            // The editor loads the document from this reply (src/hostDocument.ts). Nothing is
+            // injected with eval, so the size of installed extensions cannot get in the way.
+            Ok((
+                json!({
+                    "text": initial_text,
+                    "restoreText": pending_restore,
+                    "extensions": extensions,
+                    "filePath": path.map(|p| p.to_string_lossy().into_owned()),
+                }),
+                None,
+            ))
         }
         "notifyViewDidUpdate" => {
             if let Ok(update) = serde_json::from_value::<ViewDidUpdateParams>(params.clone()) {
@@ -133,8 +166,13 @@ fn handle_core_module(
             Ok((Value::Null, None))
         }
         "notifyEditorDidBecomeIdle" => {
-            let is_dirty = doc_mgr.with_session(window_label, |s| s.is_dirty);
-            if is_dirty {
+            let (is_dirty, has_path) = doc_mgr.with_session(window_label, |s| (s.is_dirty, s.file_path.is_some()));
+            let autosave = crate::settings::SettingsManager::new().load_user_settings().autosave;
+            if is_dirty && has_path && autosave {
+                // Auto-save to disk when the document already has a file path.
+                let script = "window.__TAURI_INTERNALS__?.invoke('save_document_content', { text: window.webModules?.core?.getEditorText?.() ?? '', saveAs: false });".to_string();
+                Ok((Value::Null, Some(script)))
+            } else if is_dirty {
                 let script = "window.__TAURI_INTERNALS__?.invoke('save_idle_backup', { text: window.webModules?.core?.getEditorText?.() ?? '' });".to_string();
                 Ok((Value::Null, Some(script)))
             } else {
@@ -153,6 +191,14 @@ fn handle_core_module(
         | "notifyWindowClose" => Ok((Value::Null, None)),
         other => Err(format!("Unknown core method: {other}")),
     }
+}
+
+/// A version ID from the editor API (`id`), or `version` as older callers send it.
+fn version_id_param(params: &Value) -> Option<&str> {
+    params
+        .get("id")
+        .or_else(|| params.get("version"))
+        .and_then(Value::as_str)
 }
 
 fn handle_api_module(
@@ -195,10 +241,21 @@ fn handle_api_module(
                 .as_deref()
                 .map(|p| doc_mgr.versions().list_versions(p))
                 .unwrap_or_default();
-            Ok((json!(versions), None))
+            // The editor expects JSON text of [{ id, modificationDate (seconds), isLocal }].
+            let entries: Vec<Value> = versions
+                .iter()
+                .map(|id| {
+                    json!({
+                        "id": id,
+                        "modificationDate": VersionManager::version_timestamp(id).unwrap_or(0.0),
+                        "isLocal": true,
+                    })
+                })
+                .collect();
+            Ok((json!(Value::Array(entries).to_string()), None))
         }
         "getFileVersionContent" => {
-            let Some(version) = params.get("version").and_then(|v| v.as_str()) else {
+            let Some(version) = version_id_param(params) else {
                 return Ok((Value::Null, None));
             };
             let target = params
@@ -212,7 +269,7 @@ fn handle_api_module(
             Ok((json!(content), None))
         }
         "restoreFileVersion" => {
-            let Some(version) = params.get("version").and_then(|v| v.as_str()) else {
+            let Some(version) = version_id_param(params) else {
                 return Ok((json!(false), None));
             };
             let target = params
@@ -223,14 +280,11 @@ fn handle_api_module(
             let Some(path) = target else {
                 return Ok((json!(false), None));
             };
-            match doc_mgr.versions().restore_version(&path, version) {
-                Ok(restored) => {
-                    doc_mgr.with_session(window_label, |s| {
-                        s.content_cache = restored.clone();
-                        s.is_dirty = false;
-                    });
-                    Ok((json!(true), Some(WebBridge::reset_editor(&restored))))
-                }
+            let is_current = doc_mgr.with_session(window_label, |s| s.file_path.as_deref() == Some(path.as_path()));
+            match doc_mgr.restore_version(window_label, &path, version) {
+                // Only reload the editor when the restored file is the one it shows.
+                Ok(restored) if is_current => Ok((json!(true), Some(WebBridge::reset_editor(&restored)))),
+                Ok(_) => Ok((json!(true), None)),
                 Err(_) => Ok((json!(false), None)),
             }
         }
@@ -240,10 +294,17 @@ fn handle_api_module(
                 .and_then(|v| v.as_str())
                 .map(PathBuf::from)
                 .or_else(|| doc_mgr.with_session(window_label, |s| s.file_path.clone()));
-            let ok = target
-                .as_deref()
-                .and_then(|p| doc_mgr.versions().delete_local_versions(p).ok())
-                .unwrap_or(false);
+            // Only the versions asked for; without IDs nothing is deleted (it used to delete all).
+            let ids: Vec<String> = params
+                .get("ids")
+                .and_then(Value::as_array)
+                .map(|ids| ids.iter().filter_map(|id| id.as_str().map(str::to_string)).collect())
+                .unwrap_or_default();
+            let ok = !ids.is_empty()
+                && target
+                    .as_deref()
+                    .and_then(|p| doc_mgr.versions().delete_versions(p, &ids).ok())
+                    .is_some_and(|removed| removed > 0);
             Ok((json!(ok), None))
         }
         "getPasteboardString" => {
@@ -347,18 +408,37 @@ fn handle_api_module(
                 .collect();
             Ok((json!(files), None))
         }
-        "getFileContent" | "getFileObject" => {
-            let Some(path_str) = params.get("path").and_then(|v| v.as_str()) else {
+        // For the file APIs a missing path means the window's current document (markedit-api).
+        "getFileContent" => {
+            let Some(path) = api_path_or_current(params, window_label, doc_mgr) else {
                 return Ok((Value::Null, None));
             };
-            let content = fs::read_to_string(path_str).ok();
-            Ok((json!(content), None))
+            Ok((json!(fs::read_to_string(path).ok()), None))
+        }
+        "getFileObject" => {
+            // The editor expects a JSON string of `FileObject { data (base64), mimeType, … }`.
+            let Some(path) = api_path_or_current(params, window_label, doc_mgr) else {
+                return Ok((Value::Null, None));
+            };
+            let Ok(bytes) = fs::read(&path) else {
+                return Ok((Value::Null, None));
+            };
+            let extension = path
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .map(|ext| ext.to_ascii_lowercase());
+            let object = json!({
+                "data": base64_encode(&bytes),
+                "mimeType": mime_type_for(extension.as_deref().unwrap_or("")),
+                "filenameExtension": extension,
+            });
+            Ok((json!(object.to_string()), None))
         }
         "getFileInfo" => {
-            let Some(path_str) = params.get("path").and_then(|v| v.as_str()) else {
+            let Some(path) = api_path_or_current(params, window_label, doc_mgr) else {
                 return Ok((Value::Null, None));
             };
-            let path = Path::new(path_str);
+            let path = path.as_path();
             let Ok(meta) = fs::metadata(path) else {
                 return Ok((Value::Null, None));
             };
@@ -435,32 +515,107 @@ fn handle_api_module(
     }
 }
 
+/// Converts a UTF-16 code unit index (what JavaScript strings use) to a UTF-8 byte index.
+fn utf16_to_byte_index(text: &str, utf16_index: usize) -> usize {
+    let mut units = 0usize;
+    for (byte_index, ch) in text.char_indices() {
+        if units >= utf16_index {
+            return byte_index;
+        }
+        units += ch.len_utf16();
+    }
+    text.len()
+}
+
+/// Converts a UTF-8 byte index back to a UTF-16 code unit index.
+fn byte_to_utf16_index(text: &str, byte_index: usize) -> usize {
+    text[..byte_index.min(text.len())].encode_utf16().count()
+}
+
+/// Word tokenizer used for double-click selection and Alt+Arrow / Alt+Backspace.
+///
+/// The web side sends `{ anchor: { text, pos, offset } }` where `text` is the current line,
+/// `pos` the caret's UTF-16 index inside that line and `offset` the line's document position.
+/// `tokenize` returns a line-relative `{ from, to }`; the move methods return an absolute
+/// document position (see `modules/tokenizer/index.ts`).
+/// `params.path`, or the current document of the window when no path is given.
+fn api_path_or_current(params: &Value, window_label: &str, doc_mgr: &DocumentManager) -> Option<PathBuf> {
+    match params.get("path").and_then(|v| v.as_str()) {
+        Some(path) if !path.is_empty() => Some(PathBuf::from(path)),
+        _ => doc_mgr.with_session(window_label, |s| s.file_path.clone()),
+    }
+}
+
+fn base64_encode(bytes: &[u8]) -> String {
+    const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let b = [chunk[0], *chunk.get(1).unwrap_or(&0), *chunk.get(2).unwrap_or(&0)];
+        let n = (u32::from(b[0]) << 16) | (u32::from(b[1]) << 8) | u32::from(b[2]);
+        out.push(TABLE[(n >> 18) as usize & 63] as char);
+        out.push(TABLE[(n >> 12) as usize & 63] as char);
+        out.push(if chunk.len() > 1 { TABLE[(n >> 6) as usize & 63] as char } else { '=' });
+        out.push(if chunk.len() > 2 { TABLE[n as usize & 63] as char } else { '=' });
+    }
+    out
+}
+
+fn mime_type_for(extension: &str) -> &'static str {
+    match extension {
+        "md" | "markdown" | "mdown" | "mkd" => "text/markdown",
+        "txt" => "text/plain",
+        "html" | "htm" => "text/html",
+        "css" => "text/css",
+        "js" => "text/javascript",
+        "json" => "application/json",
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "svg" => "image/svg+xml",
+        "pdf" => "application/pdf",
+        _ => "application/octet-stream",
+    }
+}
+
 fn handle_tokenizer_module(
     method: &str,
     params: &Value,
 ) -> Result<(Value, Option<String>), String> {
-    let line = params
-        .get("line")
+    let anchor = params.get("anchor").unwrap_or(params);
+    let line = anchor
+        .get("text")
+        .or_else(|| anchor.get("line"))
         .and_then(|v| v.as_str())
         .unwrap_or_default();
-    let pos = params
-        .get("pos")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(0) as usize;
+    let pos_utf16 = anchor.get("pos").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+    let offset = anchor.get("offset").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+    let pos = utf16_to_byte_index(line, pos_utf16);
 
     match method {
         "tokenize" => {
-            let mut from = 0usize;
-            let mut to = line.len();
+            let mut from = pos;
+            let mut to = pos;
             for (idx, word) in line.split_word_bound_indices() {
                 let end = idx + word.len();
-                if pos >= idx && pos <= end {
+                if pos >= idx && pos < end {
                     from = idx;
                     to = end;
                     break;
                 }
+                // Caret at the very end of the line selects the last word.
+                if pos == end && end == line.len() {
+                    from = idx;
+                    to = end;
+                }
             }
-            Ok((json!({ "from": from, "to": to }), None))
+            Ok((
+                json!({
+                    "from": byte_to_utf16_index(line, from),
+                    "to": byte_to_utf16_index(line, to),
+                }),
+                None,
+            ))
         }
         "moveWordBackward" => {
             let mut prev = 0usize;
@@ -469,7 +624,7 @@ fn handle_tokenizer_module(
                     prev = idx;
                 }
             }
-            Ok((json!(prev), None))
+            Ok((json!(offset + byte_to_utf16_index(line, prev)), None))
         }
         "moveWordForward" => {
             let mut next = line.len();
@@ -480,7 +635,7 @@ fn handle_tokenizer_module(
                     break;
                 }
             }
-            Ok((json!(next), None))
+            Ok((json!(offset + byte_to_utf16_index(line, next)), None))
         }
         other => Err(format!("Unknown tokenizer method: {other}")),
     }
@@ -552,6 +707,62 @@ fn handle_foundation_models_module(method: &str) -> Result<(Value, Option<String
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn file_apis_fall_back_to_the_current_document() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let doc_mgr = DocumentManager::with_data_dir(tmp.path().join("data"));
+        let doc = tmp.path().join("note.md");
+        fs::write(&doc, "# Hi").unwrap();
+        doc_mgr.with_session("main", |s| s.load_from_path(&doc)).unwrap();
+
+        let call = |method: &str, params: Value| {
+            let msg = BridgeMessage { module_name: "api".into(), method_name: method.into(), parameters: params.to_string() };
+            dispatch_bridge_message("main", &msg, &doc_mgr).expect("dispatch").0
+        };
+
+        // No path: the current document (the Preview extension calls getFileInfo() this way).
+        let info: Value = serde_json::from_str(call("getFileInfo", json!({})).as_str().expect("json string")).unwrap();
+        assert_eq!(info["filePath"], doc.to_string_lossy().as_ref());
+        assert_eq!(info["parentPath"], tmp.path().to_string_lossy().as_ref());
+        assert_eq!(call("getFileContent", json!({})), json!("# Hi"));
+
+        let object: Value = serde_json::from_str(call("getFileObject", json!({ "path": doc })).as_str().expect("json string")).unwrap();
+        assert_eq!(object["data"], "IyBIaQ==");
+        assert_eq!(object["mimeType"], "text/markdown");
+        assert_eq!(object["filenameExtension"], "md");
+
+        // Untitled window: nothing to report.
+        let msg = BridgeMessage { module_name: "api".into(), method_name: "getFileInfo".into(), parameters: "{}".into() };
+        assert!(dispatch_bridge_message("doc-2", &msg, &doc_mgr).expect("dispatch").0.is_null());
+        assert_eq!(base64_encode(b"ab"), "YWI=");
+        assert_eq!(base64_encode(b""), "");
+    }
+
+    #[test]
+    fn tokenizer_reads_anchor_and_returns_utf16_positions() {
+        let anchor = |text: &str, pos: u64, offset: u64| {
+            json!({ "anchor": { "text": text, "pos": pos, "offset": offset } })
+        };
+
+        // "hello world": caret after "wor" (pos 9) on a line starting at document offset 100.
+        let (back, _) =
+            handle_tokenizer_module("moveWordBackward", &anchor("hello world", 9, 100)).unwrap();
+        assert_eq!(back, json!(106));
+        let (fwd, _) =
+            handle_tokenizer_module("moveWordForward", &anchor("hello world", 2, 100)).unwrap();
+        assert_eq!(fwd, json!(105));
+        let (range, _) =
+            handle_tokenizer_module("tokenize", &anchor("hello world", 7, 100)).unwrap();
+        assert_eq!(range, json!({ "from": 6, "to": 11 }));
+
+        // Multi-byte text: positions stay in UTF-16 units, not bytes.
+        let (range, _) = handle_tokenizer_module("tokenize", &anchor("안녕 세계", 4, 0)).unwrap();
+        assert_eq!(range, json!({ "from": 3, "to": 5 }));
+        let (back, _) =
+            handle_tokenizer_module("moveWordBackward", &anchor("안녕 세계", 5, 10)).unwrap();
+        assert_eq!(back, json!(13));
+    }
+
     use super::*;
 
     #[test]
@@ -595,7 +806,7 @@ mod tests {
     }
 
     #[test]
-    fn returns_reset_editor_and_user_extensions_on_notify_window_did_load() {
+    fn replies_with_document_and_extensions_on_notify_window_did_load() {
         let tmp = tempfile::tempdir().expect("tempdir");
         let doc_mgr = DocumentManager::with_data_dir(tmp.path().to_path_buf());
         doc_mgr.extensions().ensure_directories().unwrap();
@@ -615,13 +826,30 @@ mod tests {
             parameters: "{}".to_string(),
         };
 
-        let (_, followup_js) =
+        // A multi-megabyte extension (like markedit-preview.js) must not travel as an eval'd script.
+        fs::write(
+            doc_mgr.extensions().scripts_dir().join("big.js"),
+            format!("/* {} */", "x".repeat(6 * 1024 * 1024)),
+        )
+        .unwrap();
+
+        let (reply, followup_js) =
             dispatch_bridge_message("main", &msg, &doc_mgr).expect("dispatch window load");
-        let script = followup_js.expect("followup script expected");
-        assert!(script.contains("__prepareScriptContexts__"));
-        assert!(script.contains("window.webModules?.core?.resetEditor"));
-        assert!(script.contains("# Welcome to MarkEdit-Win"));
-        assert!(script.contains("window.webModules?.api?.notifyAppReady"));
+        // The document and extensions come back as data; nothing is injected with eval.
+        assert!(followup_js.is_none());
+        assert_eq!(reply["text"], "# Welcome to MarkEdit-Win");
+        assert!(reply["restoreText"].is_null());
+        let scripts = reply["extensions"]["scripts"].as_array().expect("scripts");
+        assert_eq!(scripts.len(), 2);
+        assert!(scripts.iter().any(|script| script["capability"] == "ext.js"
+            && script["source"] == "MarkEdit.onAppReady(() => {});"));
+
+        // Unsaved text recovered from a backup is delivered once.
+        doc_mgr.with_session("main", |s| s.pending_restore_text = Some("draft".to_string()));
+        let (reply, _) = dispatch_bridge_message("main", &msg, &doc_mgr).expect("dispatch");
+        assert_eq!(reply["restoreText"], "draft");
+        let (reply, _) = dispatch_bridge_message("main", &msg, &doc_mgr).expect("dispatch");
+        assert!(reply["restoreText"].is_null());
     }
 
     #[test]
@@ -698,6 +926,34 @@ mod tests {
                 .unwrap(),
         };
         let (vers, _) = dispatch_bridge_message("main", &list_ver, &doc_mgr).expect("list vers");
-        assert_eq!(vers.as_array().unwrap().len(), 1);
+        // JSON text of [{ id, modificationDate, isLocal }], as api/fileVersion.ts parses it.
+        let listed: Value = serde_json::from_str(vers.as_str().expect("JSON text")).expect("JSON");
+        let listed = listed.as_array().expect("array");
+        assert_eq!(listed.len(), 1);
+        let id = listed[0]["id"].as_str().expect("id").to_string();
+        assert!(listed[0]["modificationDate"].as_f64().unwrap() > 1_600_000_000.0);
+        assert_eq!(listed[0]["isLocal"], json!(true));
+
+        let content = BridgeMessage {
+            module_name: "api".to_string(),
+            method_name: "getFileVersionContent".to_string(),
+            parameters: serde_json::to_string(&json!({ "id": id, "path": target_file.to_string_lossy() })).unwrap(),
+        };
+        let (text, _) = dispatch_bridge_message("main", &content, &doc_mgr).expect("content");
+        assert_eq!(text, json!("# v1"));
+
+        // Deleting needs the IDs: without them nothing is removed.
+        let delete = |params: Value| BridgeMessage {
+            module_name: "api".to_string(),
+            method_name: "deleteLocalFileVersions".to_string(),
+            parameters: serde_json::to_string(&params).unwrap(),
+        };
+        let path = target_file.to_string_lossy().to_string();
+        let (none, _) = dispatch_bridge_message("main", &delete(json!({ "path": path })), &doc_mgr).expect("delete none");
+        assert_eq!(none, json!(false));
+        assert_eq!(doc_mgr.versions().list_versions(&target_file).len(), 1);
+        let (deleted, _) = dispatch_bridge_message("main", &delete(json!({ "path": path, "ids": [id] })), &doc_mgr).expect("delete");
+        assert_eq!(deleted, json!(true));
+        assert!(doc_mgr.versions().list_versions(&target_file).is_empty());
     }
 }

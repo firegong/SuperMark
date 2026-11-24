@@ -1,4 +1,5 @@
 import { EditorView, Rect } from '@codemirror/view';
+import type { EditorState } from '@codemirror/state';
 
 export const isChrome = /Chrome/.test(navigator.userAgent);
 export const isWindows = /Win/.test(navigator.platform);
@@ -99,4 +100,22 @@ export function isMotionReduced() {
 
 export function isScrolledToBottom(element: HTMLElement, epsilon = 4.0) {
   return element.scrollHeight - element.scrollTop - element.clientHeight < epsilon;
+}
+
+/**
+ * Converts any line break style in `text` to the document's own (`state.lineBreak`).
+ *
+ * With a CRLF document the editor only splits inserted text on "\r\n", so LF text would end up
+ * as a single line containing raw "\n" characters.
+ */
+export function toDocumentLineBreaks(state: EditorState, text: string): string {
+  return text.replace(/\r\n?|\n/g, state.lineBreak);
+}
+
+/**
+ * Length of `text` in document positions: a line break counts as one position whatever its
+ * style, while `state.sliceDoc()` returns "\r\n" (two characters) in CRLF documents.
+ */
+export function documentLength(state: EditorState, text: string): number {
+  return state.toText(toDocumentLineBreaks(state, text)).length;
 }

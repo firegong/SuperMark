@@ -4,6 +4,7 @@
 - **작성일**: 2026-11-08
 - **대상 업스트림**: [`MarkEdit-app/MarkEdit`](https://github.com/MarkEdit-app/MarkEdit) (`v1.37.1` 기준)
 - **선택 기술 스택**: **옵션 1 — Tauri v2 (Rust + Microsoft Edge WebView2) + `CoreEditor` 재사용**
+- **문서 성격**: 착수 시점(2026-11-08)의 분석 기록. 이후 구현은 이 방향을 따랐으며, 앱 이름은 **SuperMark**로 바뀌었다. 현재 요구사항과 구조는 `REQ-002`(요구사항), `ARCH-001`(시스템 아키텍처), `ARCH-002`(브리지), `DES-001`~`DES-003`(상세 설계)을 기준으로 한다.
 
 ---
 

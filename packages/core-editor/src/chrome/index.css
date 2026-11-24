@@ -59,7 +59,8 @@ body.markedit-reduce-transparency .markedit-chrome-panel {
   z-index: 1000;
   pointer-events: none;
 
-  font-family: 'Segoe UI', 'Cascadia Mono', system-ui, -apple-system, sans-serif;
+  /* Font stacks with Hangul before generic families: see src/styling/fonts.ts */
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI Variable Text', 'Segoe UI', 'Apple SD Gothic Neo', 'Pretendard Variable', 'Malgun Gothic', system-ui, sans-serif;
   color: var(--chrome-text);
 }
 
@@ -211,7 +212,7 @@ body.markedit-reduce-transparency .markedit-chrome-panel {
 }
 
 .markedit-chrome-toggle {
-  font-family: 'Cascadia Mono', Consolas, monospace;
+  font-family: ui-monospace, 'SF Mono', Menlo, 'Cascadia Mono', Consolas, 'Apple SD Gothic Neo', 'Pretendard Variable', 'Malgun Gothic', monospace;
   min-width: 28px;
 }
 
@@ -233,16 +234,19 @@ body.markedit-reduce-transparency .markedit-chrome-panel {
   flex-shrink: 0;
 }
 
+/* Same metrics as the native macOS window buttons (macOS 26: 14pt buttons, 23pt apart). */
 .markedit-window-controls.is-macos {
-  gap: 8px;
-  width: 52px;
+  gap: 9px;
+  width: 60px;
 }
 
 .markedit-traffic-light {
-  width: 12px;
-  height: 12px;
+  /* Same outer size for the close <button> and the <span> lights (buttons default to border-box). */
+  box-sizing: border-box;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
-  border: 1px solid transparent;
+  border: 1px solid rgba(0, 0, 0, 0.12);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -262,6 +266,7 @@ body.markedit-reduce-transparency .markedit-chrome-panel {
   display: none;
   width: 8px;
   height: 8px;
+  stroke-width: 1.8;
 }
 
 .markedit-window-controls.is-macos:hover .markedit-traffic-light.is-close svg {
@@ -309,7 +314,7 @@ body.markedit-reduce-transparency .markedit-chrome-panel {
 }
 
 .markedit-window-controls-spacer {
-  width: 52px;
+  width: 60px;
   flex-shrink: 0;
 }
 
@@ -1270,72 +1275,6 @@ body.markedit-reduce-transparency .markedit-chrome-panel {
   font-size: 13px;
 }
 
-.markedit-settings-theme-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(116px, 1fr));
-  gap: 10px;
-  margin-bottom: 12px;
-}
-
-.markedit-settings-theme-card {
-  appearance: none;
-  background: var(--chrome-input-bg);
-  border: 1px solid var(--chrome-border);
-  border-radius: 8px;
-  padding: 8px;
-  cursor: pointer;
-  text-align: center;
-  transition: border-color 140ms ease, box-shadow 140ms ease;
-}
-
-.markedit-settings-theme-card:hover {
-  border-color: var(--chrome-accent);
-}
-
-.markedit-settings-theme-card.is-selected {
-  border-color: var(--chrome-accent);
-  box-shadow: 0 0 0 2px var(--chrome-accent);
-}
-
-.markedit-settings-theme-swatch {
-  width: 100%;
-  height: 56px;
-  border-radius: 6px;
-  overflow: hidden;
-  margin-bottom: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.markedit-settings-theme-swatch-content {
-  width: calc(100% - 16px);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.markedit-settings-theme-swatch-row {
-  display: flex;
-  gap: 4px;
-  height: 5px;
-}
-
-.markedit-settings-theme-swatch-token {
-  flex: 1;
-  min-width: 10px;
-  height: 5px;
-  border-radius: 2.5px;
-}
-
-.markedit-settings-theme-label {
-  font-size: 11px;
-  color: var(--chrome-text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 .markedit-settings-more-themes {
   font-size: 12px;
 }
@@ -1448,7 +1387,7 @@ body.markedit-reduce-transparency .markedit-chrome-panel {
   border: none;
   background: var(--chrome-bg-solid);
   color: var(--chrome-text);
-  font-family: 'Cascadia Mono', Consolas, monospace;
+  font-family: ui-monospace, 'SF Mono', Menlo, 'Cascadia Mono', Consolas, 'Apple SD Gothic Neo', 'Pretendard Variable', 'Malgun Gothic', monospace;
   font-size: 12px;
   line-height: 1.5;
   padding: 12px;
@@ -1511,8 +1450,8 @@ body.markedit-mode-preview #editor {
 }
 
 .markedit-mode-preview .markedit-markdown-preview-pane {
-  width: 100vw;
-  left: 0;
+  left: 260px;
+  width: calc(100vw - 260px);
 }
 
 .markedit-preview-resizer {
@@ -1531,114 +1470,21 @@ body.markedit-mode-preview #editor {
   background: var(--chrome-accent);
 }
 
-.markedit-preview-toolbar {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--chrome-border);
-  background: var(--chrome-bg);
-  backdrop-filter: blur(12px) saturate(140%);
-  -webkit-backdrop-filter: blur(12px) saturate(140%);
-  flex-wrap: wrap;
-  min-height: 40px;
-  box-sizing: border-box;
-}
-
-.markedit-preview-toolbar-left,
-.markedit-preview-toolbar-right {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-
-.markedit-preview-toolbar-right {
-  flex-shrink: 0;
-  margin-left: auto;
-}
-
-body.markedit-mode-split #markedit-mode-switcher,
-body.markedit-mode-preview #markedit-mode-switcher {
-  display: none !important;
-}
-
-.markedit-preview-mode-group {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  padding: 2px;
-  background: var(--chrome-active);
-  border-radius: 6px;
-}
-
-.markedit-preview-mode-button {
-  appearance: none;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 4px;
-  color: var(--chrome-text);
-  cursor: pointer;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 500;
-  padding: 3px 10px;
-  transition: background-color 140ms ease, box-shadow 140ms ease;
-}
-
-.markedit-preview-mode-button:hover {
-  background: var(--chrome-hover);
-}
-
-.markedit-preview-mode-button.is-active {
-  background: var(--chrome-bg-solid);
-  border-color: var(--chrome-border);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
-}
-
-.markedit-preview-standard-select {
-  appearance: none;
-  background: var(--chrome-input-bg);
-  border: 1px solid var(--chrome-border);
-  border-radius: 4px;
-  color: var(--chrome-text);
-  cursor: pointer;
-  font: inherit;
-  font-size: 11px;
-  padding: 3px 18px 3px 8px;
-  margin-left: 6px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%23666' d='M0 1l5 4 5-4z'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 6px center;
-}
-
-.markedit-preview-summary {
-  font-size: 12px;
-  color: var(--chrome-text-secondary);
-}
-
-.markedit-preview-toolbar-button {
-  font-size: 12px;
-  padding: 4px 8px;
-}
-
-.markedit-preview-toolbar-button.is-active {
-  background: var(--chrome-accent);
-  color: #fff;
-}
-
 .markedit-preview-body {
   flex: 1;
   overflow: auto;
   padding: 28px 32px;
+  /* --pv-* variables: per-theme preview defaults, see chrome/previewThemePresets.ts. */
+  font-family: var(--pv-font-body, inherit);
+  font-size: var(--pv-size-body, inherit);
+  color: var(--pv-text, inherit);
 }
 
+/* A readable column anchored to the left edge (not centered), in split view and Markdown view. */
 .markedit-preview-body > * {
   max-width: 860px;
-  margin-left: auto;
-  margin-right: auto;
+  margin-left: 0;
+  margin-right: 0;
 }
 
 .markedit-preview-body h1,
@@ -1649,16 +1495,23 @@ body.markedit-mode-preview #markedit-mode-switcher {
 .markedit-preview-body h6 {
   margin-top: 24px;
   margin-bottom: 12px;
-  font-weight: 600;
+  font-family: var(--pv-font-heading, inherit);
+  font-weight: var(--pv-heading-weight, 600);
   line-height: 1.25;
 }
 
-.markedit-preview-body h1 { font-size: 28px; }
-.markedit-preview-body h2 { font-size: 24px; }
-.markedit-preview-body h3 { font-size: 20px; }
-.markedit-preview-body h4 { font-size: 17px; }
-.markedit-preview-body h5 { font-size: 15px; }
-.markedit-preview-body h6 { font-size: 13px; color: var(--chrome-text-secondary); }
+.markedit-preview-body h1 { font-size: var(--pv-size-h1, 28px); color: var(--pv-h1, inherit); }
+.markedit-preview-body h2 { font-size: var(--pv-size-h2, 24px); color: var(--pv-h2, inherit); }
+.markedit-preview-body h3 { font-size: var(--pv-size-h3, 20px); color: var(--pv-h3, inherit); }
+.markedit-preview-body h4 { font-size: var(--pv-size-h4, 17px); color: var(--pv-h4, inherit); }
+.markedit-preview-body h5 { font-size: var(--pv-size-h5, 15px); color: var(--pv-h5, inherit); }
+.markedit-preview-body h6 { font-size: var(--pv-size-h6, 13px); color: var(--pv-h6, var(--chrome-text-secondary)); }
+
+.markedit-preview-body h1,
+.markedit-preview-body h2 {
+  padding-bottom: var(--pv-heading-rule-gap, 0);
+  border-bottom: var(--pv-heading-rule, none);
+}
 
 .markedit-preview-heading {
   position: relative;
@@ -1683,7 +1536,7 @@ body.markedit-mode-preview #markedit-mode-switcher {
 }
 
 .markedit-preview-body a {
-  color: var(--preview-accent, var(--chrome-accent));
+  color: var(--pv-link, var(--preview-accent, var(--chrome-accent)));
   text-decoration: none;
 }
 
@@ -1693,10 +1546,12 @@ body.markedit-mode-preview #markedit-mode-switcher {
 
 .markedit-preview-body strong {
   font-weight: 700;
+  color: var(--pv-strong, inherit);
 }
 
 .markedit-preview-body em {
   font-style: italic;
+  color: var(--pv-em, inherit);
 }
 
 .markedit-preview-body del {
@@ -1704,15 +1559,17 @@ body.markedit-mode-preview #markedit-mode-switcher {
 }
 
 .markedit-preview-body mark {
-  background: rgba(249, 191, 59, 0.35);
+  background: var(--pv-mark-bg, rgba(249, 191, 59, 0.35));
+  color: inherit;
   padding: 1px 3px;
   border-radius: 3px;
 }
 
 .markedit-preview-body code {
-  font-family: 'Cascadia Mono', Consolas, monospace;
+  font-family: var(--pv-font-code, ui-monospace, 'SF Mono', Menlo, 'Cascadia Mono', Consolas, 'Apple SD Gothic Neo', 'Pretendard Variable', 'Malgun Gothic', monospace);
   font-size: 0.92em;
-  background: var(--chrome-active);
+  color: var(--pv-code-text, inherit);
+  background: var(--pv-code-bg, var(--chrome-active));
   padding: 2px 5px;
   border-radius: 4px;
 }
@@ -1721,11 +1578,12 @@ body.markedit-mode-preview #markedit-mode-switcher {
   margin: 0;
   padding: 14px 16px;
   overflow: auto;
-  background: var(--chrome-bg-solid);
+  background: var(--pv-pre-bg, var(--chrome-bg-solid));
   border-radius: 0 0 6px 6px;
 }
 
 .markedit-preview-body pre code {
+  color: inherit;
   background: transparent;
   padding: 0;
   font-size: 13px;
@@ -1735,9 +1593,14 @@ body.markedit-mode-preview #markedit-mode-switcher {
 .markedit-preview-code-block {
   position: relative;
   margin: 16px 0;
-  border: 1px solid var(--chrome-border);
+  border: 1px solid var(--pv-table-border, var(--chrome-border));
   border-radius: 6px;
-  background: var(--chrome-bg-solid);
+  background: var(--pv-pre-bg, var(--chrome-bg-solid));
+}
+
+/* Room for the language label (top left) and Copy button (top right) above the code. */
+.markedit-preview-code-block > pre {
+  padding-top: 36px;
 }
 
 .markedit-preview-code-lang {
@@ -1772,8 +1635,9 @@ body.markedit-mode-preview #markedit-mode-switcher {
 .markedit-preview-body blockquote {
   margin: 14px 0;
   padding: 8px 16px;
-  border-left: 4px solid var(--chrome-accent);
-  background: var(--chrome-input-bg);
+  color: var(--pv-quote-text, inherit);
+  border-left: 4px solid var(--pv-quote-border, var(--chrome-accent));
+  background: var(--pv-quote-bg, var(--chrome-input-bg));
   border-radius: 0 6px 6px 0;
 }
 
@@ -1858,30 +1722,40 @@ body.markedit-mode-preview #markedit-mode-switcher {
 .markedit-preview-body hr {
   margin: 20px 0;
   border: none;
-  border-top: 1px solid var(--chrome-border);
+  border-top: 1px solid var(--pv-hr, var(--chrome-border));
 }
 
 .markedit-preview-table {
-  width: 100%;
+  display: var(--pv-table-display, table);
+  width: var(--pv-table-width, 100%);
+  max-width: 100%;
+  overflow: auto;
   border-collapse: collapse;
+  border-spacing: 0;
   margin: 16px 0;
-  font-size: 14px;
+  font-size: var(--pv-table-font-size, 14px);
+  font-variant-numeric: var(--pv-table-numbers, normal);
 }
 
 .markedit-preview-table th,
 .markedit-preview-table td {
-  padding: 8px 12px;
-  border: 1px solid var(--chrome-border);
+  padding: var(--pv-table-cell-padding, 8px 12px);
+  border: 1px solid var(--pv-table-border, var(--chrome-border));
 }
 
 .markedit-preview-table th {
-  background: var(--chrome-active);
+  color: var(--pv-table-header-text, inherit);
+  background: var(--pv-table-header-bg, var(--chrome-active));
   font-weight: 600;
+  /* Browsers center <th>; Markdown's default column alignment is left. Columns marked
+     `:---:` / `---:` keep their inline text-align. */
+  text-align: left;
 }
 
 .markedit-preview-table tbody tr:nth-child(even) {
-  background: var(--chrome-input-bg);
+  background: var(--pv-table-stripe, var(--chrome-input-bg));
 }
+
 
 .markedit-preview-image {
   max-width: 100%;
@@ -1932,48 +1806,6 @@ body.markedit-mode-preview #markedit-mode-switcher {
 
 .markedit-preview-footnote-ref a {
   text-decoration: none;
-}
-
-/* Floating mode switcher pill */
-
-#markedit-mode-switcher {
-  position: absolute;
-  top: 10px;
-  right: 16px;
-  z-index: 900;
-  pointer-events: auto;
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  padding: 3px;
-  background: var(--chrome-active);
-  border: 1px solid var(--chrome-border);
-  border-radius: 8px;
-  box-shadow: var(--chrome-shadow);
-}
-
-.markedit-mode-switcher-button {
-  appearance: none;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  color: var(--chrome-text);
-  cursor: pointer;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 500;
-  padding: 5px 12px;
-  transition: background-color 140ms ease, box-shadow 140ms ease;
-}
-
-.markedit-mode-switcher-button:hover {
-  background: var(--chrome-hover);
-}
-
-.markedit-mode-switcher-button.is-active {
-  background: var(--chrome-bg-solid);
-  border-color: var(--chrome-border);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 
 /* Task lists */
@@ -2066,50 +1898,30 @@ li.markedit-preview-task-item > p {
   display: none;
 }
 
-/* Syntax highlighting tokens */
+/* Syntax highlighting tokens: only used without an editor (e.g. Quick Look); with one, code in
+   the preview gets the active theme's own highlight classes (plugins/syntaxHighlight.ts). */
 
-.tok-keyword {
-  color: #cf222e;
-  font-weight: 600;
-}
-
-.tok-string {
-  color: #0a3069;
-}
-
-.tok-comment {
-  color: #6e7781;
-  font-style: italic;
-}
-
-.tok-number {
-  color: #0550ae;
-}
-
-.tok-type {
-  color: #953800;
-}
+.markedit-preview-body .tok-keyword { color: #cf222e; }
+.markedit-preview-body .tok-string, .markedit-preview-body .tok-string2 { color: #0a3069; }
+.markedit-preview-body .tok-comment, .markedit-preview-body .tok-meta { color: #6e7781; font-style: italic; }
+.markedit-preview-body .tok-number, .markedit-preview-body .tok-bool, .markedit-preview-body .tok-atom { color: #0550ae; }
+.markedit-preview-body .tok-typeName, .markedit-preview-body .tok-className, .markedit-preview-body .tok-namespace { color: #953800; }
+.markedit-preview-body .tok-propertyName, .markedit-preview-body .tok-attributeName { color: #0550ae; }
+.markedit-preview-body .tok-variableName.tok-definition { color: #8250df; }
+.markedit-preview-body .tok-tagName { color: #116329; }
+.markedit-preview-body .tok-inserted { color: #116329; }
+.markedit-preview-body .tok-deleted, .markedit-preview-body .tok-invalid { color: #82071e; }
 
 @media (prefers-color-scheme: dark) {
-  .tok-keyword {
-    color: #ff7b72;
-  }
-
-  .tok-string {
-    color: #a5d6ff;
-  }
-
-  .tok-comment {
-    color: #8b949e;
-  }
-
-  .tok-number {
-    color: #79c0ff;
-  }
-
-  .tok-type {
-    color: #ffa657;
-  }
+  .markedit-preview-body .tok-keyword { color: #ff7b72; }
+  .markedit-preview-body .tok-string, .markedit-preview-body .tok-string2 { color: #a5d6ff; }
+  .markedit-preview-body .tok-comment, .markedit-preview-body .tok-meta { color: #8b949e; }
+  .markedit-preview-body .tok-number, .markedit-preview-body .tok-bool, .markedit-preview-body .tok-atom { color: #79c0ff; }
+  .markedit-preview-body .tok-typeName, .markedit-preview-body .tok-className, .markedit-preview-body .tok-namespace { color: #ffa657; }
+  .markedit-preview-body .tok-propertyName, .markedit-preview-body .tok-attributeName { color: #79c0ff; }
+  .markedit-preview-body .tok-variableName.tok-definition { color: #d2a8ff; }
+  .markedit-preview-body .tok-tagName, .markedit-preview-body .tok-inserted { color: #7ee787; }
+  .markedit-preview-body .tok-deleted, .markedit-preview-body .tok-invalid { color: #ffa198; }
 }
 
 /* Live editor preview widgets */
@@ -2177,4 +1989,847 @@ li.markedit-preview-task-item > p {
   background: var(--chrome-active);
   font-size: 0.85em;
   font-weight: 600;
+}
+
+/* SuperMarkdown renderer */
+
+.markedit-preview-body .msm-error {
+  color: #cf222e;
+  background: rgba(207, 34, 46, 0.08);
+  border-radius: 3px;
+  padding: 0 3px;
+}
+
+.markedit-preview-body .msm-notice {
+  margin: 8px 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--chrome-border);
+  background: var(--chrome-hover);
+  color: var(--chrome-text-secondary);
+  font-size: 13px;
+}
+
+.markedit-preview-body .msm-caption {
+  color: var(--chrome-text-secondary);
+  font-size: 13px;
+  margin: 6px 0;
+}
+
+.markedit-preview-body .msm-caption-label {
+  font-weight: 600;
+}
+
+.markedit-preview-body table caption.msm-caption {
+  caption-side: top;
+  text-align: left;
+}
+
+.markedit-preview-body .msm-figure {
+  margin: 16px 0;
+}
+
+.markedit-preview-body .msm-figure figcaption {
+  text-align: center;
+}
+
+.markedit-preview-body .msm-output {
+  margin: 6px 0 12px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: var(--chrome-hover);
+}
+
+.markedit-preview-body .msm-equation {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.markedit-preview-body .msm-equation > :first-child {
+  flex: 1;
+}
+
+.markedit-preview-body .msm-equation-number {
+  color: var(--chrome-text-secondary);
+}
+
+.markedit-preview-body .msm-kbd,
+.markedit-preview-body kbd {
+  display: inline-block;
+  min-width: 1.4em;
+  padding: 1px 6px;
+  border: 1px solid var(--chrome-border);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--chrome-input-bg);
+  font: 0.85em ui-monospace, Consolas, monospace;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.markedit-preview-body .msm-tag {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: rgba(9, 105, 218, 0.1);
+  color: var(--chrome-accent);
+  font-size: 0.9em;
+}
+
+.markedit-preview-body .msm-wikilink {
+  text-decoration-style: dashed;
+}
+
+.markedit-preview-body .msm-cite {
+  font-style: normal;
+  color: var(--chrome-accent);
+}
+
+.markedit-preview-body .msm-definition-list dt {
+  font-weight: 600;
+  margin-top: 10px;
+}
+
+.markedit-preview-body .msm-definition-list dd {
+  margin: 4px 0 8px 24px;
+}
+
+.markedit-preview-body .msm-div {
+  margin: 12px 0;
+  padding: 10px 14px;
+  border: 1px solid var(--chrome-border);
+  border-radius: 6px;
+}
+
+.markedit-preview-body .msm-div.only-html {
+  border: none;
+  padding: 0;
+}
+
+.markedit-preview-body .msm-div-title {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.markedit-preview-body .msm-div.warning,
+.markedit-preview-body .msm-div.caution {
+  border-color: rgba(157, 106, 0, 0.35);
+  background: rgba(157, 106, 0, 0.06);
+}
+
+.markedit-preview-body .msm-toc-nav ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.markedit-preview-body .msm-toc {
+  margin: 12px 0;
+  padding: 10px 14px;
+  border-radius: 6px;
+  background: var(--chrome-hover);
+}
+
+.markedit-preview-body details.msm-callout > summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.markedit-preview-body details.msm-callout > summary::after {
+  content: "›";
+  margin-left: auto;
+  transition: transform 120ms ease;
+}
+
+.markedit-preview-body details.msm-callout[open] > summary::after {
+  transform: rotate(90deg);
+}
+
+.markedit-preview-body details.msm-callout:not([open]) > summary {
+  margin-bottom: 0;
+}
+
+.markedit-preview-body .msm-tabset {
+  margin: 12px 0;
+  border: 1px solid var(--chrome-border);
+  border-radius: 6px;
+}
+
+.markedit-preview-body .msm-tab-list {
+  display: flex;
+  gap: 2px;
+  padding: 4px 4px 0;
+  border-bottom: 1px solid var(--chrome-border);
+}
+
+.markedit-preview-body .msm-tab-button {
+  appearance: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--chrome-text-secondary);
+  cursor: pointer;
+  font: inherit;
+  padding: 6px 12px;
+}
+
+.markedit-preview-body .msm-tab-button.is-active {
+  border-bottom-color: var(--chrome-accent);
+  color: var(--chrome-text);
+}
+
+.markedit-preview-body .msm-tab-panel {
+  display: none;
+  padding: 10px 14px;
+}
+
+.markedit-preview-body .msm-tab-panel.is-active {
+  display: block;
+}
+
+.markedit-preview-body .msm-tab-print-title {
+  display: none;
+  font-weight: 600;
+}
+
+.markedit-preview-body .msm-pagebreak {
+  display: none;
+}
+
+/* Extended task states: [/] in progress, [-] cancelled (§30) */
+
+.markedit-preview-body .msm-checkbox,
+.markedit-preview-body input.msm-task-checkbox.is-doing,
+.markedit-preview-body input.msm-task-checkbox.is-cancelled {
+  appearance: none;
+  display: inline-block;
+  position: relative;
+  width: 13px;
+  height: 13px;
+  border: 1px solid var(--chrome-text-secondary);
+  border-radius: 3px;
+  vertical-align: middle;
+}
+
+.markedit-preview-body .msm-checkbox.is-done {
+  background: var(--chrome-accent);
+  border-color: var(--chrome-accent);
+}
+
+.markedit-preview-body .msm-checkbox.is-done::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 0;
+  width: 4px;
+  height: 8px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.markedit-preview-body .msm-checkbox.is-doing,
+.markedit-preview-body input.msm-task-checkbox.is-doing {
+  background: linear-gradient(to right, var(--chrome-accent) 50%, transparent 50%);
+  border-color: var(--chrome-accent);
+}
+
+.markedit-preview-body .msm-checkbox.is-cancelled::after,
+.markedit-preview-body input.msm-task-checkbox.is-cancelled::after {
+  content: "";
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  top: 5px;
+  height: 2px;
+  background: var(--chrome-text-secondary);
+}
+
+.markedit-preview-body li.msm-task-cancelled {
+  color: var(--chrome-text-secondary);
+  text-decoration: line-through;
+}
+
+@media print {
+  .markedit-preview-body .msm-pagebreak {
+    display: block;
+    break-after: page;
+  }
+
+  .markedit-preview-body .msm-tab-list {
+    display: none;
+  }
+
+  .markedit-preview-body .msm-tab-panel,
+  .markedit-preview-body .msm-tab-print-title {
+    display: block;
+  }
+}
+
+/* Diagram plugins (mermaid, plantuml, d2, drawio) */
+
+.markedit-preview-body .markedit-diagram {
+  margin: 4px 0;
+  /* The diagram container is a centred flex box; keep placeholders to the block width. */
+  width: 100%;
+  min-width: 0;
+}
+
+.markedit-preview-body .markedit-diagram.is-rendered {
+  width: auto;
+}
+
+.markedit-preview-body .markedit-diagram-status {
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: var(--chrome-hover);
+  color: var(--chrome-text-secondary);
+  font-size: 13px;
+}
+
+.markedit-preview-body .markedit-diagram.is-error .markedit-diagram-status {
+  color: #cf222e;
+  background: rgba(207, 34, 46, 0.08);
+}
+
+.markedit-preview-body .markedit-diagram-source {
+  margin-top: 6px;
+  max-height: 240px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* Once rendered, the source is reached through the block's "Source" toggle. */
+.markedit-preview-body .markedit-diagram.is-rendered > .markedit-diagram-source {
+  display: none;
+}
+
+.markedit-preview-body .markedit-diagram.is-pending > .markedit-diagram-source {
+  opacity: 0.6;
+}
+
+.markedit-preview-body .markedit-diagram-output {
+  overflow-x: auto;
+}
+
+.markedit-preview-body .markedit-diagram-image,
+.markedit-preview-body .markedit-diagram-output > svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+
+/* Diagrams blend with the preview theme background. */
+.markedit-preview-body .markedit-diagram-image {
+  background: var(--preview-background, Canvas);
+  border-radius: 4px;
+}
+
+.markedit-preview-body svg.markedit-drawio {
+  --drawio-label-bg: var(--preview-background, Canvas);
+  background: var(--preview-background, Canvas);
+  border-radius: 4px;
+}
+
+/* LaTeX math plugin */
+
+/* Stretchy fences, braces and large operators need a font with an OpenType MATH table:
+   Cambria Math ships with Windows, STIX Two Math with macOS. */
+.markedit-preview-body math {
+  font-family: "Cambria Math", "STIX Two Math", "Latin Modern Math", "Noto Sans Math", math;
+}
+
+.markedit-preview-body math[display="block"] {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 4px 0;
+}
+
+.markedit-preview-body mrow.markedit-math-boxed {
+  border: 1px solid currentColor;
+  padding: 0.15em 0.3em;
+}
+
+.markedit-preview-body mrow.markedit-math-cancel {
+  background: linear-gradient(to top right, transparent calc(50% - 0.6px), currentColor calc(50% - 0.6px), currentColor calc(50% + 0.6px), transparent calc(50% + 0.6px));
+}
+
+.markedit-preview-body mrow.markedit-math-bcancel {
+  background: linear-gradient(to bottom right, transparent calc(50% - 0.6px), currentColor calc(50% - 0.6px), currentColor calc(50% + 0.6px), transparent calc(50% + 0.6px));
+}
+
+.markedit-preview-body mrow.markedit-math-cancel.markedit-math-bcancel {
+  background:
+    linear-gradient(to top right, transparent calc(50% - 0.6px), currentColor calc(50% - 0.6px), currentColor calc(50% + 0.6px), transparent calc(50% + 0.6px)),
+    linear-gradient(to bottom right, transparent calc(50% - 0.6px), currentColor calc(50% - 0.6px), currentColor calc(50% + 0.6px), transparent calc(50% + 0.6px));
+}
+
+.markedit-preview-body mtd.markedit-math-align-left {
+  padding-left: 0;
+}
+
+.markedit-preview-body merror {
+  color: #cf222e;
+  background: rgba(207, 34, 46, 0.08);
+}
+
+/* Settings: diagram tools */
+
+.markedit-settings-text {
+  min-width: 220px;
+  font-family: ui-monospace, 'SF Mono', Menlo, 'Cascadia Mono', Consolas, 'Apple SD Gothic Neo', 'Pretendard Variable', 'Malgun Gothic', monospace;
+  font-size: 12px;
+}
+
+.markedit-settings-tool-status {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--chrome-text-secondary);
+}
+
+.markedit-settings-tool-status .is-available {
+  color: #1a7f37;
+}
+
+.markedit-settings-tool-status .is-missing {
+  color: #cf222e;
+}
+
+/* Quick offline drawing shown while the full diagram renders. */
+.markedit-preview-body .markedit-diagram-output.is-preliminary {
+  opacity: 0.85;
+}
+
+/* Self-styled documents (markdown-it from the MarkEdit Preview extension) */
+
+.markedit-preview-body.has-frame {
+  padding: 0;
+  overflow: hidden;
+}
+
+.markedit-preview-body.has-frame > .markedit-preview-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  border: 0;
+  background: #ffffff;
+}
+
+/* [TOC] in a document without headings */
+.markedit-preview-body .msm-toc:empty {
+  display: none;
+}
+
+/* Settings: preview styles per theme */
+
+.markedit-settings-hint {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--chrome-text-secondary);
+  margin-bottom: 10px;
+}
+
+.markedit-settings-preview-sample {
+  border: 1px solid var(--chrome-border);
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-size: 15px;
+  line-height: 1.4;
+  overflow: hidden;
+}
+
+.markedit-settings-preview-sample > div {
+  margin: 0 0 6px;
+}
+
+.markedit-settings-preview-sample > div:last-child {
+  margin-bottom: 0;
+}
+
+.markedit-settings-preview-sample {
+  font-family: var(--pv-font-body, inherit);
+  font-size: var(--pv-size-body, 15px);
+  color: var(--pv-text, inherit);
+}
+
+.markedit-settings-preview-sample-h1,
+.markedit-settings-preview-sample-h2,
+.markedit-settings-preview-sample-h3,
+.markedit-settings-preview-sample-h4,
+.markedit-settings-preview-sample-h5,
+.markedit-settings-preview-sample-h6 {
+  font-family: var(--pv-font-heading, inherit);
+  font-weight: var(--pv-heading-weight, 600);
+  line-height: 1.25;
+}
+
+/* Same defaults as the preview (.markedit-preview-body). */
+.markedit-settings-preview-sample-h1 { font-size: var(--pv-size-h1, 28px); color: var(--pv-h1, inherit); }
+.markedit-settings-preview-sample-h2 { font-size: var(--pv-size-h2, 24px); color: var(--pv-h2, inherit); }
+.markedit-settings-preview-sample-h3 { font-size: var(--pv-size-h3, 20px); color: var(--pv-h3, inherit); }
+.markedit-settings-preview-sample-h4 { font-size: var(--pv-size-h4, 17px); color: var(--pv-h4, inherit); }
+.markedit-settings-preview-sample-h5 { font-size: var(--pv-size-h5, 15px); color: var(--pv-h5, inherit); }
+.markedit-settings-preview-sample-h6 { font-size: var(--pv-size-h6, 13px); color: var(--pv-h6, inherit); opacity: 0.8; }
+
+.markedit-settings-preview-sample-h1,
+.markedit-settings-preview-sample-h2 {
+  padding-bottom: var(--pv-heading-rule-gap, 0);
+  border-bottom: var(--pv-heading-rule, none);
+}
+
+.markedit-settings-preview-sample-link {
+  color: var(--pv-link, var(--chrome-accent));
+}
+
+.markedit-settings-preview-sample-code {
+  font-family: var(--pv-font-code, ui-monospace, 'SF Mono', Menlo, 'Cascadia Mono', Consolas, 'Apple SD Gothic Neo', 'Pretendard Variable', 'Malgun Gothic', monospace);
+  font-size: 0.92em;
+  color: var(--pv-code-text, inherit);
+  background: var(--pv-code-bg, rgba(127, 127, 127, 0.18));
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.markedit-settings-preview-sample-blockquote {
+  color: var(--pv-quote-text, inherit);
+  background: var(--pv-quote-bg, transparent);
+  border-left: 3px solid var(--pv-quote-border, rgba(127, 127, 127, 0.45));
+  padding: 2px 10px;
+}
+
+.markedit-settings-preview-sample .markedit-preview-table {
+  margin: 8px 0 0;
+}
+
+.markedit-settings-preview-styles {
+  display: grid;
+  grid-template-columns: minmax(80px, auto) minmax(0, 1fr) 64px 96px 36px 28px;
+  gap: 6px 8px;
+  align-items: center;
+}
+
+.markedit-settings-preview-styles-header {
+  font-size: 11px;
+  color: var(--chrome-text-secondary);
+}
+
+.markedit-settings-preview-styles-label {
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.markedit-settings-preview-styles .markedit-settings-text,
+.markedit-settings-preview-styles .markedit-settings-number,
+.markedit-settings-preview-styles .markedit-settings-select {
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.markedit-settings-preview-color {
+  width: 36px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--chrome-border);
+  border-radius: 6px;
+  background: none;
+  cursor: pointer;
+}
+
+.markedit-settings-preview-color.is-unset {
+  opacity: 0.45;
+}
+
+.markedit-settings-preview-reset {
+  width: 28px;
+  height: 26px;
+  padding: 0;
+  justify-content: center;
+}
+
+/* Settings: theme picker (a drop-down that shows each theme's colors) */
+
+.markedit-theme-picker {
+  position: relative;
+}
+
+.markedit-theme-picker-button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 260px;
+  max-width: 100%;
+  padding: 4px 30px 4px 6px;
+  text-align: left;
+  cursor: pointer;
+  position: relative;
+}
+
+.markedit-theme-picker-button:focus-visible,
+.markedit-theme-picker.is-open .markedit-theme-picker-button {
+  border-color: var(--chrome-accent);
+}
+
+.markedit-theme-picker-chevron {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  margin-top: -5px;
+  border-right: 1.5px solid var(--chrome-text-secondary);
+  border-bottom: 1.5px solid var(--chrome-text-secondary);
+  transform: rotate(45deg);
+}
+
+.markedit-theme-picker-label {
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.markedit-theme-picker-detail {
+  font-size: 11px;
+  color: var(--chrome-text-secondary);
+  white-space: nowrap;
+}
+
+.markedit-theme-picker-list {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 300px;
+  max-height: 340px;
+  overflow-y: auto;
+  padding: 4px;
+  background: var(--chrome-bg-solid);
+  border: 1px solid var(--chrome-border);
+  border-radius: 8px;
+  box-shadow: var(--chrome-shadow);
+  outline: none;
+}
+
+.markedit-theme-picker-list[hidden] {
+  display: none;
+}
+
+.markedit-theme-picker-group-label {
+  padding: 6px 8px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--chrome-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.markedit-theme-picker-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 8px 4px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.markedit-theme-picker-option.is-active {
+  background: var(--chrome-active);
+}
+
+.markedit-theme-picker-option[aria-selected="true"] .markedit-theme-picker-label {
+  font-weight: 600;
+}
+
+.markedit-theme-picker-option[aria-selected="true"]::after {
+  content: '';
+  margin-left: auto;
+  width: 4px;
+  height: 8px;
+  border-right: 2px solid var(--chrome-accent);
+  border-bottom: 2px solid var(--chrome-accent);
+  transform: translateY(-2px) rotate(45deg);
+  flex-shrink: 0;
+}
+
+.markedit-theme-swatch {
+  display: inline-flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  width: 48px;
+  height: 30px;
+  padding: 0 6px;
+  box-sizing: border-box;
+  border: 1px solid;
+  border-radius: 5px;
+  box-shadow: inset 0 0 0 1px rgba(127, 127, 127, 0.18);
+  flex-shrink: 0;
+}
+
+.markedit-theme-swatch-row {
+  display: flex;
+  gap: 3px;
+  height: 4px;
+}
+
+.markedit-theme-swatch-token {
+  flex: 1;
+  border-radius: 2px;
+}
+
+/* Windows: slim, rounded scrollbars like Windows 11 apps (Chromium's default ones are wide gray
+   bars with arrow buttons). macOS keeps its native overlay scrollbars. */
+
+:root[data-platform="windows"] ::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+  background: transparent;
+}
+
+:root[data-platform="windows"] ::-webkit-scrollbar-thumb {
+  background-color: rgba(128, 128, 128, 0.45);
+  background-clip: padding-box;
+  border: 3px solid transparent;
+  border-radius: 6px;
+}
+
+:root[data-platform="windows"] ::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(128, 128, 128, 0.7);
+  border-width: 2px;
+}
+
+:root[data-platform="windows"] ::-webkit-scrollbar-track,
+:root[data-platform="windows"] ::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+:root[data-platform="windows"] ::-webkit-scrollbar-button {
+  display: none;
+}
+
+/* gsync Markdown (formats/gsync, docs/reference/GSYNC-MARKDOWN-SYNTAX.md) */
+
+.markedit-preview-body .gsync-header details summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.markedit-preview-body .gsync-header pre {
+  margin: 6px 0 0;
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+.markedit-preview-body .gsync-table-caption {
+  margin: 0 0 6px;
+}
+
+.markedit-preview-body .gsync-code-title {
+  margin: 12px 0 -10px;
+  font-size: 0.9em;
+  font-weight: 600;
+  opacity: 0.85;
+}
+
+.markedit-preview-body .gsync-diagram {
+  margin: 16px 0;
+}
+
+.markedit-preview-body .gsync-figure-caption {
+  text-align: center;
+  font-size: 0.92em;
+  opacity: 0.85;
+}
+
+.markedit-preview-body .container {
+  margin: 14px 0;
+  padding: 10px 14px;
+  border-left: 4px solid rgba(127, 127, 127, 0.5);
+  border-radius: 0 6px 6px 0;
+  background: rgba(127, 127, 127, 0.08);
+}
+
+.markedit-preview-body .container-title {
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.markedit-preview-body .container > :last-child {
+  margin-bottom: 0;
+}
+
+.markedit-preview-body .container-note,
+.markedit-preview-body .container-info { border-left-color: #2f81f7; background: rgba(47, 129, 247, 0.08); }
+.markedit-preview-body .container-tip,
+.markedit-preview-body .container-success { border-left-color: #2da44e; background: rgba(45, 164, 78, 0.08); }
+.markedit-preview-body .container-warning { border-left-color: #d29922; background: rgba(210, 153, 34, 0.1); }
+.markedit-preview-body .container-caution,
+.markedit-preview-body .container-danger,
+.markedit-preview-body .container-error { border-left-color: #cf222e; background: rgba(207, 34, 46, 0.08); }
+
+.markedit-preview-body .container-code-tabs {
+  padding: 0;
+  border-left: none;
+  background: none;
+}
+
+.markedit-preview-body details.admonition {
+  margin: 14px 0;
+  padding: 8px 14px;
+  border: 1px solid rgba(127, 127, 127, 0.35);
+  border-radius: 6px;
+}
+
+.markedit-preview-body details.admonition > summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.markedit-preview-body details.admonition[open] > summary {
+  margin-bottom: 8px;
+}
+
+.markedit-preview-body ul[data-marker="disc"] { list-style-type: disc; }
+.markedit-preview-body ul[data-marker="circle"] { list-style-type: circle; }
+.markedit-preview-body ul[data-marker="square"] { list-style-type: square; }
+.markedit-preview-body ul[data-marker="hollow-square"] { list-style-type: "▫ "; }
+
+.markedit-preview-body .gsync-definitions dt {
+  font-weight: 600;
+}
+
+.markedit-preview-body .gsync-definitions dd {
+  margin: 0 0 8px 24px;
+}
+
+.markedit-preview-body hr.cell-sep {
+  margin: 4px 0;
+}
+
+.markedit-preview-body .gsync-cell-list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.markedit-preview-body table.gsync-nested-table {
+  border-collapse: collapse;
+  font-size: 0.95em;
+}
+
+.markedit-preview-body table.gsync-nested-table th,
+.markedit-preview-body table.gsync-nested-table td {
+  padding: 2px 8px;
+  border: 1px solid rgba(127, 127, 127, 0.4);
+}
+
+.markedit-preview-body abbr[title] {
+  text-decoration: underline dotted;
+  cursor: help;
+}
+
+.markedit-preview-body a.cross-ref,
+.markedit-preview-body a.wiki-link {
+  text-decoration: underline dotted;
 }

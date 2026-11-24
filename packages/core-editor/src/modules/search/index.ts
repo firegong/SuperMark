@@ -156,8 +156,9 @@ export function replaceAll() {
 }
 
 export function selectAllOccurrences() {
+  // doc.toString() always joins lines with "\n"; match the selection (CRLF in CRLF docs) to it.
   const doc = window.editor.state.doc.toString();
-  const query = selectedMainText();
+  const query = selectedMainText().replace(/\r\n?/g, '\n');
   if (query.length > 0) {
     selectWithRanges(searchOccurrences(doc, query));
   }

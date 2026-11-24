@@ -66,7 +66,7 @@ pub fn install_bytes(
     }
     if !is_app_version_compatible(pending.min_app_version.as_deref(), app_version) {
         return Err(format!(
-            "Extension '{}' requires MarkEdit-Rust {} or newer",
+            "Extension '{}' requires SuperMark {} or newer",
             pending.id,
             pending.min_app_version.as_deref().unwrap_or_default()
         ));
@@ -339,7 +339,7 @@ mod tests {
             None,
         )
         .expect_err("minAppVersion gate must fail");
-        assert!(error.contains("requires MarkEdit-Rust"), "{error}");
+        assert!(error.contains("requires SuperMark"), "{error}");
     }
 
     #[test]

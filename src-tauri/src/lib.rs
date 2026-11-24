@@ -1,19 +1,100 @@
 pub mod bridge;
+pub mod diagnostics;
+pub mod diagrams;
 pub mod document;
 pub mod extensions;
+pub mod licenses;
 pub mod menu;
+pub mod links;
 pub mod settings;
+pub mod updates;
 
 use bridge::{dispatch_bridge_message, BridgeMessage, WebBridge};
 use document::DocumentManager;
 use rfd::{MessageButtons, MessageDialog, MessageDialogResult, MessageLevel};
-use serde_json::Value;
+use serde_json::{json, Value};
 use settings::SettingsManager;
 use std::path::PathBuf;
 use tauri::{
-    AppHandle, Manager, Runtime, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
+    AppHandle, Manager, RunEvent, Runtime, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
     WindowEvent,
 };
+
+/// Opens a clicked link safely (see links.rs): web and mail links in the system, documents in the
+/// app (or the window that already has them), other files only revealed, unsafe links ignored.
+/// Async: dialogs are shown with rfd's async API, which is safe off the main thread on macOS.
+async fn follow_link<R: Runtime>(window: &WebviewWindow<R>, href: &str) {
+    let app = window.app_handle();
+    let doc_mgr = app.state::<DocumentManager>();
+    let base_dir = doc_mgr.with_session(window.label(), |s| {
+        s.file_path.as_ref().and_then(|path| path.parent().map(PathBuf::from))
+    });
+    match links::resolve_link(href, base_dir.as_deref()) {
+        links::LinkTarget::External(url) => menu::open_in_shell(&url),
+        links::LinkTarget::Document(path) => menu::open_document_path(app, path),
+        links::LinkTarget::Reveal(path) => links::reveal_in_file_manager(&path),
+        links::LinkTarget::NotFound(path) => {
+            let message = if base_dir.is_none() && path.is_relative() {
+                format!("Save this document first to follow relative links:\n{}", path.display())
+            } else {
+                format!("The linked file was not found:\n{}", path.display())
+            };
+            rfd::AsyncMessageDialog::new()
+                .set_title("SuperMark")
+                .set_description(message)
+                .set_level(MessageLevel::Warning)
+                .set_buttons(MessageButtons::Ok)
+                .show()
+                .await;
+        }
+        links::LinkTarget::Ignored => {}
+    }
+}
+
+/// Standard buttons for `count` requested buttons (custom labels need a Windows feature rfd does
+/// not enable here): 1 → OK, 2 → OK/Cancel, 3+ → Yes/No/Cancel. The result is the index of the
+/// clicked button in the requested order.
+fn alert_buttons(count: usize) -> MessageButtons {
+    match count {
+        0 | 1 => MessageButtons::Ok,
+        2 => MessageButtons::OkCancel,
+        _ => MessageButtons::YesNoCancel,
+    }
+}
+
+fn alert_result_index(result: &MessageDialogResult) -> i64 {
+    match result {
+        MessageDialogResult::Ok | MessageDialogResult::Yes => 0,
+        MessageDialogResult::No => 1,
+        MessageDialogResult::Cancel => 1,
+        MessageDialogResult::Custom(_) => 0,
+    }
+}
+
+async fn show_alert(params: &Value) -> i64 {
+    let text = |key: &str| params.get(key).and_then(Value::as_str).unwrap_or("").to_string();
+    let buttons = params.get("buttons").and_then(Value::as_array).map(Vec::len).unwrap_or(0);
+    let title = text("title");
+    let result = rfd::AsyncMessageDialog::new()
+        .set_title(if title.is_empty() { "SuperMark" } else { title.as_str() })
+        .set_description(text("message"))
+        .set_level(MessageLevel::Info)
+        .set_buttons(alert_buttons(buttons))
+        .show()
+        .await;
+    // Yes/No/Cancel: Cancel is the third button.
+    if buttons >= 3 && result == MessageDialogResult::Cancel {
+        return 2;
+    }
+    alert_result_index(&result)
+}
+
+/// A link clicked in the preview.
+#[tauri::command]
+async fn open_link(window: WebviewWindow, href: String) -> Result<(), String> {
+    follow_link(&window, &href).await;
+    Ok(())
+}
 
 #[tauri::command]
 async fn handle_bridge_message(
@@ -22,7 +103,38 @@ async fn handle_bridge_message(
     message: BridgeMessage,
 ) -> Result<Value, String> {
     let label = window.label().to_string();
+
+    // MarkEdit.openDocument (extensions): like File > Open — a new window, or the one that
+    // already shows the file — never replacing this window's (possibly unsaved) document.
+    if message.module_name == "api" && message.method_name == "openDocument" {
+        let path = serde_json::from_str::<Value>(&message.parameters)
+            .ok()
+            .and_then(|params| params.get("path").and_then(Value::as_str).map(PathBuf::from));
+        let Some(path) = path.filter(|path| path.exists()) else {
+            return Ok(json!(false));
+        };
+        menu::open_document_path(window.app_handle(), path);
+        menu::refresh_app_menu(window.app_handle());
+        return Ok(json!(true));
+    }
+
+    // MarkEdit.showAlert (extensions): a real dialog; returns the index of the clicked button.
+    if message.module_name == "api" && message.method_name == "showAlert" {
+        let params = serde_json::from_str::<Value>(&message.parameters).unwrap_or(Value::Null);
+        return Ok(json!(show_alert(&params).await));
+    }
+
     let (response, followup_js) = dispatch_bridge_message(&label, &message, &doc_mgr)?;
+
+    // Ctrl+click on a link in the editor.
+    if message.module_name == "core" && message.method_name == "notifyLinkClicked" {
+        let link = serde_json::from_str::<Value>(&message.parameters)
+            .ok()
+            .and_then(|params| params.get("link").and_then(Value::as_str).map(str::to_string));
+        if let Some(link) = link {
+            follow_link(&window, &link).await;
+        }
+    }
 
     if message.module_name == "core" && message.method_name == "notifyViewDidUpdate" {
         let new_title = doc_mgr.with_session(&label, |s| s.display_title());
@@ -37,6 +149,13 @@ async fn handle_bridge_message(
 
     if let Some(script) = followup_js {
         let _ = window.eval(&script);
+    }
+
+    // `window.close()` in the editor is bridged to `core.notifyWindowClose` (index.ts). Close
+    // the window for real; CloseRequested still prompts if the document has unsaved changes.
+    // This is also what closes the window after "Yes" (save) in the close prompt.
+    if message.module_name == "core" && message.method_name == "notifyWindowClose" {
+        let _ = window.close();
     }
 
     Ok(response)
@@ -59,7 +178,9 @@ async fn save_document_content(
             .trim()
             .trim_start_matches('.');
         let ext = if ext.is_empty() { "md" } else { ext };
+        // Parent the dialog to the window so it is modal and the editor cannot change underneath it.
         rfd::FileDialog::new()
+            .set_parent(&window)
             .add_filter(
                 "Markdown & TextPack",
                 &["md", "markdown", "mdown", "mkd", "txt", "textpack"],
@@ -74,6 +195,13 @@ async fn save_document_content(
         return Ok(false);
     };
 
+    // Mark this path as ignored so our own write doesn't trigger a reload prompt.
+    let app = window.app_handle();
+    if let Some(watcher) = app.try_state::<crate::document::watcher::ExternalFileWatcher>() {
+        watcher.ignore(&path);
+    }
+
+    let saved_editor_text = text.clone();
     let mut formatted_text = text;
     if user_settings.trim_trailing_whitespace {
         formatted_text = formatted_text
@@ -96,8 +224,78 @@ async fn save_document_content(
     doc_mgr.clear_backup_snapshot(&label);
     menu::refresh_app_menu(window.app_handle());
     let _ = window.set_title(&new_title);
-    let _ = window.eval(&WebBridge::mark_content_clean());
+    persist_last_session(window.app_handle(), None);
+    // Only mark the buffer clean if it still holds exactly what was saved; edits made while the
+    // save was in progress must keep the document dirty so closing still prompts.
+    let saved_json = serde_json::to_string(&saved_editor_text).unwrap_or_else(|_| "null".to_string());
+    let _ = window.eval(&format!(
+        "(function() {{ const saved = {saved_json}; const current = window.webModules?.core?.getEditorText?.(); if (current === undefined || current === saved) {{ {} }} }})();",
+        WebBridge::mark_content_clean()
+    ));
     Ok(true)
+}
+
+/// The editor reports its view mode, Markdown parser and preview scroll sync so the View
+/// menu can show them as checkmarks. Only the focused window's state is shown.
+#[tauri::command]
+async fn view_state_changed(
+    window: WebviewWindow,
+    mode: String,
+    renderer: String,
+    sync_scroll: bool,
+    live_preview: Option<bool>,
+) -> Result<(), String> {
+    let others_focused = window
+        .app_handle()
+        .webview_windows()
+        .values()
+        .any(|other| other.label() != window.label() && other.is_focused().unwrap_or(false));
+    if !others_focused {
+        menu::apply_view_state(
+            window.app_handle(),
+            menu::ViewState {
+                mode,
+                renderer,
+                sync_scroll,
+                live_preview: live_preview.unwrap_or(false),
+            },
+        );
+    }
+    Ok(())
+}
+
+/// Renders a PlantUML / D2 / Graphviz diagram with the locally installed tool (see `diagrams`).
+/// Errors start with `not-installed:` (try another renderer) or `failed:` (diagram error).
+#[tauri::command]
+async fn diagram_render_local(lang: String, source: String) -> Result<String, String> {
+    let settings = SettingsManager::new().load_user_settings();
+    tauri::async_runtime::spawn_blocking(move || {
+        diagrams::render_local(&lang, &source, |tool| match tool {
+            "plantuml" => settings.plantuml_command.clone(),
+            "d2" => settings.d2_command.clone(),
+            // Graphviz is the `dot` command on PATH.
+            "graphviz" => "dot".to_string(),
+            other => other.to_string(),
+        })
+        .map_err(|err| err.to_bridge_string())
+    })
+    .await
+    .map_err(|err| format!("failed: {err}"))?
+}
+
+/// Reports which local diagram tools are installed (Settings → Check Local Tools).
+#[tauri::command]
+async fn diagram_tools_status() -> Result<Vec<diagrams::ToolStatus>, String> {
+    let settings = SettingsManager::new().load_user_settings();
+    tauri::async_runtime::spawn_blocking(move || {
+        vec![
+            diagrams::tool_status("plantuml", &settings.plantuml_command),
+            diagrams::tool_status("d2", &settings.d2_command),
+            diagrams::tool_status("graphviz", "dot"),
+        ]
+    })
+    .await
+    .map_err(|err| err.to_string())
 }
 
 #[tauri::command]
@@ -113,6 +311,7 @@ async fn save_idle_backup(
     });
     if is_dirty {
         doc_mgr.save_backup_snapshot(&label, &text)?;
+        persist_last_session(window.app_handle(), None);
     }
     Ok(())
 }
@@ -134,7 +333,7 @@ async fn install_extension_from_url(
         &app_version,
     )?;
 
-    let _ = window.eval(&menu::extensions_reload_script(mgr));
+    reload_extensions_everywhere(&window, mgr);
     Ok(true)
 }
 
@@ -166,7 +365,7 @@ async fn extensions_install(
     .join()
     .map_err(|_| "Failed to join extension install worker".to_string())??;
 
-    let _ = window.eval(&menu::extensions_reload_script(doc_mgr.extensions()));
+    reload_extensions_everywhere(&window, doc_mgr.extensions());
     Ok(state)
 }
 
@@ -183,7 +382,7 @@ async fn extensions_install_url(
     .join()
     .map_err(|_| "Failed to join extension URL install worker".to_string())??;
 
-    let _ = window.eval(&menu::extensions_reload_script(doc_mgr.extensions()));
+    reload_extensions_everywhere(&window, doc_mgr.extensions());
     Ok(state)
 }
 
@@ -195,7 +394,7 @@ async fn extensions_uninstall(
 ) -> Result<crate::extensions::ExtensionsManagerState, String> {
     let mgr = doc_mgr.extensions();
     let state = mgr.uninstall_extension(&id, env!("CARGO_PKG_VERSION"))?;
-    let _ = window.eval(&menu::extensions_reload_script(mgr));
+    reload_extensions_everywhere(&window, mgr);
     Ok(state)
 }
 
@@ -208,7 +407,7 @@ async fn extensions_set_enabled(
 ) -> Result<crate::extensions::ExtensionsManagerState, String> {
     let mgr = doc_mgr.extensions();
     let state = mgr.set_extension_enabled(&id, enabled, env!("CARGO_PKG_VERSION"))?;
-    let _ = window.eval(&menu::extensions_reload_script(mgr));
+    reload_extensions_everywhere(&window, mgr);
     Ok(state)
 }
 
@@ -225,7 +424,7 @@ async fn extensions_update(
     .join()
     .map_err(|_| "Failed to join extension update worker".to_string())??;
 
-    let _ = window.eval(&menu::extensions_reload_script(doc_mgr.extensions()));
+    reload_extensions_everywhere(&window, doc_mgr.extensions());
     Ok(state)
 }
 
@@ -348,12 +547,8 @@ async fn versions_restore(
     let Some(path) = doc_mgr.with_session(&label, |s| s.file_path.clone()) else {
         return Ok(false);
     };
-    let restored = doc_mgr.versions().restore_version(&path, &version)?;
-    let new_title = doc_mgr.with_session(&label, |s| {
-        s.content_cache = restored.clone();
-        s.is_dirty = false;
-        s.display_title()
-    });
+    let restored = doc_mgr.restore_version(&label, &path, &version)?;
+    let new_title = doc_mgr.with_session(&label, |s| s.display_title());
     let _ = window.set_title(&new_title);
     let _ = window.eval(&WebBridge::reset_editor(&restored));
     Ok(true)
@@ -372,6 +567,13 @@ async fn versions_delete_all(
 }
 
 pub fn build_bootstrap_script() -> String {
+    let runtime_info_json = json!({
+        "appVersion": env!("CARGO_PKG_VERSION"),
+        "appBuild": env!("CARGO_PKG_VERSION"),
+        "osVersion": format!("{} {}", std::env::consts::OS, std::env::consts::ARCH),
+        "webkitVersion": "",
+    })
+    .to_string();
     let mgr = SettingsManager::new();
     let settings = mgr.load_or_default();
     let user_settings = mgr.load_user_settings();
@@ -393,6 +595,8 @@ pub fn build_bootstrap_script() -> String {
         window.config = Object.assign({{}}, window.config, (function() {{ try {{ return {config_json}; }} catch (_) {{ return {{}}; }} }})());
         if (typeof window.config !== 'object' || window.config === null) {{ window.config = {{}}; }}
         if (!window.config.host) {{ window.config.host = 'mainApp'; }}
+        // MarkEdit.runtimeInfo(); webkitVersion is read from the WebView (api/methods.ts).
+        window.config.runtimeInfo = {runtime_info_json};
         window.MarkEdit = window.MarkEdit || {{
             editorConfig: window.config,
             userSettings: {user_settings_json}
@@ -418,6 +622,286 @@ pub fn build_bootstrap_script() -> String {
     )
 }
 
+/// Re-applies extensions in every window and rebuilds the menu: extensions (and built-in
+/// extensions) decide which Markdown parsers View → Markdown Parser offers.
+fn reload_extensions_everywhere(window: &WebviewWindow, mgr: &extensions::ExtensionManager) {
+    for webview in window.app_handle().webview_windows().values() {
+        let _ = webview.eval(&menu::extensions_reload_script(mgr));
+    }
+    menu::refresh_app_menu(window.app_handle());
+}
+
+/// Logs a document that could not be read and tells the user (instead of an empty window).
+pub fn report_open_failure(path: &std::path::Path, error: &str) {
+    diagnostics::log(&format!("failed to open {}: {error}", path.display()));
+    let _ = MessageDialog::new()
+        .set_title("SuperMark")
+        .set_description(format!("The document could not be opened:\n{}\n\n{error}", path.display()))
+        .set_level(MessageLevel::Error)
+        .set_buttons(MessageButtons::Ok)
+        .show();
+}
+
+/// The window's current document text, pulled by the editor after File > Open and similar
+/// (`window.__markeditReloadDocument__`), so large files are not pushed through `eval`.
+#[derive(serde::Serialize)]
+struct FolderNode {
+    name: String,
+    path: String,
+    is_dir: bool,
+    children: Vec<FolderNode>,
+}
+
+fn is_markdown(path: &std::path::Path) -> bool {
+    match path.extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase()) {
+        Some(ext) => matches!(ext.as_str(), "md" | "markdown" | "mdown" | "mkd" | "mkdn" | "txt"),
+        None => false,
+    }
+}
+
+fn build_folder_tree(root: &std::path::Path) -> FolderNode {
+    let mut children = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(root) {
+        let mut dirs: Vec<std::path::PathBuf> = Vec::new();
+        let mut files: Vec<std::path::PathBuf> = Vec::new();
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if name.starts_with('.') {
+                continue;
+            }
+            if path.is_dir() {
+                dirs.push(path);
+            } else if is_markdown(&path) {
+                files.push(path);
+            }
+        }
+        dirs.sort();
+        files.sort();
+        for d in dirs {
+            children.push(build_folder_tree(&d));
+        }
+        for f in files {
+            children.push(FolderNode {
+                name: f.file_name().unwrap_or_default().to_string_lossy().into_owned(),
+                path: f.to_string_lossy().into_owned(),
+                is_dir: false,
+                children: Vec::new(),
+            });
+        }
+    }
+    FolderNode {
+        name: root.file_name().unwrap_or_default().to_string_lossy().into_owned(),
+        path: root.to_string_lossy().into_owned(),
+        is_dir: true,
+        children,
+    }
+}
+
+#[tauri::command]
+async fn list_folder_tree(folder: String) -> Result<FolderNode, String> {
+    let root = std::path::PathBuf::from(&folder);
+    if !root.is_dir() {
+        return Err("not a directory".to_string());
+    }
+    Ok(build_folder_tree(&root))
+}
+
+#[tauri::command]
+async fn pick_folder() -> Result<Option<String>, String> {
+    Ok(rfd::FileDialog::new().pick_folder().map(|p| p.to_string_lossy().into_owned()))
+}
+
+#[tauri::command]
+async fn pick_file() -> Result<Option<String>, String> {
+    Ok(rfd::FileDialog::new()
+        .add_filter("Markdown", &["md", "markdown", "mdown", "mkd", "txt"])
+        .pick_file()
+        .map(|p| p.to_string_lossy().into_owned()))
+}
+
+#[tauri::command]
+async fn open_document(window: WebviewWindow, app: AppHandle, path: String) -> Result<(), String> {
+    let path = std::path::PathBuf::from(path);
+    let label = window.label().to_string();
+    let doc_mgr = app.state::<DocumentManager>();
+
+    // If the current document is dirty, ask before discarding.
+    let is_dirty = doc_mgr.with_session(&label, |s| s.is_dirty);
+    if is_dirty {
+        let result = rfd::MessageDialog::new()
+            .set_title("SuperMark")
+            .set_description("The current document has unsaved changes. Discard them and open the selected file?")
+            .set_level(rfd::MessageLevel::Warning)
+            .set_buttons(rfd::MessageButtons::OkCancel)
+            .show();
+        if result != rfd::MessageDialogResult::Ok {
+            return Ok(());
+        }
+    }
+
+    let loaded = doc_mgr.with_session(&label, |s| {
+        let text = s.load_from_path(&path)?;
+        Ok::<(String, String), String>((text, s.display_title()))
+    });
+    match loaded {
+        Ok((text, title)) => {
+            doc_mgr.push_recent(path.clone());
+            if let Some(watcher) = app.try_state::<crate::document::watcher::ExternalFileWatcher>() {
+                let _ = watcher.watch(&path);
+            }
+            let _ = window.set_title(&title);
+            let _ = window.set_focus();
+            let _ = window.eval(&crate::bridge::WebBridge::set_document_path(Some(&path)));
+            let _ = window.eval(&crate::bridge::WebBridge::reset_editor(&text));
+            let _ = window.eval(&crate::bridge::WebBridge::reload_document());
+            crate::persist_last_session(&app, None);
+        }
+        Err(error) => {
+            let _ = rfd::MessageDialog::new()
+                .set_title("SuperMark")
+                .set_description(format!("Failed to open file:\n{error}"))
+                .set_level(rfd::MessageLevel::Error)
+                .set_buttons(rfd::MessageButtons::Ok)
+                .show();
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn watch_document(app: AppHandle, path: String) -> Result<(), String> {
+    if let Some(watcher) = app.try_state::<crate::document::watcher::ExternalFileWatcher>() {
+        let _ = watcher.watch(std::path::PathBuf::from(path));
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn document_content(window: WebviewWindow, doc_mgr: State<'_, DocumentManager>) -> Result<Value, String> {
+    let label = window.label().to_string();
+    let (text, file_path) = doc_mgr.with_session(&label, |s| (s.content_cache.clone(), s.file_path.clone()));
+    Ok(serde_json::json!({
+        "text": text,
+        "filePath": file_path.map(|p| p.to_string_lossy().into_owned()),
+    }))
+}
+
+/// Installed extensions as data, for reloading them (`window.__markeditReloadExtensions__`).
+#[tauri::command]
+async fn extensions_bootstrap(
+    doc_mgr: State<'_, DocumentManager>,
+) -> Result<extensions::ExtensionBootstrap, String> {
+    Ok(doc_mgr.extensions().extension_bootstrap())
+}
+
+/// Saves which documents are open (`last-session.json`) for the `lastSession` startup behavior.
+///
+/// `closing` is a window that is going away. When it is the last window the snapshot is kept
+/// as it was, so quitting the app by closing its final window still reopens that window.
+pub fn persist_last_session<R: Runtime>(app: &AppHandle<R>, closing: Option<&str>) {
+    let mut labels: Vec<String> = app
+        .webview_windows()
+        .keys()
+        .filter(|label| Some(label.as_str()) != closing)
+        .cloned()
+        .collect();
+    if labels.is_empty() {
+        return;
+    }
+
+    labels.sort_by_key(|label| {
+        if label == "main" {
+            (0, 0)
+        } else {
+            (1, label.trim_start_matches("doc-").parse::<u32>().unwrap_or(u32::MAX))
+        }
+    });
+    let _ = app.state::<DocumentManager>().write_last_session(&labels);
+}
+
+/// Offers to restore unsaved changes left by a crash (with the default `newDocument` startup,
+/// which does not reopen the last session). `main_is_free`: the main window has no document yet,
+/// so the first recovered document can go there. Declining keeps the text in an archive folder.
+fn recover_unsaved_work<R: Runtime>(app: &AppHandle<R>, main_is_free: bool) {
+    let doc_mgr = app.state::<DocumentManager>();
+    let plan = doc_mgr.plan_unsaved_recovery();
+    if plan.is_empty() {
+        return;
+    }
+
+    let names: Vec<String> = plan
+        .iter()
+        .map(|item| {
+            item.path
+                .as_ref()
+                .and_then(|path| path.file_name())
+                .map(|name| name.to_string_lossy().into_owned())
+                .unwrap_or_else(|| "Untitled".to_string())
+        })
+        .collect();
+    let answer = MessageDialog::new()
+        .set_title("SuperMark")
+        .set_description(format!(
+            "SuperMark did not close normally. Restore unsaved changes in {} document(s)?\n\n{}",
+            plan.len(),
+            names.join("\n")
+        ))
+        .set_level(MessageLevel::Warning)
+        .set_buttons(MessageButtons::YesNo)
+        .show();
+
+    if answer != MessageDialogResult::Yes {
+        let labels: Vec<String> = plan.iter().map(|item| item.previous_label.clone()).collect();
+        match doc_mgr.archive_backups(&labels) {
+            Ok(folder) => diagnostics::log(&format!("kept declined backups in {}", folder.display())),
+            Err(error) => diagnostics::log(&format!("could not archive backups: {error}")),
+        }
+        return;
+    }
+
+    for (index, item) in plan.iter().enumerate() {
+        if index == 0 && main_is_free {
+            let title = doc_mgr.apply_restore_item("main", item);
+            if let Some(main_win) = app.get_webview_window("main") {
+                let _ = main_win.set_title(&title);
+            }
+            continue;
+        }
+        match create_editor_window(app, None) {
+            Ok(window) => {
+                let title = doc_mgr.apply_restore_item(window.label(), item);
+                let _ = window.set_title(&title);
+            }
+            Err(err) => eprintln!("[SuperMark] Failed to restore a document: {err}"),
+        }
+    }
+}
+
+/// Reopens the documents of the previous session. The first one goes into the main window.
+fn restore_last_session<R: Runtime>(app: &AppHandle<R>) {
+    let doc_mgr = app.state::<DocumentManager>();
+    let plan = doc_mgr.plan_session_restore();
+
+    for (index, item) in plan.iter().enumerate() {
+        if index == 0 {
+            let title = doc_mgr.apply_restore_item("main", item);
+            if let Some(main_win) = app.get_webview_window("main") {
+                let _ = main_win.set_title(&title);
+            }
+            continue;
+        }
+
+        match create_editor_window(app, None) {
+            Ok(window) => {
+                let title = doc_mgr.apply_restore_item(window.label(), item);
+                let _ = window.set_title(&title);
+            }
+            Err(err) => eprintln!("[SuperMark] Failed to reopen window: {err}"),
+        }
+    }
+}
+
 /// Spawns a new document window with its own `DocumentSession` and bootstrap script.
 pub fn create_editor_window<R: Runtime>(
     app: &AppHandle<R>,
@@ -427,23 +911,60 @@ pub fn create_editor_window<R: Runtime>(
     let label = doc_mgr.next_window_label();
     let init_script = build_bootstrap_script();
 
-    let title = doc_mgr.with_session(&label, |session| {
-        if let Some(ref p) = initial_path {
-            let _ = session.load_from_path(p);
-        }
-        session.display_title()
+    let (title, load_error) = doc_mgr.with_session(&label, |session| {
+        let error = initial_path
+            .as_ref()
+            .and_then(|p| session.load_from_path(p).err().map(|e| (p.clone(), e)));
+        (session.display_title(), error)
     });
-
-    if let Some(p) = initial_path {
-        doc_mgr.push_recent(p);
+    if let Some((path, error)) = load_error {
+        report_open_failure(&path, &error);
     }
 
-    WebviewWindowBuilder::new(app, &label, WebviewUrl::App("index.html".into()))
+    if let Some(p) = initial_path {
+        doc_mgr.push_recent(p.clone());
+        if let Some(watcher) = app.try_state::<crate::document::watcher::ExternalFileWatcher>() {
+            let _ = watcher.watch(&p);
+        }
+    }
+
+    let window = WebviewWindowBuilder::new(app, &label, WebviewUrl::App("index.html".into()))
         .title(&title)
         .inner_size(960.0, 680.0)
         .min_inner_size(420.0, 300.0)
         .initialization_script(&init_script)
-        .build()
+        .build()?;
+    fit_window_to_screen(&window, false);
+    let _ = window.set_focus();
+    persist_last_session(app, None);
+    Ok(window)
+}
+
+/// Initial window size for a screen: a share of its work area (taskbar excluded), within bounds
+/// that keep the editor comfortable. Logical pixels, so it is the same on any DPI scale.
+fn window_size_for_work_area(work_width: f64, work_height: f64) -> (f64, f64) {
+    let width = (work_width * 0.6).clamp(800.0, 1400.0).min(work_width);
+    let height = (work_height * 0.8).clamp(600.0, 1000.0).min(work_height);
+    (width.round(), height.round())
+}
+
+/// Windows: size new windows to the monitor instead of a fixed 960×680 (too small on large
+/// screens, too big on small ones at 150% scale); the first window is centered, later ones keep
+/// the position Windows gives them (cascading). macOS keeps the configured size.
+fn fit_window_to_screen<R: Runtime>(window: &WebviewWindow<R>, center: bool) {
+    if !cfg!(target_os = "windows") {
+        return;
+    }
+    let Ok(Some(monitor)) = window.current_monitor() else {
+        return;
+    };
+    let scale = monitor.scale_factor();
+    let area = monitor.work_area().size.to_logical::<f64>(scale);
+    let (width, height) = window_size_for_work_area(area.width, area.height);
+    let _ = window.set_size(tauri::LogicalSize::new(width, height));
+    if center {
+        let _ = window.center();
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -451,13 +972,132 @@ pub fn run() {
     let init_script = build_bootstrap_script();
 
     tauri::Builder::default()
+        // Must be the first plugin. Launching the app again (e.g. double-clicking a document in
+        // Explorer while it runs) hands the files to this process instead of starting a second
+        // one that would share the backup and session files.
+        .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
+            // Relative paths are relative to the second launch's working directory.
+            let paths: Vec<PathBuf> = args
+                .iter()
+                .skip(1)
+                .filter(|arg| !arg.starts_with('-'))
+                .map(|arg| {
+                    let path = PathBuf::from(arg);
+                    if path.is_relative() { PathBuf::from(&cwd).join(path) } else { path }
+                })
+                .filter(|path| path.exists())
+                .collect();
+            if paths.is_empty() {
+                // Just bring the app forward.
+                let window = app
+                    .webview_windows()
+                    .into_values()
+                    .find(|window| window.is_focused().unwrap_or(false))
+                    .or_else(|| app.webview_windows().into_values().next());
+                if let Some(window) = window {
+                    let _ = window.unminimize();
+                    let _ = window.set_focus();
+                }
+            }
+            for path in paths {
+                menu::open_document_path(app, path);
+            }
+        }))
+        // In-app updates from the public releases repository (updates.rs).
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(DocumentManager::new())
         .setup(move |app| {
             let app_handle = app.handle();
             let app_menu = menu::build_app_menu(app_handle)?;
             app.set_menu(app_menu)?;
 
+            // The main window is created here (tauri.conf.json has `"create": false`) so the
+            // bridge bootstrap runs as an initialization script before the page's own scripts,
+            // exactly like document windows. Injecting it later with `eval` raced the page load:
+            // the polyfill was lost or `notifyWindowDidLoad` was missed, so opened files never
+            // reached the editor.
+            let main_config = app
+                .config()
+                .app
+                .windows
+                .iter()
+                .find(|window| window.label == "main")
+                .cloned()
+                .ok_or("tauri.conf.json has no \"main\" window")?;
+            let main_window = WebviewWindowBuilder::new(app_handle, "main", WebviewUrl::App("index.html".into()))
+                .title(&main_config.title)
+                .inner_size(main_config.width, main_config.height)
+                .min_inner_size(main_config.min_width.unwrap_or(420.0), main_config.min_height.unwrap_or(300.0))
+                .resizable(main_config.resizable)
+                .initialization_script(&init_script)
+                .build()?;
+            let _ = main_window.show();
+            let _ = main_window.set_focus();
+            fit_window_to_screen(&main_window, true);
+
             let doc_mgr = app.state::<DocumentManager>();
+
+            // Watch open documents for external changes so the editor can offer to reload.
+            let watcher_app = app_handle.clone();
+            if let Ok(watcher) = crate::document::watcher::ExternalFileWatcher::new(move |path: PathBuf| {
+                let app = watcher_app.clone();
+                let doc_mgr = app.state::<DocumentManager>();
+                let watcher = app.try_state::<crate::document::watcher::ExternalFileWatcher>();
+
+                // Double filter: ignore self-saves.
+                if let Some(w) = &watcher {
+                    if w.is_ignored(&path) {
+                        return;
+                    }
+                }
+
+                // Find the window whose document is this file (compare normalized paths).
+                let norm = crate::document::watcher::normalize_path(&path);
+                let target_label = app
+                    .webview_windows()
+                    .keys()
+                    .cloned()
+                    .find(|label| {
+                        doc_mgr
+                            .with_session(label, |s| {
+                                s.file_path.as_ref().map(|p| crate::document::watcher::normalize_path(p)) == Some(norm.clone())
+                            })
+                    });
+                let Some(label) = target_label else {
+                    return;
+                };
+
+                // Ignore changes that match what we last saved (our own writes).
+                let cached = doc_mgr.with_session(&label, |s| s.content_cache.clone());
+                if let Ok(disk) = std::fs::read_to_string(&path) {
+                    if disk == cached {
+                        return;
+                    }
+                }
+
+                // Second filter: re-check ignored before notifying.
+                if let Some(w) = &watcher {
+                    if w.is_ignored(&path) {
+                        return;
+                    }
+                }
+
+                if let Some(window) = app.get_webview_window(&label) {
+                    let path_json = serde_json::to_string(&path.to_string_lossy().into_owned())
+                        .unwrap_or_else(|_| "null".to_string());
+                    let _ = window.eval(&format!(
+                        "window.__markeditExternalFileChanged?.({path_json});"
+                    ));
+                }
+            }) {
+                app.manage(watcher);
+            }
+
+            // macOS double-click: leave pending opens queued; `notifyWindowDidLoad`
+            // loads the first one into this window when the frontend is ready, so
+            // the content is reliably displayed (calling open_document_path here
+            // races the frontend load and the eval can be a no-op).
+            let _ = main_window.set_focus();
             let _ = doc_mgr.extensions().ensure_directories();
 
             // Check CLI arguments for initial file paths (e.g. double-click in Windows Explorer)
@@ -468,11 +1108,21 @@ pub fn run() {
                 .filter(|p| p.exists())
                 .collect();
 
+            diagnostics::log(&format!(
+                "startup: args {:?}, files to open {:?}",
+                std::env::args().skip(1).collect::<Vec<_>>(),
+                cli_paths
+            ));
+
             if let Some(first_path) = cli_paths.first() {
-                let title = doc_mgr.with_session("main", |s| {
-                    let _ = s.load_from_path(first_path);
-                    s.display_title()
+                let (title, load_error) = doc_mgr.with_session("main", |s| {
+                    let error = s.load_from_path(first_path).err();
+                    (s.display_title(), error)
                 });
+                match load_error {
+                    Some(error) => report_open_failure(first_path, &error),
+                    None => diagnostics::log(&format!("opened {}", first_path.display())),
+                }
                 doc_mgr.push_recent(first_path.clone());
                 if let Some(main_win) = app.get_webview_window("main") {
                     let _ = main_win.set_title(&title);
@@ -480,17 +1130,24 @@ pub fn run() {
                 for extra_path in cli_paths.iter().skip(1) {
                     let _ = create_editor_window(app_handle, Some(extra_path.clone()));
                 }
-            } else if let Some((meta, text)) = doc_mgr.load_backup_snapshot("main") {
-                // Hot-Exit backup restoration when launched without explicit file args
-                let title = doc_mgr.with_session("main", |s| {
-                    s.file_path = meta.original_path;
-                    s.content_cache = text;
-                    s.is_dirty = true;
-                    s.display_title()
+                // Unsaved work from a crash goes into windows of its own.
+                recover_unsaved_work(app_handle, false);
+            } else if SettingsManager::new().load_user_settings().startup_behavior == "lastSession" {
+                // Reopen the previous windows, including unsaved changes kept as backups.
+                restore_last_session(app_handle);
+            } else {
+                // `newDocument` (the default): an empty document, unless a crash left unsaved work.
+                recover_unsaved_work(app_handle, true);
+            }
+            persist_last_session(app_handle, None);
+
+            // Look for a new release a little after startup (release builds; Settings → General).
+            if !cfg!(debug_assertions) && SettingsManager::new().load_user_settings().check_for_updates {
+                let app_for_updates = app_handle.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_secs(5));
+                    updates::check_for_updates(app_for_updates, false);
                 });
-                if let Some(main_win) = app.get_webview_window("main") {
-                    let _ = main_win.set_title(&title);
-                }
             }
 
             // Background extension update check (upstream ExtensionRegistry semantics).
@@ -500,7 +1157,7 @@ pub fn run() {
             std::thread::spawn(move || {
                 let base = dirs::config_dir()
                     .unwrap_or_else(|| std::path::PathBuf::from("."))
-                    .join("MarkEdit");
+                    .join("SuperMark");
                 let mgr = crate::extensions::ExtensionManager::new(base);
                 let config = mgr.config();
                 let behavior = config.read().update_behavior();
@@ -533,13 +1190,18 @@ pub fn run() {
                                 updates.len()
                             );
                             let result = MessageDialog::new()
-                                .set_title("MarkEdit-Rust")
+                                .set_title("SuperMark")
                                 .set_description(&prompt)
                                 .set_level(MessageLevel::Info)
                                 .set_buttons(MessageButtons::OkCancel)
                                 .show();
 
                             if result == MessageDialogResult::Ok {
+                                // Downloads are network calls: run them off the UI thread.
+                                let thread_mgr = thread_mgr.clone();
+                                let thread_config = thread_config.clone();
+                                let thread_handle = thread_handle.clone();
+                                std::thread::spawn(move || {
                                 for (record, entry) in &updates {
                                     if let Err(err) = crate::extensions::downloader::download_update(
                                         &thread_mgr.scripts_dir(),
@@ -549,7 +1211,7 @@ pub fn run() {
                                         env!("CARGO_PKG_VERSION"),
                                     ) {
                                         eprintln!(
-                                            "[MarkEdit-Rust] Failed to install extension update '{}': {}",
+                                            "[SuperMark] Failed to install extension update '{}': {}",
                                             entry.id, err
                                         );
                                     }
@@ -558,6 +1220,7 @@ pub fn run() {
                                     let _ =
                                         webview.eval(&menu::extensions_reload_script(&thread_mgr));
                                 }
+                                });
                             }
 
                             let update_registry = crate::extensions::ExtensionRegistry::new(
@@ -569,10 +1232,11 @@ pub fn run() {
                         });
                     }
                     crate::extensions::UpdateBehavior::Automatic => {
+                        // Already on a background thread: install without blocking the UI.
                         let thread_mgr = mgr.clone();
                         let thread_config = config.clone();
                         let thread_handle = app_handle_ext.clone();
-                        let _ = app_handle_ext.run_on_main_thread(move || {
+                        (move || {
                             for (record, entry) in &updates {
                                 if let Err(err) = crate::extensions::downloader::download_update(
                                     &thread_mgr.scripts_dir(),
@@ -582,7 +1246,7 @@ pub fn run() {
                                     env!("CARGO_PKG_VERSION"),
                                 ) {
                                     eprintln!(
-                                        "[MarkEdit-Rust] Failed to install extension update '{}': {}",
+                                        "[SuperMark] Failed to install extension update '{}': {}",
                                         entry.id, err
                                     );
                                 }
@@ -598,21 +1262,21 @@ pub fn run() {
                                 env!("CARGO_PKG_VERSION").to_string(),
                             );
                             update_registry.mark_prompted();
-                        });
+                        })();
                     }
                     _ => {}
                 }
             });
 
-            if let Some(main_win) = app.get_webview_window("main") {
-                let _ = main_win.eval(&init_script);
-            }
             Ok(())
         })
         .on_menu_event(|app, event| {
             menu::handle_menu_event(app, event.id().as_ref());
         })
         .on_window_event(|window, event| {
+            if let WindowEvent::Destroyed = event {
+                persist_last_session(window.app_handle(), Some(window.label()));
+            }
             if let WindowEvent::CloseRequested { api, .. } = event {
                 let doc_mgr = window.state::<DocumentManager>();
                 let label = window.label().to_string();
@@ -621,7 +1285,7 @@ pub fn run() {
                 if is_dirty {
                     api.prevent_close();
                     let result = MessageDialog::new()
-                        .set_title("MarkEdit-Rust")
+                        .set_title("SuperMark")
                         .set_description("Do you want to save the changes made to this document?")
                         .set_level(MessageLevel::Warning)
                         .set_buttons(MessageButtons::YesNoCancel)
@@ -649,6 +1313,16 @@ pub fn run() {
             handle_bridge_message,
             save_document_content,
             save_idle_backup,
+            diagram_render_local,
+            view_state_changed,
+            document_content,
+            open_document,
+            pick_folder,
+            pick_file,
+            watch_document,
+            list_folder_tree,
+            extensions_bootstrap,
+            diagram_tools_status,
             install_extension_from_url,
             extensions_get_state,
             extensions_install,
@@ -666,8 +1340,69 @@ pub fn run() {
             versions_list,
             versions_get_content,
             versions_restore,
-            versions_delete_all
+            versions_delete_all,
+            open_link
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running MarkEdit-Win Tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building SuperMark")
+        .run(|app_handle, event| handle_opened_files(app_handle, event));
+}
+
+/// macOS double-click (or relaunch) hands the documents to open as `RunEvent::Opened`; open
+/// them through the same path used for the startup file (see `setup` above).
+#[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
+fn handle_opened_files<R: Runtime>(app_handle: &AppHandle<R>, event: RunEvent) {
+    if let RunEvent::Opened { urls } = event {
+        for url in urls {
+            if let Ok(path) = url.to_file_path() {
+                menu::open_document_path(app_handle, path);
+            }
+        }
+    }
+}
+
+/// Other platforms never emit `RunEvent::Opened`.
+#[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "android")))]
+fn handle_opened_files<R: Runtime>(_app_handle: &AppHandle<R>, _event: RunEvent) {}
+
+#[cfg(test)]
+mod tests {
+
+    #[test]
+    fn window_size_follows_the_screen_work_area() {
+        use super::window_size_for_work_area;
+        // 1920x1080 at 100% (taskbar excluded): 60% x 80%.
+        assert_eq!(window_size_for_work_area(1920.0, 1032.0), (1152.0, 826.0));
+        // 1920x1080 at 150% is 1280x720 logical: within the minimums.
+        assert_eq!(window_size_for_work_area(1280.0, 688.0), (800.0, 600.0));
+        // 4K at 100%: capped.
+        assert_eq!(window_size_for_work_area(3840.0, 2112.0), (1400.0, 1000.0));
+        // A screen smaller than the minimum: never larger than the screen.
+        assert_eq!(window_size_for_work_area(700.0, 500.0), (700.0, 500.0));
+    }
+
+    /// The main window must be created in `setup` (with the bridge bootstrap as an
+    /// initialization script), not automatically from tauri.conf.json: injecting the bootstrap
+    /// later with `eval` raced the page load and opened files never reached the editor.
+    #[test]
+    fn main_window_is_created_by_setup_with_the_bootstrap() {
+        let conf: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.conf.json")).expect("tauri.conf.json");
+        let main = conf["app"]["windows"]
+            .as_array()
+            .and_then(|windows| windows.iter().find(|w| w["label"] == "main"))
+            .expect("main window config");
+        assert_eq!(main["create"], serde_json::json!(false));
+
+        let source = include_str!("lib.rs");
+        assert!(source.contains(".initialization_script(&init_script)"));
+        assert!(!source.contains(concat!("main_win.eval(", "&init_script)")));
+    }
+
+    #[test]
+    fn index_html_merges_host_config_instead_of_overwriting_it() {
+        let html = include_str!("../../packages/core-editor/index.html");
+        assert!(html.contains("Object.assign({}, typeof hostConfig === 'object' ? hostConfig : {}, injected)"));
+        assert!(!html.contains(concat!("window.config = ", "\"{{EDITOR_CONFIG}}\";")));
+    }
 }

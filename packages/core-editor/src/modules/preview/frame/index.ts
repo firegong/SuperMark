@@ -57,7 +57,7 @@ function createFrameDocument(renderer: Renderer): string {
 
   const policy = frameDocument.createElement('meta');
   policy.httpEquiv = 'Content-Security-Policy';
-  policy.content = "default-src 'none'; script-src 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'unsafe-inline' https://cdn.jsdelivr.net; font-src https://cdn.jsdelivr.net; img-src https: data:";
+  policy.content = "default-src 'none'; script-src 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'unsafe-inline' https://cdn.jsdelivr.net; font-src https://cdn.jsdelivr.net; img-src https: data: asset:; connect-src 'none'";
 
   const style = frameDocument.createElement('style');
   style.textContent = styleTemplate;

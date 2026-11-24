@@ -6,6 +6,7 @@ import { yamlFrontmatter as frontMatter } from '@codemirror/lang-yaml';
 
 import { Config } from '../config';
 import { bundledLanguages } from '../languages';
+import { streamCodeLanguages } from '../codeLanguages';
 import { setUp, setTheme } from '../styling/config';
 import { classHighlighters, markdownExtensions, renderExtensions } from '../styling/markdown';
 import { linkStyles } from '../styling/nodes/link';
@@ -59,7 +60,7 @@ export function setUpQuickLook(config: Config) {
       frontMatter({
         content: markdown({
           base: markdownLanguage,
-          codeLanguages: bundledLanguages(html()),
+          codeLanguages: [...bundledLanguages(html()), ...streamCodeLanguages()],
           extensions: markdownExtensions,
           completeHTMLTags: false,
         }),

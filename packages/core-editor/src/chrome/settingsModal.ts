@@ -1,11 +1,30 @@
 import { createButton, createElement, setupModalTitleBar } from './utils';
+import { listThemeExtensions, setThemeExtension } from './themeExtensions';
 import { InvisiblesBehavior } from '../config';
 import { TabKeyBehavior } from '../modules/indentation';
+import { listMarkdownRenderers, setDiagramServer, setDiagramRendering, clearDiagramCache } from '../modules/markdown-renderer';
+import {
+  activePreviewThemeKey,
+  applyPreviewThemeStyles,
+  maxPreviewFontSize,
+  minPreviewFontSize,
+  normalizeElementStyle,
+  normalizePreviewThemeStyles,
+  previewStyleElements,
+  setPreviewThemeStyles,
+  PreviewElementStyle,
+  PreviewStyleElement,
+  PreviewThemeStyle,
+  PreviewThemeStyles,
+} from './previewThemeStyles';
+import { buildPreviewPresetCss, previewThemePreset, PreviewThemePreset } from './previewThemePresets';
 
-export type SettingsTab = 'editor' | 'assistant' | 'general' | 'window';
+export type SettingsTab = 'editor' | 'preview' | 'assistant' | 'general' | 'window';
 
 export interface UserSettings {
   theme: string;
+  /** Theme extension (script file name) applied over the theme; empty: the built-in theme only. */
+  themeExtension: string;
   fontFamily: string;
   fontSize: number;
   showLineNumbers: boolean;
@@ -13,6 +32,7 @@ export interface UserSettings {
   invisiblesBehavior: 'never' | 'selection' | 'trailing' | 'always';
   typewriterMode: boolean;
   focusMode: boolean;
+  livePreview: boolean;
   lineWrapping: boolean;
   lineHeight: number;
   tabKeyBehavior: number;
@@ -26,7 +46,17 @@ export interface UserSettings {
   newFilenameExtension: string;
   defaultTextEncoding: string;
   defaultLineBreak: string;
+  startupBehavior: 'newDocument' | 'lastSession';
+  /** Look for a new release at startup (desktop app, see src-tauri/src/updates.rs). */
+  checkForUpdates: boolean;
   reduceTransparency: boolean;
+  markdownRenderer: string;
+  diagramServer: string;
+  diagramRendering: 'auto' | 'local' | 'server';
+  plantumlCommand: string;
+  d2Command: string;
+  /** Preview typography per theme, see previewThemeStyles.ts. */
+  previewThemeStyles: PreviewThemeStyles;
 }
 
 interface SettingsModalController {
@@ -44,6 +74,21 @@ function pickValue<T>(raw: Record<string, unknown>, keys: string[], fallback: T)
   return fallback;
 }
 
+function normalizeDiagramRendering(value: unknown): UserSettings['diagramRendering'] {
+  return value === 'local' || value === 'server' ? value : 'auto';
+}
+
+/** `value` when it is one of `allowed`, else `fallback` (a damaged file may hold anything). */
+function oneOf<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
+  return allowed.includes(value as T) ? value as T : fallback;
+}
+
+/** A finite number within bounds, else `fallback`. */
+function numberIn(value: unknown, min: number, max: number, fallback: number): number {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.min(max, Math.max(min, number)) : fallback;
+}
+
 export function normalizeUserSettings(
   source: unknown,
   fallback?: UserSettings,
@@ -53,18 +98,20 @@ export function normalizeUserSettings(
 
   const base: UserSettings = fallback ?? {
     theme: 'github-light',
-    fontFamily: 'ui-monospace',
+    themeExtension: '',
+    fontFamily: 'D2Coding',
     fontSize: 16,
     showLineNumbers: true,
     showActiveLineIndicator: true,
     invisiblesBehavior: 'selection',
     typewriterMode: false,
     focusMode: false,
+    livePreview: false,
     lineWrapping: true,
     lineHeight: 1.5,
     tabKeyBehavior: 2,
     indentUnit: '    ',
-    suggestWhileTyping: true,
+    suggestWhileTyping: false,
     autoCharacterPairs: true,
     smartQuotesEnabled: true,
     insertFinalNewline: true,
@@ -73,7 +120,15 @@ export function normalizeUserSettings(
     newFilenameExtension: 'md',
     defaultTextEncoding: 'UTF-8',
     defaultLineBreak: '\n',
-    reduceTransparency: false,
+    startupBehavior: 'newDocument',
+    checkForUpdates: true,
+    reduceTransparency: true,
+    markdownRenderer: 'extended',
+    diagramServer: 'https://kroki.io',
+    diagramRendering: 'auto',
+    plantumlCommand: 'plantuml',
+    d2Command: 'd2',
+    previewThemeStyles: {},
   };
 
   const rawFontFamily = pickValue<string>(
@@ -87,22 +142,24 @@ export function normalizeUserSettings(
 
   return {
     theme: String(pickValue(raw, ['theme', 'lightTheme', 'editor.lightTheme'], base.theme)),
+    themeExtension: String(pickValue(raw, ['themeExtension', 'editor.themeExtension'], base.themeExtension)),
     fontFamily: normalizedFontFamily,
-    fontSize: Number(pickValue(raw, ['fontSize', 'editor.fontSize'], base.fontSize)),
+    fontSize: numberIn(pickValue(raw, ['fontSize', 'editor.fontSize'], base.fontSize), 8, 72, base.fontSize),
     showLineNumbers: Boolean(pickValue(raw, ['showLineNumbers', 'editor.showLineNumbers'], base.showLineNumbers)),
     showActiveLineIndicator: Boolean(
       pickValue(raw, ['showActiveLineIndicator', 'editor.showActiveLineIndicator'], base.showActiveLineIndicator),
     ),
-    invisiblesBehavior: pickValue(
-      raw,
-      ['invisiblesBehavior', 'editor.invisiblesBehavior'],
+    invisiblesBehavior: oneOf(
+      pickValue(raw, ['invisiblesBehavior', 'editor.invisiblesBehavior'], base.invisiblesBehavior),
+      ['never', 'selection', 'trailing', 'always'],
       base.invisiblesBehavior,
     ),
     typewriterMode: Boolean(pickValue(raw, ['typewriterMode', 'editor.typewriterMode'], base.typewriterMode)),
     focusMode: Boolean(pickValue(raw, ['focusMode', 'editor.focusMode'], base.focusMode)),
+    livePreview: Boolean(pickValue(raw, ['livePreview', 'editor.livePreview'], base.livePreview)),
     lineWrapping: Boolean(pickValue(raw, ['lineWrapping', 'editor.lineWrapping'], base.lineWrapping)),
-    lineHeight: Number(pickValue(raw, ['lineHeight', 'editor.lineHeight'], base.lineHeight)),
-    tabKeyBehavior: Number(pickValue(raw, ['tabKeyBehavior', 'editor.tabKeyBehavior'], base.tabKeyBehavior)),
+    lineHeight: numberIn(pickValue(raw, ['lineHeight', 'editor.lineHeight'], base.lineHeight), 1, 3, base.lineHeight),
+    tabKeyBehavior: Math.round(numberIn(pickValue(raw, ['tabKeyBehavior', 'editor.tabKeyBehavior'], base.tabKeyBehavior), 0, 99, base.tabKeyBehavior)),
     indentUnit: String(pickValue(raw, ['indentUnit', 'editor.indentUnit'], base.indentUnit)),
     suggestWhileTyping: Boolean(
       pickValue(raw, ['suggestWhileTyping', 'assistant.wordsInDocument'], base.suggestWhileTyping),
@@ -119,7 +176,7 @@ export function normalizeUserSettings(
     trimTrailingWhitespace: Boolean(
       pickValue(raw, ['trimTrailingWhitespace', 'assistant.trimTrailingWhitespace'], base.trimTrailingWhitespace),
     ),
-    appearance: pickValue(raw, ['appearance', 'general.appearance'], base.appearance),
+    appearance: oneOf(pickValue(raw, ['appearance', 'general.appearance'], base.appearance), ['system', 'light', 'dark'], base.appearance),
     newFilenameExtension: String(
       pickValue(raw, ['newFilenameExtension', 'general.newFilenameExtension'], base.newFilenameExtension),
     ),
@@ -129,9 +186,23 @@ export function normalizeUserSettings(
     defaultLineBreak: String(
       pickValue(raw, ['defaultLineBreak', 'general.defaultLineBreak'], base.defaultLineBreak),
     ),
+    startupBehavior: pickValue(raw, ['startupBehavior', 'general.startupBehavior'], base.startupBehavior) === 'lastSession'
+      ? 'lastSession'
+      : 'newDocument',
+    checkForUpdates: Boolean(pickValue(raw, ['checkForUpdates', 'general.checkForUpdates'], base.checkForUpdates)),
     reduceTransparency: Boolean(
       pickValue(raw, ['reduceTransparency', 'window.reduceTransparency'], base.reduceTransparency),
     ),
+    markdownRenderer: String(
+      pickValue(raw, ['markdownRenderer', 'preview.markdownRenderer'], base.markdownRenderer),
+    ),
+    diagramServer: String(
+      pickValue(raw, ['diagramServer', 'preview.diagramServer'], base.diagramServer),
+    ),
+    diagramRendering: normalizeDiagramRendering(pickValue(raw, ['diagramRendering', 'preview.diagramRendering'], base.diagramRendering)),
+    plantumlCommand: String(pickValue(raw, ['plantumlCommand', 'preview.plantumlCommand'], base.plantumlCommand)),
+    d2Command: String(pickValue(raw, ['d2Command', 'preview.d2Command'], base.d2Command)),
+    previewThemeStyles: normalizePreviewThemeStyles(pickValue<unknown>(raw, ['previewThemeStyles', 'preview.themeStyles'], base.previewThemeStyles)),
   };
 }
 
@@ -154,7 +225,267 @@ const builtInThemes: { id: string; label: string; colors: string }[] = [
   { id: 'solarized-dark', label: 'Solarized (Dark)', colors: '#002b36,#839496,#053542,#859900,#d33682,#268bd2' },
 ];
 
+const previewFontWeights: { value: string; label: string }[] = [
+  { value: '', label: 'Default' },
+  { value: '300', label: 'Light' },
+  { value: '400', label: 'Regular' },
+  { value: '500', label: 'Medium' },
+  { value: '600', label: 'Semibold' },
+  { value: '700', label: 'Bold' },
+  { value: '900', label: 'Black' },
+];
+
+/** Suggestions for the preview font fields; any installed font name works. */
+const previewFontSuggestions = [
+  'system-ui',
+  'serif',
+  'sans-serif',
+  'monospace',
+  "'Segoe UI'",
+  "'Malgun Gothic'",
+  "'Noto Sans KR'",
+  "'Nanum Gothic'",
+  "'Nanum Myeongjo'",
+  'Georgia',
+  "'Times New Roman'",
+  'Arial',
+  'Verdana',
+  "'Cascadia Code'",
+  'Consolas',
+  "'JetBrains Mono'",
+];
+
+/** The theme default an element's size field shows as its placeholder (headings and body text). */
+function presetFontSize(preset: PreviewThemePreset | undefined, element: PreviewStyleElement): number | undefined {
+  const sizes: Partial<Record<PreviewStyleElement, number>> = preset?.sizes ?? {};
+  return sizes[element];
+}
+
+/** The theme default an unset color field shows. */
+function presetColor(preset: PreviewThemePreset | undefined, element: PreviewStyleElement): string | undefined {
+  if (preset === undefined) {
+    return undefined;
+  }
+  const { colors } = preset;
+  const byElement: Record<PreviewStyleElement, string> = {
+    body: colors.text,
+    h1: colors.h1,
+    h2: colors.h2,
+    h3: colors.h3,
+    h4: colors.h4,
+    h5: colors.h5,
+    h6: colors.h6,
+    link: colors.link,
+    code: colors.codeText,
+    blockquote: colors.blockquoteText,
+  };
+  return byElement[element];
+}
+
+/** Placeholder swatches for theme extensions (their colors are only known once applied). */
+const extensionLightSwatch = '#fafafa,#383a42,#eef0f3,#a626a4,#4078f2,#50a14f';
+const extensionDarkSwatch = '#282c34,#abb2bf,#2c313a,#c678dd,#61afef,#98c379';
+
+interface ThemePickerItem {
+  value: string;
+  label: string;
+  detail?: string;
+  /** Comma-separated: background, text, line highlight, then token colors. */
+  colors: string;
+}
+
+interface ThemePickerGroup {
+  label?: string;
+  items: ThemePickerItem[];
+}
+
+/** A small picture of the editor in the theme's colors: a few lines of colored tokens. */
+function createThemeSwatch(colors: string): HTMLElement {
+  const palette = colors.split(',').map(color => color.trim());
+  const swatch = createElement('span', 'markedit-theme-swatch');
+  swatch.style.backgroundColor = palette[0] ?? '#ffffff';
+  swatch.style.borderColor = palette[2] ?? 'transparent';
+  swatch.setAttribute('aria-hidden', 'true');
+
+  const rows = [[3, 1], [4, 1, 5], [1, 3]];
+  for (const columns of rows) {
+    const row = createElement('span', 'markedit-theme-swatch-row', swatch);
+    for (const index of columns) {
+      const token = createElement('span', 'markedit-theme-swatch-token', row);
+      token.style.backgroundColor = palette[index] ?? '#000000';
+    }
+  }
+  return swatch;
+}
+
+let themePickerCount = 0;
+
+/**
+ * A drop-down (listbox) whose button and options show each theme's colors, which a native
+ * <select> cannot. Keyboard: arrows / Home / End move, Enter or Space picks, Escape closes.
+ */
+function createThemePicker(
+  label: string,
+  groups: ThemePickerGroup[],
+  value: string,
+  onChange: (value: string) => void,
+): HTMLElement {
+  const listId = `markedit-theme-picker-list-${++themePickerCount}`;
+  const items = groups.flatMap(group => group.items);
+  const selected = items.find(item => item.value === value) ?? items[0];
+
+  const wrapper = createElement('div', 'markedit-settings-field markedit-theme-picker');
+  const labelElement = createElement('label', 'markedit-settings-field-label', wrapper, label);
+  labelElement.id = `${listId}-label`;
+
+  const button = createElement('button', 'markedit-chrome-input markedit-theme-picker-button', wrapper);
+  button.type = 'button';
+  button.setAttribute('aria-haspopup', 'listbox');
+  button.setAttribute('aria-expanded', 'false');
+  button.setAttribute('aria-controls', listId);
+  button.setAttribute('aria-labelledby', `${labelElement.id} ${listId}-value`);
+  button.dataset.value = selected.value;
+  button.appendChild(createThemeSwatch(selected.colors));
+  const valueLabel = createElement('span', 'markedit-theme-picker-label', button, selected.label);
+  valueLabel.id = `${listId}-value`;
+  if (selected.detail !== undefined) {
+    createElement('span', 'markedit-theme-picker-detail', button, selected.detail);
+  }
+  createElement('span', 'markedit-theme-picker-chevron', button).setAttribute('aria-hidden', 'true');
+
+  const list = createElement('div', 'markedit-theme-picker-list', wrapper);
+  list.id = listId;
+  list.setAttribute('role', 'listbox');
+  list.setAttribute('aria-labelledby', labelElement.id);
+  list.tabIndex = -1;
+  list.hidden = true;
+
+  const options: HTMLElement[] = [];
+  for (const group of groups) {
+    const container = group.label !== undefined ? createElement('div', 'markedit-theme-picker-group', list) : list;
+    if (group.label !== undefined) {
+      container.setAttribute('role', 'group');
+      const heading = createElement('div', 'markedit-theme-picker-group-label', container, group.label);
+      heading.id = `${listId}-group-${options.length}`;
+      container.setAttribute('aria-labelledby', heading.id);
+    }
+    for (const item of group.items) {
+      const option = createElement('div', 'markedit-theme-picker-option', container);
+      option.id = `${listId}-option-${options.length}`;
+      option.setAttribute('role', 'option');
+      option.setAttribute('aria-selected', String(item.value === selected.value));
+      option.dataset.value = item.value;
+      option.appendChild(createThemeSwatch(item.colors));
+      createElement('span', 'markedit-theme-picker-label', option, item.label);
+      if (item.detail !== undefined) {
+        createElement('span', 'markedit-theme-picker-detail', option, item.detail);
+      }
+      option.addEventListener('mousemove', () => setActive(options.indexOf(option)));
+      option.addEventListener('click', () => choose(option));
+      options.push(option);
+    }
+  }
+
+  let activeIndex = -1;
+  let isOpen = false;
+  function setActive(index: number): void {
+    if (index < 0 || index >= options.length) {
+      return;
+    }
+    options[activeIndex]?.classList.remove('is-active');
+    activeIndex = index;
+    const option = options[index];
+    option.classList.add('is-active');
+    list.setAttribute('aria-activedescendant', option.id);
+    // Not implemented by every DOM (e.g. jsdom).
+    (option as Partial<HTMLElement>).scrollIntoView?.({ block: 'nearest' });
+  }
+
+  function onOutsidePointer(event: Event): void {
+    if (!wrapper.contains(event.target as Node)) {
+      close(false);
+    }
+  }
+
+  function open(): void {
+    if (isOpen) {
+      return;
+    }
+    isOpen = true;
+    list.hidden = false;
+    wrapper.classList.add('is-open');
+    button.setAttribute('aria-expanded', 'true');
+    setActive(Math.max(0, options.findIndex(option => option.dataset.value === selected.value)));
+    list.focus();
+    document.addEventListener('mousedown', onOutsidePointer, true);
+  }
+
+  function close(restoreFocus: boolean): void {
+    if (!isOpen) {
+      return;
+    }
+    isOpen = false;
+    list.hidden = true;
+    wrapper.classList.remove('is-open');
+    button.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('mousedown', onOutsidePointer, true);
+    if (restoreFocus) {
+      button.focus();
+    }
+  }
+
+  function choose(option: HTMLElement): void {
+    close(true);
+    const next = option.dataset.value ?? '';
+    if (next !== selected.value) {
+      onChange(next);
+    }
+  }
+
+  button.addEventListener('click', () => {
+    if (!isOpen) {
+      open();
+    } else {
+      close(true);
+    }
+  });
+  button.addEventListener('keydown', event => {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      open();
+    }
+  });
+
+  list.addEventListener('keydown', event => {
+    const moves: Record<string, number> = {
+      ArrowDown: activeIndex + 1,
+      ArrowUp: activeIndex - 1,
+      Home: 0,
+      End: options.length - 1,
+      PageDown: Math.min(options.length - 1, activeIndex + 5),
+      PageUp: Math.max(0, activeIndex - 5),
+    };
+    if (event.key in moves) {
+      event.preventDefault();
+      setActive(moves[event.key]);
+    } else if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      const option = options[activeIndex] as HTMLElement | undefined;
+      if (option !== undefined) {
+        choose(option);
+      }
+    } else if (event.key === 'Tab') {
+      close(false);
+    }
+  });
+  // Escape closes the list rather than Settings (see the global Escape handler in chrome/index.ts).
+  wrapper.addEventListener('markedit-close-popup', () => close(true));
+
+  return wrapper;
+}
+
 const fontFamilies: { value: string; label: string }[] = [
+  { value: 'D2Coding', label: 'D2Coding (Default)' },
   { value: 'ui-monospace', label: 'System Mono' },
   { value: 'system-ui', label: 'System UI' },
   { value: "'Cascadia Code', monospace", label: 'Cascadia Code' },
@@ -182,6 +513,22 @@ const indentUnitOptions: { value: string; label: string }[] = [
   { value: '    ', label: '4 Spaces' },
   { value: '\t', label: '1 Tab' },
   { value: '\t\t', label: '2 Tabs' },
+];
+
+const diagramRenderingOptions: { value: UserSettings['diagramRendering']; label: string }[] = [
+  { value: 'auto', label: 'Local tools, then server' },
+  { value: 'local', label: 'Local tools only' },
+  { value: 'server', label: 'Diagram server only' },
+];
+
+const diagramServerOptions: { value: string; label: string }[] = [
+  { value: 'https://kroki.io', label: 'kroki.io (online)' },
+  { value: '', label: 'Off (offline diagrams only)' },
+];
+
+const startupOptions: { value: UserSettings['startupBehavior']; label: string }[] = [
+  { value: 'newDocument', label: 'Open a new document' },
+  { value: 'lastSession', label: 'Reopen last session' },
 ];
 
 const appearanceOptions: { value: UserSettings['appearance']; label: string }[] = [
@@ -227,24 +574,6 @@ async function invokeTauri<T>(cmd: string, args?: Record<string, unknown>): Prom
   return await invoke(cmd, args) as T;
 }
 
-function createThemeSwatch(colors: string): HTMLElement {
-  const palette = colors.split(',').map(color => color.trim());
-  const container = createElement('div', 'markedit-settings-theme-swatch');
-  container.style.backgroundColor = palette[0] ?? '#ffffff';
-
-  const rows = [[2, 3], [4, 1], [3, 5], [5], [2, 1]];
-  const content = createElement('div', 'markedit-settings-theme-swatch-content', container);
-  for (const columns of rows) {
-    const row = createElement('div', 'markedit-settings-theme-swatch-row', content);
-    for (const index of columns) {
-      const token = createElement('span', 'markedit-settings-theme-swatch-token', row);
-      token.style.backgroundColor = palette[index] ?? '#000000';
-    }
-  }
-
-  return container;
-}
-
 function createToggle(
   label: string,
   checked: boolean,
@@ -260,6 +589,25 @@ function createToggle(
   wrapper.appendChild(input);
   createElement('span', 'markedit-settings-toggle-slider', wrapper);
   createElement('span', 'markedit-settings-toggle-label', wrapper, label);
+  return wrapper;
+}
+
+function createTextField(label: string, value: string, placeholder: string, onCommit: (value: string) => void): HTMLElement {
+  const wrapper = createElement('div', 'markedit-settings-field');
+  createElement('label', 'markedit-settings-field-label', wrapper, label);
+  const input = createElement('input', 'markedit-chrome-input markedit-settings-text') as HTMLInputElement;
+  input.type = 'text';
+  input.value = value;
+  input.placeholder = placeholder;
+  input.spellcheck = false;
+  // Commit on blur / Enter rather than on every keystroke.
+  input.addEventListener('change', () => {
+    const next = input.value.trim();
+    if (next !== value) {
+      onCommit(next);
+    }
+  });
+  wrapper.appendChild(input);
   return wrapper;
 }
 
@@ -350,6 +698,8 @@ export function createSettingsModal(
   let settings = normalizeUserSettings(window.config);
   let activeTab: SettingsTab = initialTab;
   let mutationVersion = 0;
+  /** The theme whose preview styles the Preview tab edits; starts at the theme in use. */
+  let previewStyleThemeKey = activePreviewThemeKey() || settings.theme;
 
   const core = window.webModules.core as unknown as { restoreFocus: () => void } | undefined;
   const configModule = window.webModules.config as unknown as {
@@ -388,6 +738,7 @@ export function createSettingsModal(
   const tabsRow = createElement('div', 'markedit-chrome-settings-tabs', header);
   const tabs: Record<SettingsTab, string> = {
     editor: 'Editor',
+    preview: 'Preview',
     assistant: 'Assistant',
     general: 'General',
     window: 'Window',
@@ -461,11 +812,19 @@ export function createSettingsModal(
   }
 
   function applyLocalChange<K extends keyof UserSettings>(key: K, value: UserSettings[K]): void {
-    window.config = { ...window.config, [key]: value } as typeof window.config;
+    // Update in place: theme extensions hook properties of this object (e.g. `theme`).
+    Object.assign(window.config, { [key]: value });
 
     switch (key) {
       case 'theme':
         configModule?.setTheme?.({ name: value as string });
+        break;
+      case 'themeExtension':
+        setThemeExtension(String(value));
+        applyPreviewThemeStyles();
+        break;
+      case 'previewThemeStyles':
+        setPreviewThemeStyles(value);
         break;
       case 'fontSize':
         configModule?.setFontSize?.({ fontSize: Number(value) });
@@ -484,6 +843,9 @@ export function createSettingsModal(
         break;
       case 'focusMode':
         configModule?.setFocusMode?.({ enabled: Boolean(value) });
+        break;
+      case 'livePreview':
+        window.chromeUI?.setEditorLivePreview(Boolean(value));
         break;
       case 'lineWrapping':
         configModule?.setLineWrapping?.({ enabled: Boolean(value) });
@@ -535,6 +897,31 @@ export function createSettingsModal(
         document.body.classList.toggle('markedit-reduce-transparency', reduced);
         break;
       }
+      case 'markdownRenderer':
+        window.chromeUI?.setMarkdownRenderer(String(value));
+        break;
+      case 'diagramServer':
+        if (window.chromeUI === undefined) {
+          setDiagramServer(String(value));
+        } else {
+          window.chromeUI.setDiagramServer(String(value));
+        }
+        break;
+      case 'diagramRendering':
+        if (window.chromeUI === undefined) {
+          setDiagramRendering(String(value));
+        } else {
+          window.chromeUI.setDiagramRendering(String(value));
+        }
+        break;
+      case 'plantumlCommand':
+      case 'd2Command':
+        // Rendered results are cached by source; re-render with the new tool.
+        clearDiagramCache();
+        window.chromeUI?.setDiagramRendering(settings.diagramRendering);
+        break;
+      case 'startupBehavior':
+      case 'checkForUpdates':
       case 'defaultTextEncoding':
       case 'insertFinalNewline':
       case 'newFilenameExtension':
@@ -545,6 +932,7 @@ export function createSettingsModal(
 
   function applyAllLocal(next: UserSettings): void {
     applyLocalChange('theme', next.theme);
+    applyLocalChange('themeExtension', next.themeExtension);
     applyLocalChange('fontFamily', next.fontFamily);
     applyLocalChange('fontSize', next.fontSize);
     applyLocalChange('showLineNumbers', next.showLineNumbers);
@@ -552,6 +940,7 @@ export function createSettingsModal(
     applyLocalChange('invisiblesBehavior', next.invisiblesBehavior);
     applyLocalChange('typewriterMode', next.typewriterMode);
     applyLocalChange('focusMode', next.focusMode);
+    applyLocalChange('livePreview', next.livePreview);
     applyLocalChange('lineWrapping', next.lineWrapping);
     applyLocalChange('lineHeight', next.lineHeight);
     applyLocalChange('tabKeyBehavior', next.tabKeyBehavior);
@@ -561,6 +950,10 @@ export function createSettingsModal(
     applyLocalChange('smartQuotesEnabled', next.smartQuotesEnabled);
     applyLocalChange('defaultLineBreak', next.defaultLineBreak);
     applyLocalChange('reduceTransparency', next.reduceTransparency);
+    applyLocalChange('markdownRenderer', next.markdownRenderer);
+    applyLocalChange('diagramServer', next.diagramServer);
+    applyLocalChange('diagramRendering', next.diagramRendering);
+    applyLocalChange('previewThemeStyles', next.previewThemeStyles);
     document.documentElement.dataset.appearance = next.appearance;
   }
 
@@ -576,6 +969,53 @@ export function createSettingsModal(
     return section;
   }
 
+  /** Theme drop-down: built-in themes, then installed theme extensions (as in MarkEdit's Theme pop-up). */
+  /** Theme drop-down with a color preview of each theme: built-in themes, then installed theme extensions. */
+  function createThemeSelect(): HTMLElement {
+    const extensionPrefix = 'extension:';
+    const current = settings.themeExtension !== ''
+      ? `${extensionPrefix}${settings.themeExtension}`
+      : settings.theme;
+
+    const groups: ThemePickerGroup[] = [{
+      label: 'Built-in',
+      items: builtInThemes.map(theme => ({ value: theme.id, label: theme.label, colors: theme.colors })),
+    }];
+    const extensions = listThemeExtensions();
+    if (extensions.length > 0) {
+      groups.push({
+        label: 'Extensions',
+        items: extensions.map(extension => {
+          const modes = extension.light && extension.dark ? 'Light & Dark' : extension.dark ? 'Dark only' : 'Light only';
+          return {
+            value: `${extensionPrefix}${extension.capability}`,
+            label: extension.label,
+            detail: modes,
+            colors: extension.dark && !extension.light ? extensionDarkSwatch : extensionLightSwatch,
+          };
+        }),
+      });
+    }
+
+    // Keep an unknown saved value (e.g. an uninstalled extension) visible instead of silently showing another theme.
+    if (!groups.some(group => group.items.some(item => item.value === current))) {
+      groups.unshift({ items: [{ value: current, label: settings.themeExtension || settings.theme, colors: extensionLightSwatch }] });
+    }
+
+    return createThemePicker('Theme', groups, current, value => {
+      if (value.startsWith(extensionPrefix)) {
+        void updateSetting('themeExtension', value.slice(extensionPrefix.length));
+        return;
+      }
+
+      // A built-in theme replaces any theme extension.
+      if (settings.themeExtension !== '') {
+        void updateSetting('themeExtension', '');
+      }
+      void updateSetting('theme', value);
+    });
+  }
+
   function renderEditorTab(): void {
     const fontSection = createSection('Font');
     const fontFamilyField = createSelect('Font Family', fontFamilies, settings.fontFamily, value => {
@@ -588,18 +1028,7 @@ export function createSettingsModal(
     fontSection.appendChild(fontSizeField);
 
     const themeSection = createSection('Theme');
-    const themeGrid = createElement('div', 'markedit-settings-theme-grid', themeSection);
-    for (const theme of builtInThemes) {
-      const card = createElement('button', 'markedit-settings-theme-card');
-      card.type = 'button';
-      card.classList.toggle('is-selected', settings.theme === theme.id);
-      card.appendChild(createThemeSwatch(theme.colors));
-      createElement('div', 'markedit-settings-theme-label', card, theme.label);
-      card.addEventListener('click', () => {
-        void updateSetting('theme', theme.id);
-      });
-      themeGrid.appendChild(card);
-    }
+    themeSection.appendChild(createThemeSelect());
 
     const moreThemesButton = createButton('Get More Themes...', () => {
       window.chromeUI?.openExtensionsManager('discover');
@@ -617,6 +1046,9 @@ export function createSettingsModal(
       void updateSetting('invisiblesBehavior', value);
     });
     displaySection.appendChild(invisiblesField);
+    displaySection.appendChild(createToggle('Live Preview in Editor', settings.livePreview, value => {
+      void updateSetting('livePreview', value);
+    }));
 
     const editSection = createSection('Edit Behavior');
     editSection.appendChild(createToggle('Line Wrapping', settings.lineWrapping, value => {
@@ -667,6 +1099,12 @@ export function createSettingsModal(
 
   function renderGeneralTab(): void {
     const section = createSection('General');
+    section.appendChild(createSelect('On Startup', startupOptions, settings.startupBehavior, value => {
+      void updateSetting('startupBehavior', value);
+    }));
+    section.appendChild(createToggle('Check for Updates Automatically', settings.checkForUpdates, value => {
+      void updateSetting('checkForUpdates', value);
+    }));
     section.appendChild(createSelect('Appearance', appearanceOptions, settings.appearance, value => {
       void updateSetting('appearance', value);
     }));
@@ -679,10 +1117,61 @@ export function createSettingsModal(
     section.appendChild(createSelect('Default Line Endings', lineBreakOptions, settings.defaultLineBreak, value => {
       void updateSetting('defaultLineBreak', value);
     }));
+    const rendererOptions = listMarkdownRenderers().map(engine => ({ value: engine.id, label: engine.name }));
+    section.appendChild(createSelect('Markdown Parser', rendererOptions, settings.markdownRenderer, value => {
+      void updateSetting('markdownRenderer', value);
+    }));
+    // PlantUML, D2 and advanced Mermaid diagrams are rendered by a Kroki server; their source
+    // text is sent there. A self-hosted server can be set in settings.json.
+    renderDiagramSection();
 
     const actions = createElement('div', 'markedit-settings-actions', section);
     actions.appendChild(createButton('Open settings.json', () => { void openSettingsFile(); }, 'markedit-chrome-button'));
     actions.appendChild(createButton('Reset to Defaults', () => { void resetSettings(); }, 'markedit-chrome-button markedit-chrome-action-button'));
+  }
+
+  function renderDiagramSection(): void {
+    // PlantUML, D2 and Mermaid render locally (installed tools, bundled mermaid.js) and/or on a
+    // Kroki server. With the server in use, diagram sources are sent there.
+    const section = createSection('Diagrams');
+    section.appendChild(createSelect('Diagram Rendering', diagramRenderingOptions, settings.diagramRendering, value => {
+      void updateSetting('diagramRendering', value);
+    }));
+    section.appendChild(createSelect('Diagram Server', diagramServerOptions, settings.diagramServer, value => {
+      void updateSetting('diagramServer', value);
+    }));
+    section.appendChild(createTextField('PlantUML Command', settings.plantumlCommand, 'plantuml or C:\\tools\\plantuml.jar', value => {
+      void updateSetting('plantumlCommand', value);
+    }));
+    section.appendChild(createTextField('D2 Command', settings.d2Command, 'd2', value => {
+      void updateSetting('d2Command', value);
+    }));
+
+    const status = createElement('div', 'markedit-settings-tool-status');
+    const actions = createElement('div', 'markedit-settings-actions', section);
+    actions.appendChild(createButton('Check Local Tools', () => { void checkLocalTools(status); }, 'markedit-chrome-button'));
+    section.appendChild(status);
+  }
+
+  async function checkLocalTools(status: HTMLElement): Promise<void> {
+    status.textContent = 'Checking…';
+    try {
+      const result = await invokeTauri<{ tool: string; available: boolean; version?: string | null; error?: string | null }[] | undefined>('diagram_tools_status');
+      status.replaceChildren();
+      for (const tool of result ?? []) {
+        const row = createElement('div', tool.available ? 'is-available' : 'is-missing', status);
+        const name = tool.tool === 'plantuml' ? 'PlantUML' : tool.tool === 'd2' ? 'D2' : tool.tool;
+        row.textContent = tool.available
+          ? `✓ ${name}: ${tool.version ?? 'installed'}`
+          : `✗ ${name}: ${(tool.error ?? 'not found').replace(/^(not-installed|failed):\s*/, '')}`;
+      }
+      createElement('div', 'is-available', status, '✓ Mermaid: bundled mermaid.js');
+      if ((result ?? []).length === 0) {
+        status.textContent = 'Local tools can only be checked in the desktop app.';
+      }
+    } catch (error) {
+      status.textContent = `Could not check local tools: ${String(error)}`;
+    }
   }
 
   function renderWindowTab(): void {
@@ -690,6 +1179,238 @@ export function createSettingsModal(
     section.appendChild(createToggle('Reduce Transparency', settings.reduceTransparency, value => {
       void updateSetting('reduceTransparency', value);
     }));
+  }
+
+  /** Themes the Preview tab can style: built-in themes, installed extensions, then any other saved key. */
+  function previewStyleThemeOptions(): { value: string; label: string; colors?: string[] }[] {
+    const options: { value: string; label: string; colors?: string[] }[] = builtInThemes.map(theme => ({
+      value: theme.id,
+      label: theme.label,
+      colors: theme.colors.split(','),
+    }));
+    for (const extension of listThemeExtensions()) {
+      options.push({ value: `extension:${extension.capability}`, label: `${extension.label} (Extension)` });
+    }
+    for (const key of Object.keys(settings.previewThemeStyles)) {
+      if (!options.some(option => option.value === key)) {
+        options.push({ value: key, label: key });
+      }
+    }
+    if (!options.some(option => option.value === previewStyleThemeKey)) {
+      options.unshift({ value: previewStyleThemeKey, label: previewStyleThemeKey });
+    }
+    const active = activePreviewThemeKey();
+    return options.map(option => option.value === active ? { ...option, label: `${option.label} — Current` } : option);
+  }
+
+  /** Background and text colors for the sample: the theme's swatch, or the editor's colors for the theme in use. */
+  function previewSampleColors(colors: string[] | undefined): { background: string; text: string } {
+    if (colors !== undefined && colors.length > 1) {
+      return { background: colors[0], text: colors[1] };
+    }
+    const pane = document.querySelector<HTMLElement>('.markedit-markdown-preview-pane');
+    const style = getComputedStyle(pane ?? document.body);
+    return {
+      background: style.getPropertyValue('--preview-bg').trim() || style.backgroundColor,
+      text: style.getPropertyValue('--preview-fg').trim() || style.color,
+    };
+  }
+
+  function toHexColor(color: string): string {
+    if (/^#[0-9a-f]{6}$/i.test(color)) {
+      return color.toLowerCase();
+    }
+    const match = /rgba?\(\s*(\d+)[\s,]+(\d+)[\s,]+(\d+)/.exec(color);
+    if (match === null) {
+      return '#808080';
+    }
+    return `#${match.slice(1, 4).map(part => Number(part).toString(16).padStart(2, '0')).join('')}`;
+  }
+
+  function renderPreviewTab(): void {
+    const options = previewStyleThemeOptions();
+    const current = options.find(option => option.value === previewStyleThemeKey);
+    const sampleColors = previewSampleColors(current?.colors);
+    // Edited in place while a control is being dragged; saved on change.
+    let draft: PreviewThemeStyle = { ...(settings.previewThemeStyles[previewStyleThemeKey] ?? {}) };
+
+    const themeSection = createSection('Theme');
+    themeSection.appendChild(createSelect('Customize Preview For', options, previewStyleThemeKey, value => {
+      previewStyleThemeKey = value;
+      render();
+    }));
+    createElement('div', 'markedit-settings-hint', themeSection,
+      'Each theme keeps its own preview styles. Empty fields use the theme\'s defaults.');
+
+    const preset = previewThemePreset(previewStyleThemeKey);
+    const sample = createElement('div', 'markedit-settings-preview-sample', themeSection);
+    sample.style.backgroundColor = sampleColors.background;
+    sample.style.color = sampleColors.text;
+    // The theme's preview defaults, as in the preview itself.
+    createElement('style', '', sample, buildPreviewPresetCss(preset, '.markedit-chrome-settings-body .markedit-settings-preview-sample'));
+    const sampleNodes: Partial<Record<PreviewStyleElement, HTMLElement[]>> = {};
+    const addSample = (id: PreviewStyleElement, tag: keyof HTMLElementTagNameMap, text: string, parent: HTMLElement = sample) => {
+      const node = createElement(tag, `markedit-settings-preview-sample-${id}`, parent, text);
+      (sampleNodes[id] ??= []).push(node);
+      return node;
+    };
+    addSample('h1', 'div', 'Heading 1');
+    addSample('h2', 'div', 'Heading 2');
+    addSample('h3', 'div', 'Heading 3');
+    const paragraph = addSample('body', 'div', 'Body text with a ');
+    addSample('link', 'span', 'link', paragraph);
+    paragraph.appendChild(document.createTextNode(' and '));
+    addSample('code', 'span', 'inline code', paragraph);
+    paragraph.appendChild(document.createTextNode('.'));
+    addSample('h4', 'div', 'Heading 4');
+    addSample('h5', 'div', 'Heading 5');
+    addSample('h6', 'div', 'Heading 6');
+    addSample('blockquote', 'div', 'A blockquote.');
+    const table = createElement('table', 'markedit-preview-table', sample);
+    const headerRow = createElement('tr', '', createElement('thead', '', table));
+    createElement('th', '', headerRow, 'Table');
+    createElement('th', '', headerRow, 'Header');
+    const tableBody = createElement('tbody', '', table);
+    for (const row of [['Row', 'One'], ['Row', 'Two']]) {
+      const tableRow = createElement('tr', '', tableBody);
+      for (const cell of row) {
+        createElement('td', '', tableRow, cell);
+      }
+    }
+
+    const updateSample = () => {
+      for (const { id } of previewStyleElements) {
+        for (const node of sampleNodes[id] ?? []) {
+          const style = draft[id];
+          node.style.fontFamily = style?.fontFamily ?? '';
+          node.style.fontSize = style?.fontSize !== undefined ? `${style.fontSize}px` : '';
+          node.style.fontWeight = style?.fontWeight !== undefined ? String(style.fontWeight) : '';
+          node.style.color = style?.color ?? '';
+        }
+      }
+    };
+
+    const applyDraft = (persist: boolean) => {
+      updateSample();
+      const next: PreviewThemeStyles = { ...settings.previewThemeStyles };
+      if (Object.keys(draft).length > 0) {
+        next[previewStyleThemeKey] = draft;
+      } else {
+        delete next[previewStyleThemeKey];
+      }
+      if (persist) {
+        void updateSetting('previewThemeStyles', next);
+      } else {
+        setPreviewThemeStyles(next);
+      }
+    };
+
+    const updateElement = (id: PreviewStyleElement, patch: Partial<PreviewElementStyle>, persist: boolean) => {
+      const merged: Record<string, unknown> = { ...(draft[id] ?? {}), ...patch };
+      const style = normalizeElementStyle(merged);
+      draft = { ...draft };
+      if (style === undefined) {
+        delete draft[id];
+      } else {
+        draft[id] = style;
+      }
+      applyDraft(persist);
+    };
+
+    const styleSection = createSection('Typography');
+    const grid = createElement('div', 'markedit-settings-preview-styles', styleSection);
+    for (const heading of ['', 'Font', 'Size', 'Weight', 'Color', '']) {
+      createElement('div', 'markedit-settings-preview-styles-header', grid, heading);
+    }
+
+    for (const element of previewStyleElements) {
+      const style = draft[element.id] ?? {};
+      createElement('div', 'markedit-settings-preview-styles-label', grid, element.label);
+
+      const font = createElement('input', 'markedit-chrome-input markedit-settings-text');
+      font.type = 'text';
+      font.value = style.fontFamily ?? '';
+      font.placeholder = 'Default';
+      font.spellcheck = false;
+      font.setAttribute('list', 'markedit-settings-preview-fonts');
+      font.setAttribute('aria-label', `${element.label} font`);
+      font.dataset.element = element.id;
+      font.dataset.property = 'fontFamily';
+      font.addEventListener('change', () => {
+        updateElement(element.id, { fontFamily: font.value.trim() || undefined }, true);
+      });
+      grid.appendChild(font);
+
+      const size = createElement('input', 'markedit-chrome-input markedit-settings-number');
+      size.type = 'number';
+      size.min = String(minPreviewFontSize);
+      size.max = String(maxPreviewFontSize);
+      size.value = style.fontSize !== undefined ? String(style.fontSize) : '';
+      const defaultSize = presetFontSize(preset, element.id);
+      size.placeholder = defaultSize !== undefined ? String(defaultSize) : 'Auto';
+      size.setAttribute('aria-label', `${element.label} size`);
+      size.dataset.element = element.id;
+      size.dataset.property = 'fontSize';
+      size.addEventListener('change', () => {
+        const parsed = size.value.trim() === '' ? undefined : Number(size.value);
+        updateElement(element.id, { fontSize: parsed }, true);
+      });
+      grid.appendChild(size);
+
+      const weight = createElement('select', 'markedit-chrome-input markedit-settings-select');
+      for (const option of previewFontWeights) {
+        const node = createElement('option', '', weight, option.label);
+        node.value = option.value;
+      }
+      weight.value = style.fontWeight !== undefined ? String(style.fontWeight) : '';
+      weight.setAttribute('aria-label', `${element.label} weight`);
+      weight.dataset.element = element.id;
+      weight.dataset.property = 'fontWeight';
+      weight.addEventListener('change', () => {
+        updateElement(element.id, { fontWeight: weight.value === '' ? undefined : Number(weight.value) }, true);
+      });
+      grid.appendChild(weight);
+
+      const color = createElement('input', 'markedit-settings-preview-color');
+      color.type = 'color';
+      color.value = style.color ?? presetColor(preset, element.id) ?? toHexColor(sampleColors.text);
+      color.classList.toggle('is-unset', style.color === undefined);
+      color.title = style.color === undefined ? 'Theme default' : style.color;
+      color.setAttribute('aria-label', `${element.label} color`);
+      color.dataset.element = element.id;
+      color.dataset.property = 'color';
+      color.addEventListener('input', () => {
+        color.classList.remove('is-unset');
+        updateElement(element.id, { color: color.value }, false);
+      });
+      color.addEventListener('change', () => {
+        updateElement(element.id, { color: color.value }, true);
+      });
+      grid.appendChild(color);
+
+      const reset = createButton('↺', () => {
+        updateElement(element.id, { fontFamily: undefined, fontSize: undefined, fontWeight: undefined, color: undefined }, true);
+      }, 'markedit-chrome-button markedit-settings-preview-reset');
+      reset.title = `Reset ${element.label}`;
+      reset.disabled = draft[element.id] === undefined;
+      grid.appendChild(reset);
+    }
+
+    const fonts = createElement('datalist', '', styleSection);
+    fonts.id = 'markedit-settings-preview-fonts';
+    for (const family of previewFontSuggestions) {
+      createElement('option', '', fonts).value = family;
+    }
+
+    const actions = createElement('div', 'markedit-settings-actions', styleSection);
+    const resetAll = createButton('Reset This Theme', () => {
+      draft = {};
+      applyDraft(true);
+    }, 'markedit-chrome-button markedit-settings-preview-reset-all');
+    resetAll.disabled = Object.keys(draft).length === 0;
+    actions.appendChild(resetAll);
+
+    updateSample();
   }
 
   function renderTabs(): void {
@@ -708,6 +1429,9 @@ export function createSettingsModal(
     switch (activeTab) {
       case 'editor':
         renderEditorTab();
+        break;
+      case 'preview':
+        renderPreviewTab();
         break;
       case 'assistant':
         renderAssistantTab();

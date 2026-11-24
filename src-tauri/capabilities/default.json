@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Default capability for MarkEdit-Win editor windows",
+  "description": "Default capability for SuperMark editor windows",
   "windows": ["*"],
   "permissions": [
     "core:default"

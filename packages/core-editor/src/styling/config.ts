@@ -2,6 +2,7 @@ import { EditorView } from '@codemirror/view';
 import { EditorColors, EditorTheme } from './types';
 import { Config, WebFontFace, InvisiblesBehavior } from '../config';
 import { globalState, editingState, styleSheets } from '../common/store';
+import { hangulFallbacks, monospaceFallbacks } from './fonts';
 import { observeGuttersWidth, adjustGutterPositions } from '../modules/lines';
 import { refreshEditFocus } from '../modules/selection';
 import { gutterExtensions } from './nodes/gutter';
@@ -71,9 +72,14 @@ export function setFontFace(fontFace: WebFontFace) {
       'sans-serif',
     ];
 
-    // The desired family goes first, followed by the fallbacks minus a possible duplicate
+    // The desired family goes first, then fonts with good Hangul (before any generic family, see
+    // fonts.ts), followed by the fallbacks minus a possible duplicate
+    // Monospace fonts come before them: the Hangul fonts also have Latin letters, and
+    // ui-monospace (the default family) is macOS only.
     const fontFamilies = [
       fontFace.family,
+      ...monospaceFallbacks.filter(family => family !== fontFace.family),
+      hangulFallbacks,
       ...fallbacks.filter(family => family !== fontFace.family),
     ];
 

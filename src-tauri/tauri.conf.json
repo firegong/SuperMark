@@ -1,7 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "MarkEdit-Rust",
-  "version": "0.1.0",
+  "productName": "SuperMark",
+  "mainBinaryName": "SuperMark",
+  "version": "0.3.5",
   "identifier": "app.markedit.rust",
   "build": {
     "frontendDist": "../packages/core-editor/dist",
@@ -12,7 +13,8 @@
     "windows": [
       {
         "label": "main",
-        "title": "Untitled — MarkEdit-Rust",
+        "create": false,
+        "title": "Untitled — SuperMark",
         "width": 960,
         "height": 680,
         "minWidth": 420,
@@ -21,7 +23,14 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": {
+          "allow": ["**"],
+          "requireLiteralLeadingDot": false
+        }
+      }
     }
   },
   "bundle": {
@@ -36,13 +45,20 @@
     ],
     "fileAssociations": [
       {
-        "ext": ["md", "markdown", "mdown", "mkd"],
+        "ext": [
+          "md",
+          "markdown",
+          "mdown",
+          "mkd"
+        ],
         "name": "Markdown Document",
         "description": "Markdown Text Document",
         "mimeType": "text/markdown"
       },
       {
-        "ext": ["textpack"],
+        "ext": [
+          "textpack"
+        ],
         "name": "TextPack Archive",
         "description": "Compressed Markdown TextBundle",
         "mimeType": "application/x-textpack"
@@ -55,6 +71,18 @@
       },
       "nsis": {
         "installMode": "currentUser"
+      }
+    },
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDgwNTVDOEU3NkI2MERFRjAKUldUdzNtQnI1OGhWZ0tjOW1LdUlHaDlNZ1g2c3J3bS9CZXhHWHVGSDFjbUFMVEJVdEt5SjM2S2oK",
+      "endpoints": [
+        "https://github.com/firegong/SuperMark/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
       }
     }
   }

@@ -62,6 +62,12 @@ pub struct EditorConfig {
     pub read_only_mode: bool,
     pub typewriter_mode: bool,
     pub focus_mode: bool,
+    /// Render tables, math, diagrams and other elements inside the editor (off: plain source).
+    #[serde(default)]
+    pub live_preview: bool,
+    /// Theme extension (script file name) applied over the theme; empty: built-in theme only.
+    #[serde(default)]
+    pub theme_extension: String,
     pub line_wrapping: bool,
     pub line_height: f64,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -96,6 +102,10 @@ pub struct UserSettings {
     pub light_theme: String,
     #[serde(rename = "editor.darkTheme")]
     pub dark_theme: String,
+    /// Installed theme extension (script file name, e.g. `markedit-theme-one-dark.js`) whose
+    /// colors apply over the theme. Empty: the built-in theme as chosen, no extension colors.
+    #[serde(rename = "editor.themeExtension")]
+    pub theme_extension: String,
     #[serde(rename = "editor.showLineNumbers")]
     pub show_line_numbers: bool,
     #[serde(rename = "editor.showActiveLineIndicator")]
@@ -106,6 +116,10 @@ pub struct UserSettings {
     pub typewriter_mode: bool,
     #[serde(rename = "editor.focusMode")]
     pub focus_mode: bool,
+    /// Render tables, math, diagrams and other elements inside the editor. Off by default:
+    /// the editor shows Markdown source; the preview renders it.
+    #[serde(rename = "editor.livePreview")]
+    pub live_preview: bool,
     #[serde(rename = "editor.lineWrapping")]
     pub line_wrapping: bool,
     #[serde(rename = "editor.lineHeight")]
@@ -114,6 +128,9 @@ pub struct UserSettings {
     pub tab_key_behavior: i64,
     #[serde(rename = "editor.indentUnit")]
     pub indent_unit: String,
+    /// Save the document to disk automatically when the editor becomes idle.
+    #[serde(rename = "editor.autosave")]
+    pub autosave: bool,
 
     #[serde(rename = "assistant.insertFinalNewline")]
     pub insert_final_newline: bool,
@@ -134,27 +151,98 @@ pub struct UserSettings {
     pub default_text_encoding: String,
     #[serde(rename = "general.defaultLineBreak")]
     pub default_line_break: String,
+    /// What to show when the app starts without files: `newDocument` (default) opens an empty
+    /// document, `lastSession` reopens the windows (and unsaved changes) of the last session.
+    #[serde(rename = "general.startupBehavior")]
+    pub startup_behavior: String,
+    /// Look for a new release at startup (see `updates.rs`).
+    #[serde(rename = "general.checkForUpdates")]
+    pub check_for_updates: bool,
+    /// A version the user chose to skip; the automatic check does not offer it again.
+    #[serde(rename = "general.skippedUpdateVersion")]
+    pub skipped_update_version: String,
 
+    /// Opaque panels (no frosted glass). On by default: on Windows, text over translucent,
+    /// blurred layers loses ClearType and looks rough.
     #[serde(rename = "window.reduceTransparency")]
     pub reduce_transparency: bool,
+
+    /// Markdown parser used by the preview: `extended`, `super`, `gfm`, `commonmark` or a
+    /// renderer registered by an extension.
+    #[serde(rename = "preview.markdownRenderer")]
+    pub markdown_renderer: String,
+
+    /// Kroki-compatible server used by the PlantUML / D2 (and advanced Mermaid) diagram
+    /// plugins. Empty turns online diagram rendering off; diagram sources are sent here.
+    #[serde(rename = "preview.diagramServer")]
+    pub diagram_server: String,
+    /// `auto` (local tools first, then the diagram server), `local` or `server`.
+    #[serde(rename = "preview.diagramRendering")]
+    pub diagram_rendering: String,
+    /// Command for local PlantUML: `plantuml`, a path to `plantuml.jar`, or `java -jar …`.
+    #[serde(rename = "preview.plantumlCommand")]
+    pub plantuml_command: String,
+    /// Command for local D2.
+    #[serde(rename = "preview.d2Command")]
+    pub d2_command: String,
+    /// Preview typography per theme (font, size, weight and color of the body text, headings,
+    /// links, code and blockquotes), keyed by theme id or `extension:<script file name>`.
+    #[serde(rename = "preview.themeStyles")]
+    pub preview_theme_styles: Value,
+
+    /// Version of the settings file format, for one-time migrations (see `migrate_settings`).
+    #[serde(rename = "meta.settingsRevision")]
+    pub settings_revision: u32,
+}
+
+/// Current settings file revision.
+/// 2: `window.reduceTransparency` defaults to on; files from before keep `false` written out
+///    only because every field is saved, so they are switched once.
+/// 3: the editor font defaults to D2Coding; the old default (never offered in Settings, so never
+///    chosen by hand) is switched once.
+pub const SETTINGS_REVISION: u32 = 3;
+
+/// Default editor font, bundled with the editor.
+pub const DEFAULT_FONT_FAMILY: &str = "D2Coding";
+
+/// The default editor font before revision 3.
+const PREVIOUS_DEFAULT_FONT_FAMILY: &str = "Cascadia Mono, Consolas, ui-monospace, monospace";
+
+/// Brings settings loaded from an older file (`stored` holds its raw keys) up to date.
+fn migrate_settings(settings: &mut UserSettings, stored: &serde_json::Map<String, Value>) {
+    let revision = stored
+        .get("meta.settingsRevision")
+        .and_then(Value::as_u64)
+        .unwrap_or(1);
+    if revision < 2 {
+        settings.reduce_transparency = true;
+    }
+    if revision < 3 && settings.font_family == PREVIOUS_DEFAULT_FONT_FAMILY {
+        settings.font_family = DEFAULT_FONT_FAMILY.to_string();
+    }
+    settings.settings_revision = SETTINGS_REVISION;
 }
 
 impl Default for UserSettings {
     fn default() -> Self {
         Self {
-            font_family: "Cascadia Mono, Consolas, ui-monospace, monospace".to_string(),
+            // Bundled with the editor (dist/fonts): Hangul is exactly two columns wide.
+            font_family: DEFAULT_FONT_FAMILY.to_string(),
             font_size: 15.0,
             light_theme: "github-light".to_string(),
             dark_theme: "github-dark".to_string(),
+            theme_extension: String::new(),
             show_line_numbers: true,
             show_active_line_indicator: true,
             invisibles_behavior: "selection".to_string(),
             typewriter_mode: false,
             focus_mode: false,
+            live_preview: false,
             line_wrapping: true,
             line_height: 1.5,
             tab_key_behavior: 0,
             indent_unit: "  ".to_string(),
+            autosave: true,
             insert_final_newline: false,
             trim_trailing_whitespace: false,
             suggest_while_typing: false,
@@ -164,7 +252,17 @@ impl Default for UserSettings {
             new_filename_extension: "md".to_string(),
             default_text_encoding: "UTF-8".to_string(),
             default_line_break: "\r\n".to_string(),
-            reduce_transparency: false,
+            startup_behavior: "newDocument".to_string(),
+            check_for_updates: true,
+            skipped_update_version: String::new(),
+            reduce_transparency: true,
+            markdown_renderer: "extended".to_string(),
+            diagram_server: "https://kroki.io".to_string(),
+            diagram_rendering: "auto".to_string(),
+            plantuml_command: "plantuml".to_string(),
+            d2_command: "d2".to_string(),
+            preview_theme_styles: json!({}),
+            settings_revision: SETTINGS_REVISION,
         }
     }
 }
@@ -194,6 +292,8 @@ impl UserSettings {
             read_only_mode: false,
             typewriter_mode: self.typewriter_mode,
             focus_mode: self.focus_mode,
+            live_preview: self.live_preview,
+            theme_extension: self.theme_extension.clone(),
             line_wrapping: self.line_wrapping,
             line_height: self.line_height,
             default_line_break: Some(self.default_line_break.clone()),
@@ -214,6 +314,7 @@ impl UserSettings {
             obj.insert("theme".to_string(), json!(active_theme));
             obj.insert("lightTheme".to_string(), json!(self.light_theme));
             obj.insert("darkTheme".to_string(), json!(self.dark_theme));
+            obj.insert("themeExtension".to_string(), json!(self.theme_extension));
             obj.insert("fontFamily".to_string(), json!(self.font_family));
             obj.insert("fontSize".to_string(), json!(self.font_size));
             obj.insert("showLineNumbers".to_string(), json!(self.show_line_numbers));
@@ -227,10 +328,12 @@ impl UserSettings {
             );
             obj.insert("typewriterMode".to_string(), json!(self.typewriter_mode));
             obj.insert("focusMode".to_string(), json!(self.focus_mode));
+            obj.insert("livePreview".to_string(), json!(self.live_preview));
             obj.insert("lineWrapping".to_string(), json!(self.line_wrapping));
             obj.insert("lineHeight".to_string(), json!(self.line_height));
             obj.insert("tabKeyBehavior".to_string(), json!(self.tab_key_behavior));
             obj.insert("indentUnit".to_string(), json!(self.indent_unit));
+            obj.insert("autosave".to_string(), json!(self.autosave));
             obj.insert(
                 "insertFinalNewline".to_string(),
                 json!(self.insert_final_newline),
@@ -265,8 +368,24 @@ impl UserSettings {
                 json!(self.default_line_break),
             );
             obj.insert(
+                "startupBehavior".to_string(),
+                json!(self.startup_behavior),
+            );
+            obj.insert(
                 "reduceTransparency".to_string(),
                 json!(self.reduce_transparency),
+            );
+            obj.insert(
+                "markdownRenderer".to_string(),
+                json!(self.markdown_renderer),
+            );
+            obj.insert("diagramServer".to_string(), json!(self.diagram_server));
+            obj.insert("diagramRendering".to_string(), json!(self.diagram_rendering));
+            obj.insert("plantumlCommand".to_string(), json!(self.plantuml_command));
+            obj.insert("d2Command".to_string(), json!(self.d2_command));
+            obj.insert(
+                "previewThemeStyles".to_string(),
+                self.preview_theme_styles.clone(),
             );
         }
         val
@@ -279,6 +398,7 @@ fn canonical_setting_key(key: &str) -> Option<&'static str> {
         "editor.fontSize" | "fontSize" => Some("editor.fontSize"),
         "editor.lightTheme" | "lightTheme" => Some("editor.lightTheme"),
         "editor.darkTheme" | "darkTheme" => Some("editor.darkTheme"),
+        "editor.themeExtension" | "themeExtension" => Some("editor.themeExtension"),
         "editor.showLineNumbers" | "showLineNumbers" => Some("editor.showLineNumbers"),
         "editor.showActiveLineIndicator" | "showActiveLineIndicator" => {
             Some("editor.showActiveLineIndicator")
@@ -286,6 +406,7 @@ fn canonical_setting_key(key: &str) -> Option<&'static str> {
         "editor.invisiblesBehavior" | "invisiblesBehavior" => Some("editor.invisiblesBehavior"),
         "editor.typewriterMode" | "typewriterMode" => Some("editor.typewriterMode"),
         "editor.focusMode" | "focusMode" => Some("editor.focusMode"),
+        "editor.livePreview" | "livePreview" => Some("editor.livePreview"),
         "editor.lineWrapping" | "lineWrapping" => Some("editor.lineWrapping"),
         "editor.lineHeight" | "lineHeight" => Some("editor.lineHeight"),
         "editor.tabKeyBehavior" | "tabKeyBehavior" => Some("editor.tabKeyBehavior"),
@@ -313,7 +434,17 @@ fn canonical_setting_key(key: &str) -> Option<&'static str> {
             Some("general.defaultTextEncoding")
         }
         "general.defaultLineBreak" | "defaultLineBreak" => Some("general.defaultLineBreak"),
+        "general.startupBehavior" | "startupBehavior" => Some("general.startupBehavior"),
+        "general.checkForUpdates" | "checkForUpdates" => Some("general.checkForUpdates"),
+        "general.skippedUpdateVersion" | "skippedUpdateVersion" => Some("general.skippedUpdateVersion"),
         "window.reduceTransparency" | "reduceTransparency" => Some("window.reduceTransparency"),
+        "preview.markdownRenderer" | "markdownRenderer" => Some("preview.markdownRenderer"),
+        "preview.diagramServer" | "diagramServer" => Some("preview.diagramServer"),
+        "preview.diagramRendering" | "diagramRendering" => Some("preview.diagramRendering"),
+        "preview.plantumlCommand" | "plantumlCommand" => Some("preview.plantumlCommand"),
+        "preview.d2Command" | "d2Command" => Some("preview.d2Command"),
+        "preview.themeStyles" | "previewThemeStyles" => Some("preview.themeStyles"),
+        "meta.settingsRevision" => Some("meta.settingsRevision"),
         _ => None,
     }
 }
@@ -348,7 +479,7 @@ impl SettingsManager {
     pub fn new() -> Self {
         let base = dirs::config_dir().unwrap_or_else(|| PathBuf::from("."));
         Self {
-            config_dir: base.join("MarkEdit"),
+            config_dir: base.join("SuperMark"),
         }
     }
 
@@ -378,7 +509,8 @@ impl SettingsManager {
                     if let Some(target_map) = base_val.as_object_mut() {
                         apply_settings_patch_map(target_map, obj);
                     }
-                    if let Ok(settings) = serde_json::from_value::<UserSettings>(base_val) {
+                    if let Ok(mut settings) = serde_json::from_value::<UserSettings>(base_val) {
+                        migrate_settings(&mut settings, obj);
                         return settings;
                     }
                 }
@@ -395,6 +527,8 @@ impl SettingsManager {
             s.invisibles_behavior = legacy.invisibles_behavior;
             s.typewriter_mode = legacy.typewriter_mode;
             s.focus_mode = legacy.focus_mode;
+            s.live_preview = legacy.live_preview;
+            s.theme_extension = legacy.theme_extension;
             s.line_wrapping = legacy.line_wrapping;
             s.line_height = legacy.line_height;
             if let Some(lb) = legacy.default_line_break {
@@ -458,6 +592,8 @@ impl SettingsManager {
         user.invisibles_behavior = config.invisibles_behavior.clone();
         user.typewriter_mode = config.typewriter_mode;
         user.focus_mode = config.focus_mode;
+        user.live_preview = config.live_preview;
+        user.theme_extension = config.theme_extension.clone();
         user.line_wrapping = config.line_wrapping;
         user.line_height = config.line_height;
         if let Some(ref lb) = config.default_line_break {
@@ -498,6 +634,17 @@ impl SettingsManager {
         let smart_quotes_arg = json!({ "enabled": editor_cfg.smart_quotes_enabled });
         let appearance_json =
             serde_json::to_string(&settings.appearance).unwrap_or_else(|_| "\"system\"".to_string());
+        let diagram_rendering_json = serde_json::to_string(&settings.diagram_rendering)
+            .unwrap_or_else(|_| "\"auto\"".to_string());
+        let diagram_server_json = serde_json::to_string(&settings.diagram_server)
+            .unwrap_or_else(|_| "\"\"".to_string());
+        let renderer_json = serde_json::to_string(&settings.markdown_renderer)
+            .unwrap_or_else(|_| "\"extended\"".to_string());
+        let live_preview = settings.live_preview;
+        let theme_extension_json =
+            serde_json::to_string(&settings.theme_extension).unwrap_or_else(|_| "\"\"".to_string());
+        let preview_theme_styles_json = serde_json::to_string(&settings.preview_theme_styles)
+            .unwrap_or_else(|_| "{}".to_string());
         let reduce_trans_str = if settings.reduce_transparency {
             "true"
         } else {
@@ -508,7 +655,9 @@ impl SettingsManager {
             r#"(function() {{
   const nextCfg = {cfg_json};
   const nextUser = {user_json};
-  window.config = Object.assign({{}}, window.config, nextCfg);
+  // In place: theme extensions hook properties of window.config (e.g. `theme`).
+  if (typeof window.config !== 'object' || window.config === null) {{ window.config = {{}}; }}
+  Object.assign(window.config, nextCfg);
   if (window.MarkEdit) {{
     window.MarkEdit.editorConfig = window.config;
     window.MarkEdit.userSettings = nextUser;
@@ -536,6 +685,12 @@ impl SettingsManager {
     c.setAutoCharacterPairs?.({auto_pairs_arg});
     c.setSmartQuotesEnabled?.({smart_quotes_arg});
   }}
+  window.chromeUI?.setDiagramRendering?.({diagram_rendering_json});
+  window.chromeUI?.setDiagramServer?.({diagram_server_json});
+  window.chromeUI?.setMarkdownRenderer?.({renderer_json});
+  window.chromeUI?.setEditorLivePreview?.({live_preview});
+  window.chromeUI?.setThemeExtension?.({theme_extension_json});
+  window.chromeUI?.setPreviewThemeStyles?.({preview_theme_styles_json});
 }})();"#
         )
     }
@@ -614,5 +769,104 @@ mod tests {
         let sync_js = mgr.build_live_sync_js(&patched_flat);
         assert!(sync_js.contains("c.setTheme"));
         assert!(sync_js.contains("synthwave84"));
+
+        // Markdown parser choice persists under `preview.markdownRenderer`.
+        assert_eq!(patched_flat.markdown_renderer, "extended");
+        let with_renderer = mgr
+            .update_user_settings(&json!({ "markdownRenderer": "super" }))
+            .expect("update markdown renderer");
+        assert_eq!(with_renderer.markdown_renderer, "super");
+        assert_eq!(mgr.load_user_settings().markdown_renderer, "super");
+        assert_eq!(with_renderer.to_frontend_value()["markdownRenderer"], "super");
+        assert_eq!(with_renderer.to_frontend_value()["preview.markdownRenderer"], "super");
+        assert_eq!(with_renderer.diagram_server, "https://kroki.io");
+        assert_eq!(with_renderer.diagram_rendering, "auto");
+        assert_eq!(with_renderer.plantuml_command, "plantuml");
+        let local = mgr
+            .update_user_settings(&json!({ "diagramRendering": "local", "plantumlCommand": "C:\\tools\\plantuml.jar" }))
+            .expect("local diagrams");
+        assert_eq!(local.diagram_rendering, "local");
+        assert_eq!(local.plantuml_command, "C:\\tools\\plantuml.jar");
+        assert!(mgr.build_live_sync_js(&local).contains("setDiagramRendering?.(\"local\")"));
+        let no_server = mgr
+            .update_user_settings(&json!({ "diagramServer": "" }))
+            .expect("turn diagram server off");
+        assert_eq!(no_server.diagram_server, "");
+        assert!(mgr.build_live_sync_js(&no_server).contains("setDiagramServer?.(\"\")"));
+        assert_eq!(with_renderer.startup_behavior, "newDocument");
+        let with_startup = mgr
+            .update_user_settings(&json!({ "startupBehavior": "lastSession" }))
+            .expect("update startup behavior");
+        assert_eq!(with_startup.startup_behavior, "lastSession");
+        assert_eq!(with_startup.to_frontend_value()["startupBehavior"], "lastSession");
+        assert!(mgr
+            .build_live_sync_js(&with_renderer)
+            .contains("window.chromeUI?.setMarkdownRenderer?.(\"super\")"));
+    }
+
+    #[test]
+    fn persists_preview_theme_styles_and_syncs_them_to_windows() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let mgr = SettingsManager::with_dir(tmp.path());
+        assert_eq!(mgr.load_user_settings().preview_theme_styles, json!({}));
+
+        let styles = json!({ "dracula": { "h1": { "fontSize": 32, "color": "#ff79c6" } } });
+        let updated = mgr
+            .update_user_settings(&json!({ "previewThemeStyles": styles }))
+            .expect("update preview theme styles");
+        assert_eq!(updated.preview_theme_styles, styles);
+        assert_eq!(mgr.load_user_settings().preview_theme_styles, styles);
+        assert_eq!(updated.to_frontend_value()["previewThemeStyles"], styles);
+        assert_eq!(updated.to_frontend_value()["preview.themeStyles"], styles);
+        assert!(mgr
+            .build_live_sync_js(&updated)
+            .contains("setPreviewThemeStyles?.({\"dracula\""));
+    }
+
+    #[test]
+    fn panels_are_opaque_by_default_and_old_files_are_migrated_once() {
+        assert!(UserSettings::default().reduce_transparency);
+
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let mgr = SettingsManager::with_dir(tmp.path());
+        // A file from before revision 2: every field written out, transparency on.
+        fs::write(
+            mgr.settings_file_path(),
+            r#"{ "editor.fontSize": 16.0, "window.reduceTransparency": false }"#,
+        )
+        .expect("write old settings");
+        let migrated = mgr.load_user_settings();
+        assert!(migrated.reduce_transparency);
+        assert_eq!(migrated.font_size, 16.0);
+        assert_eq!(migrated.settings_revision, SETTINGS_REVISION);
+
+        // Turned off again by the user: saved with the current revision, so it stays off.
+        let chosen = mgr
+            .update_user_settings(&json!({ "reduceTransparency": false }))
+            .expect("turn transparency back on");
+        assert!(!chosen.reduce_transparency);
+        assert!(!mgr.load_user_settings().reduce_transparency);
+    }
+
+    #[test]
+    fn the_editor_font_defaults_to_d2coding_and_only_the_old_default_is_migrated() {
+        assert_eq!(UserSettings::default().font_family, "D2Coding");
+
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let mgr = SettingsManager::with_dir(tmp.path());
+        fs::write(
+            mgr.settings_file_path(),
+            r#"{ "editor.fontFamily": "Cascadia Mono, Consolas, ui-monospace, monospace", "meta.settingsRevision": 2 }"#,
+        )
+        .unwrap();
+        assert_eq!(mgr.load_user_settings().font_family, "D2Coding");
+
+        // A font the user picked stays.
+        fs::write(
+            mgr.settings_file_path(),
+            r#"{ "editor.fontFamily": "'JetBrains Mono', monospace", "meta.settingsRevision": 2 }"#,
+        )
+        .unwrap();
+        assert_eq!(mgr.load_user_settings().font_family, "'JetBrains Mono', monospace");
     }
 }

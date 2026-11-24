@@ -11,13 +11,16 @@ describe('Build system', () => {
   test('host placeholders are resolved at build time, with config before settings', () => {
     const html = readHtml();
     // The Tauri host serves dist statically, so the vite build replaces the
-    // quoted upstream placeholders with empty JSON objects; index.ts merges
-    // its defaults and the native bootstrap overrides them at runtime.
+    // quoted upstream placeholders with empty JSON objects. The inline script must
+    // merge them under what the desktop host already injected (initialization script),
+    // not overwrite window.config / MarkEdit.userSettings.
     expect(html).not.toContain('"{{EDITOR_CONFIG}}"');
     expect(html).not.toContain('"{{USER_SETTINGS}}"');
-    expect(html).toContain('window.config = {};');
-    expect(html).toContain('userSettings: {}');
-    expect(html.indexOf('window.config = {};')).toBeLessThan(html.indexOf('userSettings: {}'));
+    expect(html).toContain('var hostConfig = {};');
+    expect(html).toContain('var hostSettings = {};');
+    expect(html.indexOf('var hostConfig = {};')).toBeLessThan(html.indexOf('var hostSettings = {};'));
+    expect(html).not.toContain('window.config = {};');
+    expect(html).toContain('userSettings: existing.userSettings ||');
   });
 
   test('test everything is inlined in a single file', () => {

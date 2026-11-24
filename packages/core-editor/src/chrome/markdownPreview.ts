@@ -1,14 +1,30 @@
-import { createButton, createElement } from './utils';
+import { createElement } from './utils';
+import { isEditorLivePreview } from './liveEditorPreview';
+import {
+  buildAnchors,
+  lineToOffset,
+  matchHeadings,
+  offsetToLine,
+  referenceOffset,
+  scrollTopForOffset,
+  sourceHeadings,
+  type ScrollAnchor,
+} from './scrollSync';
 import { globalState } from '../common/store';
 import {
-  renderMarkdown,
+  renderMarkdownAsync,
   getActiveMarkdownRenderer,
   setActiveMarkdownRenderer,
   getMarkdownSyntaxStandard,
   setMarkdownSyntaxStandard,
   registerMarkdownRenderer,
   listMarkdownRenderers,
+  hydrateDiagrams,
+  clearSuperSetIncludes,
+  previewFor,
+  previewFrame,
   type MarkdownSyntaxStandard,
+  type PreviewHost,
 } from '../modules/markdown-renderer';
 
 export type MarkdownPreviewMode = 'editor' | 'split' | 'preview';
@@ -16,7 +32,6 @@ export type MarkdownPreviewMode = 'editor' | 'split' | 'preview';
 const previewState: {
   mode: MarkdownPreviewMode;
   pane: HTMLElement | null;
-  toolbar: HTMLElement | null;
   body: HTMLElement | null;
   syncScroll: boolean;
   splitRatio: number;
@@ -26,7 +41,6 @@ const previewState: {
 } = {
   mode: 'editor',
   pane: null,
-  toolbar: null,
   body: null,
   syncScroll: true,
   splitRatio: 0.5,
@@ -71,29 +85,6 @@ function getEditorLineRange(line: number): { from: number; to: number } {
   return { from: lineObj.from, to: lineObj.to };
 }
 
-function updateSummary(): void {
-  if (previewState.toolbar === null) {
-    return;
-  }
-
-  const text = getEditorText();
-  const words = countWords(text);
-  const badge = previewState.toolbar.querySelector('.markedit-preview-summary') as HTMLElement | null;
-  if (badge !== null) {
-    badge.textContent = `${words} words · ${readingTime(words)}`;
-  }
-}
-
-function countWords(text: string): number {
-  const matches = text.match(/[\p{L}\p{N}]+/gu);
-  return matches?.length ?? 0;
-}
-
-function readingTime(words: number): string {
-  const minutes = Math.max(1, Math.round(words / 200));
-  return `${minutes} min read`;
-}
-
 function updateContent(force = false): void {
   const body = previewState.body;
   if (body === null || previewState.mode === 'editor') {
@@ -107,9 +98,9 @@ function updateContent(force = false): void {
     }
 
     previewState.lastContent = text;
-    body.innerHTML = renderMarkdown(text);
-    attachPreviewInteractions();
-    updateSummary();
+    // Each format shows its parser's output with its own preview (modules/markdown-renderer/formats/).
+    const engine = getActiveMarkdownRenderer();
+    previewFor(engine).render(body, text, engine, previewHost);
   };
 
   if (force) {
@@ -129,6 +120,73 @@ function updateContent(force = false): void {
   previewState.updateTimeout = setTimeout(() => render(false), 50);
 }
 
+/** What the format previews (modules/markdown-renderer/formats/, preview/) call back into. */
+const previewHost: PreviewHost = {
+  rerender() {
+    updateContent(true);
+  },
+  didRenderHtml(body) {
+    attachPreviewInteractions();
+    realignAfterRender();
+    // Async diagram plugins (PlantUML, D2, compressed draw.io, …) finish rendering here; their
+    // final size moves everything below them.
+    void hydrateAndRealign(body);
+  },
+  didLoadFrame(frameDocument) {
+    // Links: same-document anchors scroll, others open outside the preview (open_link).
+    frameDocument.addEventListener('click', event => handlePreviewLinkClick(event, frameDocument));
+    attachFrameScrollSync(frameDocument);
+    realignAfterRender();
+  },
+  didChangeLayout() {
+    invalidateScrollAnchors();
+    realignAfterRender();
+  },
+};
+
+/**
+ * Clicking a link must never navigate the app's own page (or the preview frame) away from the
+ * editor: in-page anchors scroll, everything else goes to the host, which opens web links in the
+ * browser, documents in the app and nothing unsafe (src-tauri/src/links.rs).
+ */
+export function handlePreviewLinkClick(event: MouseEvent, owner: Document): void {
+  const anchor = (event.target as Element | null)?.closest('a');
+  if (anchor === null || anchor === undefined) {
+    return;
+  }
+  const href = anchor.getAttribute('href') ?? '';
+  // Links made by the preview itself (tabs, copy buttons, footnote back-links handle their own).
+  if (event.defaultPrevented) {
+    return;
+  }
+  event.preventDefault();
+
+  if (href.startsWith('#')) {
+    const id = decodeURIComponent(href.slice(1));
+    const target = owner.getElementById(id) ?? Array.from(owner.querySelectorAll('[name]')).find(element => element.getAttribute('name') === id);
+    target?.scrollIntoView({ block: 'start' });
+    return;
+  }
+  if (href.trim() === '') {
+    return;
+  }
+
+  const invoke = window.__TAURI_INTERNALS__?.invoke;
+  if (invoke === undefined) {
+    console.warn('[MarkEdit] Links open from the desktop app only:', href);
+    return;
+  }
+  void openLink(invoke, href);
+}
+
+async function openLink(invoke: (cmd: string, args?: Record<string, unknown>) => Promise<unknown>, href: string): Promise<void> {
+  try {
+    await invoke('open_link', { href });
+  } catch (error) {
+    console.error('[MarkEdit] Failed to open link:', error);
+  }
+}
+
 function attachPreviewInteractions(): void {
   if (previewState.body === null) {
     return;
@@ -144,14 +202,12 @@ function attachPreviewInteractions(): void {
       }
 
       const line = parseInt(lineAttr, 10);
-      const checked = checkbox.checked;
       const { from, to } = getEditorLineRange(line);
       const lineText = getEditorView()?.state.doc.sliceString(from, to) ?? '';
-      const updated = checked
-        ? lineText.replace(/\[x\]/i, '[ ]')
-        : lineText.replace(/\[ \]/, '[x]');
-
-      getEditorView()?.dispatch({ changes: { from, to, insert: updated } });
+      const updated = toggleTaskMarker(lineText);
+      if (updated !== null && updated !== lineText) {
+        getEditorView()?.dispatch({ changes: { from, to, insert: updated } });
+      }
     });
   });
 
@@ -184,9 +240,25 @@ function attachPreviewInteractions(): void {
       const container = button.closest('.markedit-preview-mermaid');
       if (container !== null) {
         container.classList.toggle('is-source-visible');
+        invalidateScrollAnchors();
       }
     });
   });
+}
+
+/**
+ * Toggles the task marker of a list item line. The click handler runs after the browser has
+ * already flipped `checkbox.checked`, so the source text (not the DOM state) decides the result:
+ * an open task (`[ ]`) becomes done, any other state (`[x]`, `[X]`, `[/]`, `[-]`) becomes open.
+ */
+export function toggleTaskMarker(lineText: string): string | null {
+  const match = /^(\s*(?:>\s*)*(?:[-*+]|\d{1,9}[.)]|\(@[\w-]*\))[ \t]+)\[([ xX/-])\]/.exec(lineText);
+  if (match === null) {
+    return null;
+  }
+
+  const next = match[2] === ' ' ? 'x' : ' ';
+  return `${match[1]}[${next}]${lineText.slice(match[0].length)}`;
 }
 
 async function copyToClipboard(text: string, button: HTMLButtonElement, feedback: string): Promise<void> {
@@ -196,121 +268,430 @@ async function copyToClipboard(text: string, button: HTMLButtonElement, feedback
   setTimeout(() => { button.textContent = original; }, 1200);
 }
 
-function getVisibleEditorLines(scroller: HTMLElement, editor: typeof window.editor): { first: number; last: number } {
-  const totalLines = editor.state.doc.lines;
+// ---------------------------------------------------------------------------------------------
+// Scroll sync (split view), in both directions. See scrollSync.ts for the geometry.
+// ---------------------------------------------------------------------------------------------
 
-  if (scroller.scrollTop <= 2) {
-    return { first: 1, last: Math.min(1, totalLines) };
-  }
+type ScrollSide = 'editor' | 'preview';
 
-  const topBlock = editor.lineBlockAtHeight(scroller.scrollTop);
-  const bottomBlock = editor.lineBlockAtHeight(scroller.scrollTop + (scroller.clientHeight || 400));
-
-  const hasRealLayout = !(topBlock.from === 0 && bottomBlock.to === 0);
-  if (hasRealLayout) {
-    return {
-      first: editor.state.doc.lineAt(topBlock.from).number,
-      last: editor.state.doc.lineAt(bottomBlock.to).number,
-    };
-  }
-
-  const topFraction = scroller.scrollTop / Math.max(1, scroller.scrollHeight);
-  const visibleFraction = (scroller.clientHeight || 200) / Math.max(1, scroller.scrollHeight);
-  const first = Math.max(1, Math.floor(topFraction * totalLines) + 1);
-  const last = Math.min(totalLines, Math.max(first, Math.ceil((topFraction + visibleFraction) * totalLines)));
-  return { first, last };
+interface PreviewSurface {
+  scroller: HTMLElement;
+  root: HTMLElement;
+  framed: boolean;
+  /** Offset of an element from the top of the scrollable content. */
+  offsetOf: (element: Element) => number;
 }
 
-function getEditorViewportOffset(scroller: HTMLElement, editor: typeof window.editor): number {
-  if (scroller.scrollTop <= 2) {
-    return 0;
-  }
+const scrollSyncState: {
+  anchors: ScrollAnchor[] | null;
+  anchorsKey: string;
+  anchorsTime: number;
+  contentVersion: number;
+  /** Last user input (wheel, click, key, touch) in each pane: the more recent one drives. */
+  lastInput: Record<ScrollSide, number>;
+  /** Positions this code set: the scroll events they cause are not user scrolling. */
+  echo: Record<ScrollSide, { top: number; until: number } | null>;
+} = {
+  anchors: null,
+  anchorsKey: '',
+  anchorsTime: 0,
+  contentVersion: 0,
+  lastInput: { editor: 0, preview: 0 },
+  echo: { editor: null, preview: null },
+};
 
-  const topBlock = editor.lineBlockAtHeight(scroller.scrollTop);
-  if (topBlock.from === 0 && topBlock.to === 0) {
-    return 0;
-  }
+const ANCHOR_CACHE_MS = 1500;
+const ECHO_MS = 300;
+/** After input in the preview, editor scroll adjustments (re-measuring) do not move it back. */
+const PREVIEW_DRIVE_MS = 1000;
 
-  return Math.max(0, topBlock.top - scroller.scrollTop);
+function now(): number {
+  return Date.now();
 }
 
-function getRelativeOffset(child: HTMLElement, parent: HTMLElement): number {
-  const childRect = child.getBoundingClientRect();
-  const parentRect = parent.getBoundingClientRect();
-
-  if (childRect.height > 0 && parentRect.height > 0) {
-    return childRect.top - parentRect.top + parent.scrollTop;
-  }
-
-  return child.offsetTop - parent.offsetTop;
+function isScrollSyncActive(): boolean {
+  return previewState.syncScroll && previewState.mode === 'split' && previewState.body !== null && !isSyncPaused();
 }
 
-function findAnchorElement(firstLine: number, lastLine: number): HTMLElement | null {
+// ---------------------------------------------------------------------------------------------
+// Sync pauses while the user edits or has a selection (in either pane), so the panes do not
+// jump under the cursor or a drag selection. It resumes once there has been no edit and no
+// selection for SYNC_RESUME_MS, and then re-aligns the panes.
+// ---------------------------------------------------------------------------------------------
+
+const SYNC_RESUME_MS = 1000;
+/** While a selection exists, how often to check whether it was cleared. */
+const SELECTION_POLL_MS = 250;
+
+const syncPause: {
+  until: number;
+  selection: boolean;
+  doc: unknown;
+  timer: ReturnType<typeof setTimeout> | null;
+} = {
+  until: 0,
+  selection: false,
+  doc: null,
+  timer: null,
+};
+
+/** Starts tracking edits from the current document without pausing (new document, mode change). */
+function resetSyncPause(): void {
+  syncPause.until = 0;
+  syncPause.selection = false;
+  syncPause.doc = getEditorView()?.state.doc ?? null;
+  if (syncPause.timer !== null) {
+    clearTimeout(syncPause.timer);
+    syncPause.timer = null;
+  }
+}
+
+function hasActiveSelection(): boolean {
+  if (getEditorView()?.state.selection.ranges.some(range => !range.empty) === true) {
+    return true;
+  }
+
+  const pane = previewState.pane;
+  const selection = document.getSelection();
+  if (pane !== null && selection !== null && !selection.isCollapsed && selection.anchorNode !== null && pane.contains(selection.anchorNode)) {
+    return true;
+  }
+
+  const body = previewState.body;
+  const frameSelection = body === null ? null : previewFrame(body)?.contentWindow?.getSelection() ?? null;
+  return frameSelection !== null && !frameSelection.isCollapsed;
+}
+
+/** Notices edits: every change to the editor gives it a new document. */
+function noteEditorEdits(): void {
+  const doc = getEditorView()?.state.doc;
+  if (doc === undefined || doc === syncPause.doc) {
+    return;
+  }
+  const edited = syncPause.doc !== null;
+  syncPause.doc = doc;
+  if (edited) {
+    pauseSync();
+  }
+}
+
+function pauseSync(): void {
+  syncPause.until = now() + SYNC_RESUME_MS;
+  scheduleSyncResume();
+}
+
+function isSyncPaused(): boolean {
+  noteEditorEdits();
+  if (hasActiveSelection()) {
+    if (!syncPause.selection) {
+      syncPause.selection = true;
+      scheduleSyncResume();
+    }
+    return true;
+  }
+  if (syncPause.selection) {
+    // The selection was just cleared: wait the full quiet period from now.
+    syncPause.selection = false;
+    pauseSync();
+    return true;
+  }
+  return now() < syncPause.until;
+}
+
+function scheduleSyncResume(): void {
+  if (syncPause.timer !== null) {
+    clearTimeout(syncPause.timer);
+  }
+  const delay = syncPause.selection ? SELECTION_POLL_MS : Math.max(0, syncPause.until - now()) + 20;
+  syncPause.timer = setTimeout(() => {
+    syncPause.timer = null;
+    if (previewState.mode !== 'split') {
+      return;
+    }
+    if (isSyncPaused()) {
+      // Still selecting, or edited again: keep checking (replaces any check scheduled meanwhile).
+      scheduleSyncResume();
+      return;
+    }
+    realignAfterRender();
+  }, delay);
+}
+
+/** Selection changes in the page or the preview frame update the pause right away. */
+function handleSelectionChange(): void {
+  if (previewState.mode === 'split') {
+    isSyncPaused();
+  }
+}
+
+function previewSurface(): PreviewSurface | null {
   const body = previewState.body;
   if (body === null) {
     return null;
   }
 
-  const candidates = Array.from(body.querySelectorAll<HTMLElement>('[data-line]'))
-    .map(element => ({ element, line: parseInt(element.dataset.line ?? '-1', 10) }))
-    .filter(({ line }) => line >= firstLine && line <= lastLine)
-    .sort((a, b) => a.line - b.line);
-
-  if (candidates.length === 0) {
-    return null;
+  const frame = previewFrame(body);
+  if (frame !== null) {
+    const frameDocument = frame.contentDocument;
+    const scroller = frameDocument?.scrollingElement as HTMLElement | null | undefined;
+    if (frameDocument === null || scroller === null || scroller === undefined) {
+      return null;
+    }
+    return {
+      scroller,
+      root: frameDocument.body,
+      framed: true,
+      offsetOf: element => element.getBoundingClientRect().top + scroller.scrollTop,
+    };
   }
 
-  const heading = candidates.find(({ element }) => (
-    element.matches('h1, h2, h3, h4, h5, h6, .markedit-preview-heading') ||
-    element.querySelector('h1, h2, h3, h4, h5, h6, .markedit-preview-heading') !== null
-  ));
-  if (heading !== undefined) {
-    return heading.element;
-  }
-
-  const listItem = candidates.find(({ element }) => (
-    element.tagName === 'LI' ||
-    element.classList.contains('markedit-preview-task-item') ||
-    element.classList.contains('markedit-preview-list')
-  ));
-  if (listItem !== undefined) {
-    return listItem.element;
-  }
-
-  return candidates[0].element;
+  return {
+    scroller: body,
+    root: body,
+    framed: false,
+    offsetOf: element => element.getBoundingClientRect().top - body.getBoundingClientRect().top + body.scrollTop,
+  };
 }
 
+function isRendered(element: Element): boolean {
+  const rect = element.getBoundingClientRect();
+  return rect.width > 0 || rect.height > 0;
+}
+
+/** Forget measured preview positions (content re-rendered). */
+function invalidateScrollAnchors(): void {
+  scrollSyncState.contentVersion += 1;
+  scrollSyncState.anchors = null;
+}
+
+/**
+ * Anchors of the preview, cached while its size and content stay the same. Late layout changes
+ * (images, diagrams, tabs, details) change the content height or width, which rebuilds them.
+ */
+function previewAnchors(surface: PreviewSurface, totalLines: number): ScrollAnchor[] {
+  const { scroller, root } = surface;
+  const key = `${scrollSyncState.contentVersion}:${totalLines}:${scroller.scrollHeight}:${scroller.clientWidth}:${surface.framed ? 1 : 0}`;
+  if (scrollSyncState.anchors !== null && scrollSyncState.anchorsKey === key && now() - scrollSyncState.anchorsTime < ANCHOR_CACHE_MS) {
+    return scrollSyncState.anchors;
+  }
+
+  const raw: ScrollAnchor[] = [];
+  root.querySelectorAll<HTMLElement>('[data-line]').forEach(element => {
+    const line = parseInt(element.dataset.line ?? '', 10);
+    if (!Number.isNaN(line) && isRendered(element)) {
+      raw.push({ line, top: surface.offsetOf(element) });
+    }
+  });
+
+  // No line attributes (e.g. markdown-it in a frame): match headings by text instead.
+  if (raw.length === 0) {
+    const headings = Array.from(root.querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5, h6')).filter(isRendered);
+    const lines = matchHeadings(headings.map(heading => heading.textContent), sourceHeadings(getEditorText()));
+    headings.forEach((heading, index) => {
+      const line = lines.at(index);
+      if (line !== null && line !== undefined) {
+        raw.push({ line, top: surface.offsetOf(heading) });
+      }
+    });
+  }
+
+  scrollSyncState.anchors = buildAnchors(raw, totalLines, scroller.scrollHeight);
+  scrollSyncState.anchorsKey = key;
+  scrollSyncState.anchorsTime = now();
+  return scrollSyncState.anchors;
+}
+
+/** Offset of the editor's document inside its scroller (content padding, top panels). */
+function editorDocumentOffset(editor: typeof window.editor): number {
+  const scroller = editor.scrollDOM;
+  const offset = editor.documentTop - scroller.getBoundingClientRect().top + scroller.scrollTop;
+  return Number.isFinite(offset) ? offset : 0;
+}
+
+/** Fractional 0-based source line at a content offset of the editor scroller. */
+function editorLineAtOffset(editor: typeof window.editor, offset: number): number {
+  const doc = editor.state.doc;
+  const height = offset - editorDocumentOffset(editor);
+  if (height <= 0) {
+    return 0;
+  }
+
+  const block = editor.lineBlockAtHeight(height);
+  if (block.height <= 0) {
+    // No layout (e.g. hidden): fall back to the share of the content height.
+    const scroller = editor.scrollDOM;
+    return doc.lines * Math.min(1, offset / Math.max(1, scroller.scrollHeight));
+  }
+  if (height >= block.top + block.height && block.to >= doc.length) {
+    return doc.lines;
+  }
+
+  const first = doc.lineAt(block.from).number - 1;
+  const last = doc.lineAt(block.to).number - 1;
+  const fraction = Math.max(0, Math.min(1, (height - block.top) / block.height));
+  return first + fraction * (last - first + 1);
+}
+
+/** Content offset of the editor scroller at a fractional 0-based source line. */
+function editorOffsetAtLine(editor: typeof window.editor, line: number): number {
+  const doc = editor.state.doc;
+  const base = editorDocumentOffset(editor);
+  if (line >= doc.lines) {
+    const lastBlock = editor.lineBlockAt(doc.length);
+    return base + lastBlock.top + lastBlock.height;
+  }
+
+  const index = Math.max(0, Math.floor(line));
+  const docLine = doc.line(index + 1);
+  const block = editor.lineBlockAt(docLine.from);
+  if (block.height <= 0) {
+    // No layout: the same share of the content height as editorLineAtOffset.
+    return editor.scrollDOM.scrollHeight * Math.max(0, line) / Math.max(1, doc.lines);
+  }
+  const first = doc.lineAt(block.from).number - 1;
+  const span = doc.lineAt(block.to).number - first;
+  const fraction = (line - first) / Math.max(1, span);
+  return base + block.top + Math.max(0, Math.min(1, fraction)) * block.height;
+}
+
+/** Scrolls `element` and remembers the position, so its scroll event is not taken as user input. */
+function setSyncedScrollTop(side: ScrollSide, element: HTMLElement, top: number): void {
+  const before = element.scrollTop;
+  if (Math.abs(before - top) < 0.5) {
+    return;
+  }
+  element.scrollTop = top;
+  const after = element.scrollTop;
+  if (Math.abs(after - before) >= 0.5) {
+    scrollSyncState.echo[side] = { top: after, until: now() + ECHO_MS };
+  }
+}
+
+/** Whether a scroll event is the result of `setSyncedScrollTop`. */
+function isScrollEcho(side: ScrollSide, top: number): boolean {
+  const echo = scrollSyncState.echo[side];
+  if (echo === null) {
+    return false;
+  }
+  if (now() > echo.until) {
+    scrollSyncState.echo[side] = null;
+    return false;
+  }
+  if (Math.abs(top - echo.top) <= 1) {
+    scrollSyncState.echo[side] = null;
+    return true;
+  }
+  return false;
+}
+
+/** Editor → preview: shows the part of the preview that matches the editor's viewport. */
 export function syncScroll(): void {
-  if (!previewState.syncScroll || previewState.mode !== 'split' || previewState.body === null) {
+  if (!isScrollSyncActive()) {
     return;
   }
 
   const editor = getEditorView();
-  const scroller = editor?.scrollDOM;
-  if (editor === undefined || scroller === undefined) {
+  const surface = previewSurface();
+  if (editor === undefined || surface === null) {
     return;
   }
 
-  const body = previewState.body;
+  const line = editorLineAtOffset(editor, referenceOffset(editor.scrollDOM));
+  const offset = lineToOffset(previewAnchors(surface, editor.state.doc.lines), line);
+  setSyncedScrollTop('preview', surface.scroller, scrollTopForOffset(offset, surface.scroller));
+}
 
-  if (scroller.scrollTop <= 2) {
-    body.scrollTop = 0;
+/** Preview → editor: scrolls the editor to the source of what the preview shows. */
+export function syncEditorScroll(): void {
+  if (!isScrollSyncActive()) {
     return;
   }
 
-  const { first, last } = getVisibleEditorLines(scroller, editor);
-  const anchor = findAnchorElement(first, last);
-
-  if (anchor === null) {
-    const ratio = scroller.scrollTop / (scroller.scrollHeight - scroller.clientHeight || 1);
-    body.scrollTop = ratio * (body.scrollHeight - body.clientHeight || 1);
+  const editor = getEditorView();
+  const surface = previewSurface();
+  if (editor === undefined || surface === null) {
     return;
   }
 
-  const anchorTop = getRelativeOffset(anchor, body);
-  const editorOffset = getEditorViewportOffset(scroller, editor);
-  const maxOffset = Math.max(0, scroller.clientHeight * 0.35);
-  body.scrollTop = Math.max(0, anchorTop - Math.min(editorOffset, maxOffset));
+  const line = offsetToLine(previewAnchors(surface, editor.state.doc.lines), referenceOffset(surface.scroller));
+  const offset = editorOffsetAtLine(editor, line);
+  setSyncedScrollTop('editor', editor.scrollDOM, scrollTopForOffset(offset, editor.scrollDOM));
+}
+
+function handleEditorScroll(): void {
+  const scroller = getEditorView()?.scrollDOM;
+  if (scroller === undefined || isScrollEcho('editor', scroller.scrollTop)) {
+    return;
+  }
+
+  // The user is scrolling the preview and the editor moved by itself: it re-measured lines that
+  // had estimated heights. Put it back at the preview's position instead of moving the preview.
+  const { editor: editorInput, preview: previewInput } = scrollSyncState.lastInput;
+  if (previewInput > editorInput && now() - previewInput < PREVIEW_DRIVE_MS) {
+    syncEditorScroll();
+    return;
+  }
+
+  syncScroll();
+}
+
+function handlePreviewScroll(): void {
+  const surface = previewSurface();
+  if (surface === null || isScrollEcho('preview', surface.scroller.scrollTop)) {
+    return;
+  }
+
+  // Only scrolling the user started in the preview moves the editor (not re-rendering).
+  const { editor: editorInput, preview: previewInput } = scrollSyncState.lastInput;
+  if (previewInput <= editorInput) {
+    return;
+  }
+
+  syncEditorScroll();
+}
+
+function notePreviewInput(): void {
+  scrollSyncState.lastInput.preview = now();
+}
+
+function noteInput(event: Event): void {
+  const target = event.target;
+  const pane = previewState.pane;
+  if (pane !== null && target instanceof Node && pane.contains(target)) {
+    notePreviewInput();
+  } else {
+    scrollSyncState.lastInput.editor = now();
+  }
+}
+
+const inputEvents = ['wheel', 'mousedown', 'touchstart', 'keydown'] as const;
+
+/** Tracks input in the frame of a self-styled document (its events do not reach the page). */
+function attachFrameScrollSync(frameDocument: Document): void {
+  frameDocument.addEventListener('scroll', handlePreviewScroll, { passive: true });
+  frameDocument.addEventListener('selectionchange', handleSelectionChange);
+  for (const name of inputEvents) {
+    frameDocument.addEventListener(name, notePreviewInput, { capture: true, passive: true });
+  }
+}
+
+async function hydrateAndRealign(body: HTMLElement): Promise<void> {
+  await hydrateDiagrams(body);
+  realignAfterRender();
+}
+
+/** Re-aligns the preview after it was re-rendered, unless the user is scrolling it. */
+function realignAfterRender(): void {
+  invalidateScrollAnchors();
+  if (!isScrollSyncActive()) {
+    return;
+  }
+  const { editor: editorInput, preview: previewInput } = scrollSyncState.lastInput;
+  if (previewInput > editorInput) {
+    syncEditorScroll();
+  } else {
+    syncScroll();
+  }
 }
 
 function createPreviewPane(): HTMLElement {
@@ -320,101 +701,18 @@ function createPreviewPane(): HTMLElement {
   }
 
   previewState.pane = null;
-  previewState.toolbar = null;
   previewState.body = null;
 
   const pane = createElement('div', 'markedit-markdown-preview-pane');
   document.body.appendChild(pane);
 
-  const toolbar = createElement('div', 'markedit-preview-toolbar', pane);
-  previewState.toolbar = toolbar;
-
-  const left = createElement('div', 'markedit-preview-toolbar-left', toolbar);
-  const modeGroup = createElement('div', 'markedit-preview-mode-group', left);
-
-  const editorButton = createButton('Editor', () => setMarkdownPreviewMode('editor'), 'markedit-preview-mode-button');
-  editorButton.dataset.mode = 'editor';
-  modeGroup.appendChild(editorButton);
-
-  const splitButton = createButton('Split', () => setMarkdownPreviewMode('split'), 'markedit-preview-mode-button');
-  splitButton.dataset.mode = 'split';
-  modeGroup.appendChild(splitButton);
-
-  const previewButton = createButton('Preview', () => setMarkdownPreviewMode('preview'), 'markedit-preview-mode-button');
-  previewButton.dataset.mode = 'preview';
-  modeGroup.appendChild(previewButton);
-
-  const rendererSelect = createSyntaxStandardSelect();
-  modeGroup.appendChild(rendererSelect);
-
-  const summary = createElement('span', 'markedit-preview-summary', left, '0 words · 1 min read');
-  summary.title = 'Document summary';
-
-  const right = createElement('div', 'markedit-preview-toolbar-right', toolbar);
-
-  const syncButton = createButton('Sync Scroll', () => {
-    previewState.syncScroll = !previewState.syncScroll;
-    syncButton.classList.toggle('is-active', previewState.syncScroll);
-    if (previewState.syncScroll) {
-      syncScroll();
-    }
-  }, 'markedit-preview-toolbar-button');
-  syncButton.classList.add('is-active');
-  syncButton.title = 'Sync editor scroll to preview';
-  right.appendChild(syncButton);
-
-  const copyButton = createButton('Copy HTML', () => {
-    const html = previewState.body?.innerHTML ?? '';
-    void copyToClipboard(html, copyButton, 'Copied!');
-  }, 'markedit-preview-toolbar-button');
-  right.appendChild(copyButton);
-
-  const closeButton = createButton('×', () => setMarkdownPreviewMode('editor'), 'markedit-chrome-button markedit-chrome-icon-button markedit-chrome-close-button');
-  right.appendChild(closeButton);
-
   const body = createElement('div', 'markedit-preview-body', pane);
+  body.addEventListener('scroll', handlePreviewScroll, { passive: true });
+  body.addEventListener('click', event => handlePreviewLinkClick(event, document));
   previewState.body = body;
 
   previewState.pane = pane;
   return pane;
-}
-
-function createSyntaxStandardSelect(): HTMLSelectElement {
-  const select = document.createElement('select');
-  select.className = 'markedit-preview-standard-select';
-  select.title = 'Markdown syntax standard';
-
-  const standards: { value: MarkdownSyntaxStandard; label: string }[] = [
-    { value: 'extended', label: 'Extended' },
-    { value: 'gfm', label: 'GFM' },
-    { value: 'commonmark', label: 'CommonMark' },
-  ];
-
-  for (const { value, label } of standards) {
-    const option = document.createElement('option');
-    option.value = value;
-    option.textContent = label;
-    select.appendChild(option);
-  }
-
-  for (const engine of listMarkdownRenderers()) {
-    if (engine.id === 'commonmark' || engine.id === 'gfm' || engine.id === 'extended') {
-      continue;
-    }
-    const option = document.createElement('option');
-    option.value = engine.id;
-    option.textContent = engine.name;
-    select.appendChild(option);
-  }
-
-  select.value = getActiveMarkdownRenderer().id;
-
-  select.addEventListener('change', () => {
-    setActiveMarkdownRenderer(select.value);
-    updateContent(true);
-  });
-
-  return select;
 }
 
 function ensureResizer(): HTMLElement | null {
@@ -457,7 +755,6 @@ function applyLayout(): void {
 
   body.classList.remove('markedit-mode-split', 'markedit-mode-preview');
   removeResizer();
-  ensureModeSwitcher();
 
   if (previewState.mode === 'editor') {
     if (editor !== null) {
@@ -469,14 +766,21 @@ function applyLayout(): void {
       previewState.pane.style.display = 'none';
     }
 
-    updateModeSwitcher();
     return;
   }
 
   createPreviewPane();
   if (previewState.pane !== null) {
     previewState.pane.style.display = '';
-    previewState.pane.style.width = previewState.mode === 'preview' ? '100%' : `${(1 - previewState.splitRatio) * 100}%`;
+    if (previewState.mode === 'preview') {
+      // Keep the sidebar visible on the left, like in edit mode.
+      const sidebarWidth = 260;
+      previewState.pane.style.left = `${sidebarWidth}px`;
+      previewState.pane.style.width = `calc(100% - ${sidebarWidth}px)`;
+    } else {
+      previewState.pane.style.left = '';
+      previewState.pane.style.width = `${(1 - previewState.splitRatio) * 100}%`;
+    }
   }
 
   body.classList.add(previewState.mode === 'split' ? 'markedit-mode-split' : 'markedit-mode-preview');
@@ -492,14 +796,9 @@ function applyLayout(): void {
     }
   } else if (editor !== null) {
     editor.style.width = '';
-    editor.style.display = '';
+    editor.style.display = 'none';
   }
 
-  previewState.toolbar?.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach(button => {
-    button.classList.toggle('is-active', button.dataset.mode === previewState.mode);
-  });
-
-  updateModeSwitcher();
   syncEditorStyles();
   updateContent(true);
 }
@@ -510,12 +809,14 @@ function startLiveSync(): void {
     return;
   }
 
-  editor.scrollDOM.addEventListener('scroll', syncScroll);
+  editor.scrollDOM.addEventListener('scroll', handleEditorScroll, { passive: true });
+  resetSyncPause();
 
   const target = editor.dom;
   if (mutationObserver === null) {
     mutationObserver = new MutationObserver(() => {
       if (previewState.mode !== 'editor') {
+        noteEditorEdits();
         updateContent();
       }
     });
@@ -528,12 +829,17 @@ function stopLiveSync(): void {
     clearTimeout(previewState.updateTimeout);
     previewState.updateTimeout = null;
   }
-  getEditorView()?.scrollDOM.removeEventListener('scroll', syncScroll);
+  getEditorView()?.scrollDOM.removeEventListener('scroll', handleEditorScroll);
   mutationObserver?.disconnect();
   mutationObserver = null;
 }
 
 function setupGlobalListeners(): void {
+  // Which pane the user works in decides the direction of scroll sync.
+  for (const name of inputEvents) {
+    window.addEventListener(name, noteInput, { capture: true, passive: true });
+  }
+
   window.addEventListener('mousemove', event => {
     if (!previewState.isDragging) {
       return;
@@ -550,9 +856,22 @@ function setupGlobalListeners(): void {
 
   window.addEventListener('editor-colors-changed', () => {
     syncEditorStyles();
+    // Code is highlighted with the theme's own classes: render it again for the new theme.
+    updateContent(true);
   });
 
+  // The View menu is shared by all windows; show this window's state when it is focused.
+  window.addEventListener('focus', () => {
+    // Included files may have been edited in another window or app.
+    clearSuperSetIncludes();
+    publishViewState();
+  });
+
+  document.addEventListener('selectionchange', handleSelectionChange);
+
   window.addEventListener('markedit-editor-reset', () => {
+    resetSyncPause();
+    clearSuperSetIncludes(true);
     previewState.lastContent = '';
     updateContent(true);
   });
@@ -573,45 +892,6 @@ function syncEditorStyles(): void {
   pane.style.setProperty('--preview-bg', background);
   pane.style.setProperty('--preview-fg', foreground);
   pane.style.setProperty('--preview-accent', accent);
-}
-
-function ensureModeSwitcher(): void {
-  const root = document.getElementById('markedit-chrome-root');
-  if (root?.querySelector('#markedit-mode-switcher') !== null) {
-    return;
-  }
-
-  const pill = createElement('div', 'markedit-mode-switcher', root);
-  pill.id = 'markedit-mode-switcher';
-
-  const modes: MarkdownPreviewMode[] = ['editor', 'split', 'preview'];
-  for (const mode of modes) {
-    const label = mode.charAt(0).toUpperCase() + mode.slice(1);
-    const button = createButton(label, () => setMarkdownPreviewMode(mode), 'markedit-mode-switcher-button');
-    button.dataset.mode = mode;
-    pill.appendChild(button);
-  }
-
-  const rendererSelect = createSyntaxStandardSelect();
-  pill.appendChild(rendererSelect);
-}
-
-function updateModeSwitcher(): void {
-  const pill = document.getElementById('markedit-mode-switcher');
-  if (pill === null) {
-    return;
-  }
-
-  pill.style.display = previewState.mode === 'editor' ? '' : 'none';
-
-  pill.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach(button => {
-    button.classList.toggle('is-active', button.dataset.mode === previewState.mode);
-  });
-
-  const select = pill.querySelector<HTMLSelectElement>('.markedit-preview-standard-select');
-  if (select !== null) {
-    select.value = getActiveMarkdownRenderer().id;
-  }
 }
 
 export function getMarkdownPreviewMode(): MarkdownPreviewMode {
@@ -636,6 +916,8 @@ export function setMarkdownPreviewMode(mode: MarkdownPreviewMode): void {
     stopLiveSync();
     getEditorView()?.focus();
   }
+
+  publishViewState();
 }
 
 export function toggleMarkdownPreview(preferredMode?: 'split' | 'preview'): void {
@@ -657,6 +939,7 @@ export function toggleMarkdownPreview(preferredMode?: 'split' | 'preview'): void
 export function setMarkdownStandard(standard: MarkdownSyntaxStandard): void {
   setMarkdownSyntaxStandard(standard);
   updateContent(true);
+  publishViewState();
 }
 
 export function getMarkdownStandard(): MarkdownSyntaxStandard {
@@ -666,13 +949,74 @@ export function getMarkdownStandard(): MarkdownSyntaxStandard {
 export { registerMarkdownRenderer };
 
 export function setMarkdownRenderer(id: string): void {
+  if (!listMarkdownRenderers().some(engine => engine.id === id)) {
+    console.warn(`Unknown markdown renderer: ${id}`);
+    return;
+  }
+
+  const changed = getActiveMarkdownRenderer().id !== id;
   setActiveMarkdownRenderer(id);
+  if (changed) {
+    updateContent(true);
+    publishViewState();
+  }
+}
+
+/** Re-renders the preview, e.g. after a renderer plugin or the diagram server changed. */
+export function refreshMarkdownPreview(): void {
   updateContent(true);
 }
 
-export function ensureChromeUIModeSwitcher(): void {
-  ensureModeSwitcher();
-  updateModeSwitcher();
+export function isPreviewSyncScroll(): boolean {
+  return previewState.syncScroll;
+}
+
+/** View → Sync Preview Scroll. */
+export function togglePreviewSyncScroll(): void {
+  previewState.syncScroll = !previewState.syncScroll;
+  if (previewState.syncScroll) {
+    syncScroll();
+  }
+  publishViewState();
+}
+
+/** View → Copy Preview HTML: the rendered HTML of the document, in any view mode. */
+export async function copyPreviewHtml(): Promise<void> {
+  const framed = previewState.body !== null && previewFrame(previewState.body) !== null;
+  const html = previewState.mode !== 'editor' && previewState.body !== null && !framed
+    ? previewState.body.innerHTML
+    : await renderMarkdownAsync(getEditorText());
+  try {
+    await navigator.clipboard.writeText(html);
+  } catch (error) {
+    console.error('Failed to copy preview HTML:', error);
+  }
+}
+
+/**
+ * Reports the view mode, Markdown parser and scroll sync to the desktop host, which shows them
+ * as checkmarks in the native View menu (the page has no view buttons of its own).
+ */
+export function publishViewState(): void {
+  void reportViewState();
+}
+
+async function reportViewState(): Promise<void> {
+  const invoke = window.__TAURI_INTERNALS__?.invoke;
+  if (invoke === undefined) {
+    return;
+  }
+
+  try {
+    await invoke('view_state_changed', {
+      mode: previewState.mode,
+      renderer: getActiveMarkdownRenderer().id,
+      syncScroll: previewState.syncScroll,
+      livePreview: isEditorLivePreview(),
+    });
+  } catch (error) {
+    console.error('Failed to report view state:', error);
+  }
 }
 
 setupGlobalListeners();
