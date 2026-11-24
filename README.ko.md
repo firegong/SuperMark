@@ -1,6 +1,8 @@
 # SuperMark
 
-**SuperMark**는 macOS용 오픈소스 경량 마크다운 에디터 **[MarkEdit](https://github.com/MarkEdit-app/MarkEdit)** 를 기반으로, **Tauri v2 (Rust + WebView2 / WKWebView)** 를 사용해 macOS와 Windows에서 동작하도록 포팅·확장한 마크다운 에디터입니다.
+**SuperMark**는 macOS용 오픈소스 경량 마크다운 에디터 **[MarkEdit](https://github.com/MarkEdit-app/MarkEdit)** 를 기반으로, **Tauri v2 (Rust + Microsoft Edge WebView2)** 를 사용해 macOS와 Windows에서 동작하도록 포팅·확장한 마크다운 에디터입니다.
+
+SuperMark는 **Markdown Super Set Format** — MultiMarkdown 6, Pandoc, markdown-it, Obsidian의 장점을 모은 통합 마크다운 방언 — 을 시험하고 선보이기 위해 만들어졌습니다. 전체 사양은 [Markdown Super Set Format 저장소](https://github.com/firegong/Markdown-Super-Set-Format)를 참조하세요.
 
 ## 핵심 특징 (Core Highlights)
 
@@ -31,22 +33,14 @@
 
 ```text
 SuperMark/
-├── README.md                                 # 프로젝트 개요 및 빌드 안내
+├── README.md                                 # 프로젝트 개요 및 빌드 안내 (영어)
+├── README.ko.md                              # 한국어 버전
+├── LICENSE                                    # MIT License
 ├── .github/workflows/                        # CI 빌드 및 테스트 파이프라인
 ├── docs/                                     # 소프트웨어 공학 개발 산출물 (SDLC Artifacts)
-│   ├── 01-requirements/                      # 타당성 분석서 및 요구사항 명세서 (SRS)
-│   ├── 02-architecture/                      # 시스템 아키텍처 및 Native↔Web RPC 명세
-│   ├── 03-design/                            # 문서 수명주기 상세 설계서
-│   ├── 04-roadmap/                           # Phase 1~3 구현 로드맵
-│   └── 05-testing/                           # 테스트 및 검증 계획서
 ├── packages/
 │   └── core-editor/                          # MarkEdit CoreEditor (CodeMirror 6 + Fluent Chrome UI)
 ├── src-tauri/                                # 네이티브 호스트 (Rust / Tauri v2)
-│   ├── src/bridge/                           # 양방향 브리지 디스패처, 공유 DTO, SecretStorage
-│   ├── src/document/                         # 문서 세션, 인코딩, TextBundle/TextPack, 버전 히스토리, 파일 워처
-│   ├── src/extensions/                       # 유저 스크립트(.js) 및 스타일(.css) 로더
-│   ├── src/menu/                             # 네이티브 메뉴바 및 단축키 라우터
-│   └── src/settings/                         # EditorConfig 및 settings.json 매니저
 └── scripts/                                  # 코드 생성 및 빌드 자동화 스크립트
 ```
 
@@ -75,5 +69,4 @@ cargo build --release
 
 - 원작 프로젝트: [MarkEdit-app/MarkEdit](https://github.com/MarkEdit-app/MarkEdit) (MIT License, Copyright (c) cyanzhong and contributors)
 - SuperMark는 MarkEdit을 기반으로 Tauri v2로 포팅·확장한 프로젝트입니다.
-
-EOF
+- See `LICENSE` for the full license and third-party notices.

@@ -2,7 +2,7 @@
 
 **SuperMark** is a cross-platform (macOS + Windows) markdown editor ported and extended from **[MarkEdit](https://github.com/MarkEdit-app/MarkEdit)** using **Tauri v2 (Rust + WebView2 / WKWebView)**.
 
-SuperMark was created to showcase and test **Markdown Super Format** — a unified markdown dialect that collects the best syntax from MultiMarkdown 6, Pandoc, markdown-it, and Obsidian. See the [Markdown Super Format repository](https://github.com/firegong/Markdown-Super-Set-Format) for the full specification.
+SuperMark was created to showcase and test **Markdown Super Set Format** — a unified markdown dialect that collects the best syntax from MultiMarkdown 6, Pandoc, markdown-it, and Obsidian. See the [Markdown Super Set Format repository](https://github.com/firegong/Markdown-Super-Set-Format) for the full specification.
 
 ## Core Highlights
 
