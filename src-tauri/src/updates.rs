@@ -1,4 +1,4 @@
-//! In-app updates from the public releases repository (`firegong/SuperMark-releases`).
+//! In-app updates from the public releases repository (`firegong/SuperMark`).
 //!
 //! Releases are built and signed by `.github/workflows/release.yml` (tauri-action with
 //! `createUpdaterArtifacts`), which also uploads `latest.json`; `tauri.conf.json` points the
@@ -19,7 +19,7 @@ use tauri::{AppHandle, Manager, Runtime};
 use tauri_plugin_updater::UpdaterExt;
 
 /// Where people can download releases by hand.
-pub const RELEASES_PAGE: &str = "https://github.com/firegong/SuperMark-releases/releases";
+pub const RELEASES_PAGE: &str = "https://github.com/firegong/SuperMark/releases";
 
 /// The single-file build: updates are downloaded by hand.
 pub const PORTABLE: bool = cfg!(feature = "portable");
