@@ -536,11 +536,13 @@ pub fn build_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> 
 
     let edit_menu = SubmenuBuilder::new(app, "Edit")
         .item(
-            &MenuItemBuilder::with_id("edit.undo", shortcut_hint("Undo", "Cmd+Z"))
+            &MenuItemBuilder::with_id("edit.undo", "Undo")
+                .accelerator("CmdOrCtrl+Z")
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::with_id("edit.redo", shortcut_hint("Redo", "Cmd+Y"))
+            &MenuItemBuilder::with_id("edit.redo", "Redo")
+                .accelerator("CmdOrCtrl+Y")
                 .build(app)?,
         )
         .separator()
@@ -697,12 +699,14 @@ pub fn build_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> 
                 .build(app)?,
         )
         .item(
-            &CheckMenuItemBuilder::with_id("view.mode.split", shortcut_hint("Split Preview", "Cmd+Shift+P"))
+            &CheckMenuItemBuilder::with_id("view.mode.split", "Split Preview")
+                .accelerator("CmdOrCtrl+Shift+P")
                 .checked(view_state.mode == "split")
                 .build(app)?,
         )
         .item(
-            &CheckMenuItemBuilder::with_id("view.mode.preview", shortcut_hint("Markdown View", "Cmd+Shift+V"))
+            &CheckMenuItemBuilder::with_id("view.mode.preview", "Markdown View")
+                .accelerator("CmdOrCtrl+Shift+V")
                 .checked(view_state.mode == "preview")
                 .build(app)?,
         )
@@ -2048,10 +2052,10 @@ mod tests {
 
         // Keys the editor page handles itself (CodeMirror keymaps, chrome keydown handler).
         for page_key in [
-            "CmdOrCtrl+Z", "CmdOrCtrl+Y", "CmdOrCtrl+F", "CmdOrCtrl+H", "CmdOrCtrl+G",
+            "CmdOrCtrl+F", "CmdOrCtrl+H", "CmdOrCtrl+G",
             "Alt+Up", "Alt+Down", "Shift+Alt+Up", "Shift+Alt+Down", "CmdOrCtrl+]", "CmdOrCtrl+[",
             "CmdOrCtrl+/", "Shift+Alt+A", "CmdOrCtrl+Shift+O", "CmdOrCtrl+Shift+I",
-            "CmdOrCtrl+Shift+P", "CmdOrCtrl+Shift+V", "CmdOrCtrl+Shift+K", "CmdOrCtrl+M",
+            "CmdOrCtrl+Shift+K", "CmdOrCtrl+M",
             "Ctrl+Alt+Up", "Ctrl+Alt+Down",
         ] {
             assert!(!accelerators.iter().any(|acc| acc == page_key), "{page_key} is owned by the editor");
