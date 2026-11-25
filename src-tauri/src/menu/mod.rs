@@ -723,15 +723,12 @@ pub fn build_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> 
         .item(&MenuItemBuilder::with_id("view.toc", "Table of Contents").build(app)?)
         .item(&MenuItemBuilder::with_id("view.stats", "Document Statistics").build(app)?)
         .separator()
-        .item(&MenuItemBuilder::with_id("view.line_numbers", "Toggle Line Numbers").build(app)?)
-        .item(
-            &MenuItemBuilder::with_id("view.active_line", "Toggle Active Line Indicator")
-                .build(app)?,
-        )
-        .item(&MenuItemBuilder::with_id("view.line_wrapping", "Toggle Line Wrapping").build(app)?)
-        .item(&MenuItemBuilder::with_id("view.invisibles", "Toggle Invisible Characters").build(app)?)
-        .item(&MenuItemBuilder::with_id("view.typewriter", "Toggle Typewriter Mode").build(app)?)
-        .item(&MenuItemBuilder::with_id("view.focus", "Toggle Focus Mode").build(app)?)
+        .item(&CheckMenuItemBuilder::with_id("view.line_numbers", "Toggle Line Numbers").checked(crate::settings::SettingsManager::new().load_user_settings().show_line_numbers).build(app)?)
+        .item(&CheckMenuItemBuilder::with_id("view.active_line", "Toggle Active Line Indicator").checked(crate::settings::SettingsManager::new().load_user_settings().show_active_line_indicator).build(app)?)
+        .item(&CheckMenuItemBuilder::with_id("view.line_wrapping", "Toggle Line Wrapping").checked(crate::settings::SettingsManager::new().load_user_settings().line_wrapping).build(app)?)
+        .item(&CheckMenuItemBuilder::with_id("view.invisibles", "Toggle Invisible Characters").checked(crate::settings::SettingsManager::new().load_user_settings().invisibles_behavior != "never").build(app)?)
+        .item(&CheckMenuItemBuilder::with_id("view.typewriter", "Toggle Typewriter Mode").checked(crate::settings::SettingsManager::new().load_user_settings().typewriter_mode).build(app)?)
+        .item(&CheckMenuItemBuilder::with_id("view.focus", "Toggle Focus Mode").checked(crate::settings::SettingsManager::new().load_user_settings().focus_mode).build(app)?)
         .separator()
         .item(&MenuItemBuilder::with_id("view.theme", "Toggle Dark / Light Theme").build(app)?)
         .separator()
@@ -1592,6 +1589,41 @@ pub fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, menu_id: &str) {
     }
 
     if let Some(script) = menu_id_to_web_script(menu_id) {
+        // Toggle checkmark for view toggle items (read current state from settings, flip it).
+        let new_checked = match menu_id {
+            "view.line_numbers" => {
+                let s = crate::settings::SettingsManager::new().load_user_settings();
+                Some(!s.show_line_numbers)
+            }
+            "view.active_line" => {
+                let s = crate::settings::SettingsManager::new().load_user_settings();
+                Some(!s.show_active_line_indicator)
+            }
+            "view.line_wrapping" => {
+                let s = crate::settings::SettingsManager::new().load_user_settings();
+                Some(!s.line_wrapping)
+            }
+            "view.invisibles" => {
+                let s = crate::settings::SettingsManager::new().load_user_settings();
+                Some(s.invisibles_behavior == "never")
+            }
+            "view.typewriter" => {
+                let s = crate::settings::SettingsManager::new().load_user_settings();
+                Some(!s.typewriter_mode)
+            }
+            "view.focus" => {
+                let s = crate::settings::SettingsManager::new().load_user_settings();
+                Some(!s.focus_mode)
+            }
+            _ => None,
+        };
+        if let Some(checked) = new_checked {
+            if let Some(item) = app.menu().and_then(|m| m.get(menu_id)) {
+                if let Some(check) = item.as_check_menuitem() {
+                    let _ = check.set_checked(checked);
+                }
+            }
+        }
         if let Some(webview) = focused_webview(app) {
             let _ = webview.eval(&script);
         }
