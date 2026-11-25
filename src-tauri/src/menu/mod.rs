@@ -536,11 +536,11 @@ pub fn build_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> 
 
     let edit_menu = SubmenuBuilder::new(app, "Edit")
         .item(
-            &MenuItemBuilder::with_id("edit.undo", shortcut_hint("Undo", "Ctrl+Z"))
+            &MenuItemBuilder::with_id("edit.undo", shortcut_hint("Undo", "Cmd+Z"))
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::with_id("edit.redo", shortcut_hint("Redo", "Ctrl+Y"))
+            &MenuItemBuilder::with_id("edit.redo", shortcut_hint("Redo", "Cmd+Y"))
                 .build(app)?,
         )
         .separator()
@@ -697,12 +697,12 @@ pub fn build_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> 
                 .build(app)?,
         )
         .item(
-            &CheckMenuItemBuilder::with_id("view.mode.split", shortcut_hint("Split Preview", "Ctrl+Shift+P"))
+            &CheckMenuItemBuilder::with_id("view.mode.split", shortcut_hint("Split Preview", "Cmd+Shift+P"))
                 .checked(view_state.mode == "split")
                 .build(app)?,
         )
         .item(
-            &CheckMenuItemBuilder::with_id("view.mode.preview", shortcut_hint("Markdown View", "Ctrl+Shift+V"))
+            &CheckMenuItemBuilder::with_id("view.mode.preview", shortcut_hint("Markdown View", "Cmd+Shift+V"))
                 .checked(view_state.mode == "preview")
                 .build(app)?,
         )
@@ -1668,7 +1668,19 @@ fn shortcut_hint(label: &str, shortcut: &str) -> String {
     if cfg!(target_os = "windows") {
         format!("{label}\t{shortcut}")
     } else {
-        format!("{label} ({shortcut})")
+        // Show the shortcut as native-looking symbols instead of text in parentheses.
+        let symbols = shortcut
+            .split('+')
+            .map(|part| match part.trim() {
+                "CmdOrCtrl" | "Cmd" => "⌘",
+                "Ctrl" => "⌃",
+                "Shift" => "⇧",
+                "Alt" | "Option" => "⌥",
+                other => other,
+            })
+            .collect::<Vec<_>>()
+            .join("");
+        format!("{label}  {symbols}")
     }
 }
 
