@@ -1,275 +1,439 @@
+/* =============================================================================
+   SuperMark VS Code Style Sidebar & Layout
+   ============================================================================= */
+
+/* Root App Layout */
+.markedit-app-layout,
 .markedit-sidebar-container {
   display: flex;
+  flex-direction: row;
   height: 100vh;
   width: 100vw;
   overflow: hidden;
+  background: var(--chrome-bg-solid, #f3f3f3);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI Variable Text', 'Segoe UI', 'Apple SD Gothic Neo', 'Pretendard Variable', 'Malgun Gothic', system-ui, sans-serif;
+  color: var(--chrome-text, #1d1d1f);
 }
 
-.markedit-sidebar-toggle {
-  position: fixed;
-  top: 8px;
-  left: 8px;
-  z-index: 210;
-  width: 28px;
-  height: 28px;
-  border: none;
-  border-radius: 6px;
-  background: var(--chrome-bg, rgba(255, 255, 255, 0.9));
-  color: var(--chrome-text, #1d1d1f);
-  font-size: 14px;
-  cursor: pointer;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+body.is-col-resizing,
+body.is-col-resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+/* -----------------------------------------------------------------------------
+   Activity Bar (Far-left bar, 48px width)
+   ----------------------------------------------------------------------------- */
+
+.markedit-activity-bar {
+  width: 48px;
+  min-width: 48px;
+  max-width: 48px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  background: var(--chrome-bg-solid, #f3f3f3);
+  border-right: 1px solid var(--chrome-border, rgba(0, 0, 0, 0.08));
+  user-select: none;
+  z-index: 30;
+  box-sizing: border-box;
+}
+
+.markedit-activity-bar-top,
+.markedit-activity-bar-bottom {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.markedit-activity-btn {
+  width: 48px;
+  height: 48px;
   display: flex;
   align-items: center;
   justify-content: center;
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  color: var(--chrome-text-secondary, #666666);
+  opacity: 0.65;
+  position: relative;
+  transition: color 0.12s ease, opacity 0.12s ease, background-color 0.12s ease;
+  outline: none;
+  box-sizing: border-box;
 }
 
-/* In preview mode the sidebar takes only its own width (no transparent gap). */
-.markedit-mode-preview .markedit-sidebar-container {
-  width: 260px;
+.markedit-activity-btn:hover {
+  opacity: 1;
+  color: var(--chrome-text, #111111);
+  background: var(--chrome-hover, rgba(0, 0, 0, 0.04));
 }
 
-.markedit-sidebar-container.sidebar-hidden .markedit-sidebar {
-  display: none;
+.markedit-activity-btn:active {
+  background: var(--chrome-active, rgba(0, 0, 0, 0.08));
 }
 
-/* Sidebar is always visible in all modes (edit/split/preview). */
+.markedit-activity-btn.is-active {
+  opacity: 1;
+  color: var(--chrome-text, #111111);
+}
+
+/* VS Code active tab left indicator line */
+.markedit-activity-btn.is-active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--chrome-accent, #005fb8);
+}
+
+/* -----------------------------------------------------------------------------
+   Primary Side Bar (Explorer, Outline, etc.)
+   ----------------------------------------------------------------------------- */
+
 .markedit-sidebar {
   width: 260px;
-  min-width: 200px;
-  max-width: 400px;
-  border-right: 1px solid var(--chrome-border, rgba(0, 0, 0, 0.12));
+  min-width: 180px;
+  max-width: 600px;
+  height: 100%;
   display: flex;
   flex-direction: column;
-  background: var(--chrome-bg-solid, var(--chrome-bg, #f5f5f5));
-  font-size: 13px;
+  background: var(--chrome-bg-solid, #f3f3f3);
+  border-right: 1px solid var(--chrome-border, rgba(0, 0, 0, 0.08));
+  position: relative;
   overflow: hidden;
-  color: var(--chrome-text, #1d1d1f);
-  /* Sidebar in normal flow (no overlay). */
-  opacity: 1;
+  user-select: none;
+  z-index: 20;
+  flex-shrink: 0;
+  box-sizing: border-box;
 }
 
-.markedit-sidebar-tabs {
+.markedit-sidebar.is-hidden {
+  display: none !important;
+}
+
+/* Side Bar Header */
+.markedit-sidebar-header {
+  height: 35px;
+  min-height: 35px;
   display: flex;
-  border-bottom: 1px solid var(--chrome-border, rgba(0, 0, 0, 0.12));
-  background: var(--chrome-bg, #f5f5f5);
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px 0 16px;
+  border-bottom: 1px solid var(--chrome-border, rgba(0, 0, 0, 0.06));
+  box-sizing: border-box;
 }
 
-.markedit-sidebar-tab {
-  flex: 1;
-  padding: 9px 4px;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--chrome-text, #1d1d1f);
-  opacity: 0.6;
-  transition: opacity 0.12s ease;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-}
-
-.markedit-sidebar-tab:hover {
-  opacity: 0.85;
-}
-
-.markedit-sidebar-tab.is-active {
-  opacity: 1;
+.markedit-sidebar-title {
+  font-size: 11px;
   font-weight: 600;
-  border-bottom-color: var(--chrome-accent, #007aff);
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--chrome-text-secondary, #666666);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.markedit-sidebar-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.markedit-sidebar-icon-btn {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  padding: 0;
+  cursor: pointer;
+  color: var(--chrome-text-secondary, #666666);
+  transition: background-color 0.1s ease, color 0.1s ease;
+  outline: none;
+}
+
+.markedit-sidebar-icon-btn:hover {
+  background: var(--chrome-hover, rgba(0, 0, 0, 0.06));
+  color: var(--chrome-text, #111111);
+}
+
+.markedit-sidebar-icon-btn:active {
+  background: var(--chrome-active, rgba(0, 0, 0, 0.1));
+}
+
+/* Side Bar Content Panes */
+.markedit-sidebar-content {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  display: flex;
 }
 
 .markedit-sidebar-pane {
   display: none;
   flex: 1;
-  overflow: auto;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
   padding: 4px 0;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-
-.markedit-sidebar-pane::-webkit-scrollbar {
-  display: none;
-  width: 0;
-  height: 0;
+  box-sizing: border-box;
 }
 
 .markedit-sidebar-pane.is-active {
   display: block;
 }
 
-.markedit-filetree-dir {
-  font-weight: 600;
-  padding: 5px 8px;
-  color: var(--chrome-text, #1d1d1f);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+/* Side Bar Resizer */
+.markedit-sidebar-resizer {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  cursor: col-resize;
+  z-index: 25;
+  transition: background-color 0.15s ease;
+}
+
+.markedit-sidebar-resizer:hover {
+  background: var(--chrome-accent, #005fb8);
+}
+
+/* -----------------------------------------------------------------------------
+   File Tree (Explorer)
+   ----------------------------------------------------------------------------- */
+
+.markedit-filetree {
+  display: flex;
+  flex-direction: column;
+}
+
+.markedit-filetree-root-header {
   display: flex;
   align-items: center;
   gap: 6px;
-  cursor: default;
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  color: var(--chrome-text-secondary, #666666);
+  cursor: pointer;
   user-select: none;
+  border-bottom: 1px solid var(--chrome-border, rgba(0, 0, 0, 0.04));
+  transition: background-color 0.08s ease;
 }
 
-.markedit-filetree-dir .markedit-filetree-icon {
+.markedit-filetree-root-header:hover {
+  background: var(--chrome-hover, rgba(0, 0, 0, 0.04));
+  color: var(--chrome-text, #111111);
+}
+
+.markedit-filetree-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding-right: 8px;
   font-size: 13px;
+  color: var(--chrome-text, #1d1d1f);
+  cursor: pointer;
+  user-select: none;
+  border-radius: 4px;
+  margin: 1px 4px;
+  transition: background-color 0.08s ease, color 0.08s ease;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+.markedit-filetree-item:hover {
+  background: var(--chrome-hover, rgba(0, 0, 0, 0.05));
+}
+
+.markedit-filetree-item.is-active {
+  background: var(--chrome-accent-soft, rgba(0, 95, 184, 0.14));
+  color: var(--chrome-accent, #005fb8);
+  font-weight: 500;
+}
+
+.markedit-filetree-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  color: var(--chrome-text-secondary, #888888);
   flex-shrink: 0;
+}
+
+.markedit-filetree-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 16px;
-  text-align: center;
-}
-
-.markedit-filetree-dir .markedit-filetree-arrow {
-  font-size: 10px;
-  opacity: 0.55;
+  height: 16px;
   flex-shrink: 0;
-  transition: transform 0.12s ease;
-  display: inline-block;
-  width: 10px;
-  text-align: center;
 }
 
-.markedit-filetree-dirwrap {
-  display: block;
+.markedit-filetree-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
 }
 
 .markedit-filetree-children {
-  border-left: 1px solid var(--chrome-border, rgba(0, 0, 0, 0.14));
-  margin-left: 3px;
-  padding-left: 5px;
-  padding-top: 2px;
-  padding-bottom: 2px;
-}
-
-.markedit-filetree-file {
-  padding: 4px 8px;
-  cursor: pointer;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: var(--chrome-text, #1d1d1f);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  border-radius: 4px;
-  margin: 1px 6px 1px 0;
-  transition: background 0.1s ease;
   position: relative;
+  border-left: 1px solid var(--chrome-border, rgba(0, 0, 0, 0.08));
+  margin-left: 16px;
 }
 
-.markedit-filetree-file .markedit-filetree-icon {
-  font-size: 13px;
-  flex-shrink: 0;
-  width: 16px;
+/* Empty State */
+.markedit-sidebar-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 24px 16px;
+  gap: 12px;
+}
+
+.markedit-sidebar-empty-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--chrome-text-secondary, #666666);
   text-align: center;
 }
 
-.markedit-filetree-file::before {
-  content: '';
-  position: absolute;
-  left: -5px;
-  top: 50%;
-  width: 8px;
-  height: 1px;
-  background: var(--chrome-border, rgba(0, 0, 0, 0.14));
+.markedit-sidebar-empty-desc {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--chrome-text-secondary, #666666);
+  text-align: center;
+  margin-bottom: 6px;
 }
 
-.markedit-filetree-file:hover {
-  background: var(--chrome-hover, rgba(0, 0, 0, 0.06));
+.markedit-sidebar-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.1s ease, border-color 0.1s ease;
+  outline: none;
 }
 
-.markedit-filetree-file.is-active {
-  background: var(--chrome-accent-soft, rgba(0, 122, 255, 0.12));
-  color: var(--chrome-accent, #007aff);
+.markedit-sidebar-action-btn.primary {
+  background: var(--chrome-accent, #005fb8);
+  color: #ffffff;
+  border: 1px solid transparent;
 }
 
-.markedit-filetree-file:hover {
-  background: var(--chrome-hover, rgba(0, 0, 0, 0.06));
+.markedit-sidebar-action-btn.primary:hover {
+  background: var(--chrome-accent-hover, #0066c7);
 }
 
-.markedit-filetree-file.is-active {
-  background: var(--chrome-accent-soft, rgba(0, 122, 255, 0.12));
-  color: var(--chrome-accent, #007aff);
+.markedit-sidebar-action-btn.secondary {
+  background: transparent;
+  color: var(--chrome-text, #111111);
+  border: 1px solid var(--chrome-border, rgba(0, 0, 0, 0.15));
 }
 
-.markedit-filetree-file:hover {
-  background: var(--chrome-hover, rgba(0, 0, 0, 0.06));
+.markedit-sidebar-action-btn.secondary:hover {
+  background: var(--chrome-hover, rgba(0, 0, 0, 0.05));
 }
 
-.markedit-filetree-file.is-active {
-  background: var(--chrome-accent-soft, rgba(0, 122, 255, 0.12));
-  color: var(--chrome-accent, #007aff);
+/* -----------------------------------------------------------------------------
+   Outline View
+   ----------------------------------------------------------------------------- */
+
+.markedit-outline-list {
+  padding: 6px 0;
 }
 
 .markedit-outline-item {
-  padding: 5px 10px;
-  cursor: pointer;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: var(--chrome-text, #1d1d1f);
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  height: 26px;
+  padding-right: 10px;
+  font-size: 12px;
+  color: var(--chrome-text, #1d1d1f);
+  cursor: pointer;
+  user-select: none;
   border-radius: 4px;
-  margin: 1px 6px;
-  transition: background 0.1s ease;
-  position: relative;
-}
-
-.markedit-outline-item::before {
-  content: '§';
-  font-size: 11px;
-  opacity: 0.5;
-  flex-shrink: 0;
-  width: 12px;
-  text-align: center;
+  margin: 1px 4px;
+  transition: background-color 0.08s ease, color 0.08s ease;
+  box-sizing: border-box;
 }
 
 .markedit-outline-item:hover {
   background: var(--chrome-hover, rgba(0, 0, 0, 0.06));
 }
 
+.markedit-outline-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 600;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: var(--chrome-hover, rgba(0, 0, 0, 0.08));
+  color: var(--chrome-accent, #005fb8);
+  flex-shrink: 0;
+  min-width: 18px;
+}
+
+.markedit-outline-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
 .markedit-sidebar-empty {
-  padding: 16px 12px;
-  color: var(--chrome-muted, #8e8e93);
-  font-style: italic;
+  padding: 30px 16px;
   font-size: 12px;
+  color: var(--chrome-text-secondary, #888888);
   text-align: center;
+  font-style: italic;
 }
 
-.markedit-sidebar-empty-state {
+/* -----------------------------------------------------------------------------
+   Main Workspace Area (hosts #editor & Markdown preview)
+   ----------------------------------------------------------------------------- */
+
+.markedit-main-area {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 16px 12px;
-}
-
-.markedit-sidebar-action-btn {
-  padding: 8px 12px;
-  border: 1px solid var(--chrome-border, rgba(0, 0, 0, 0.15));
-  border-radius: 6px;
-  background: var(--chrome-bg, #ffffff);
-  color: var(--chrome-text, #1d1d1f);
-  font-size: 12px;
-  font-family: inherit;
-  cursor: pointer;
-  transition: background 0.1s ease, border-color 0.1s ease;
-}
-
-.markedit-sidebar-action-btn:hover {
-  background: var(--chrome-hover, rgba(0, 0, 0, 0.06));
-  border-color: var(--chrome-accent, #007aff);
-}
-
-.markedit-sidebar-action-btn.secondary {
-  background: transparent;
+  flex-direction: row;
+  position: relative;
+  overflow: hidden;
 }
 
 #editor {
   flex: 1;
   min-width: 0;
+  height: 100%;
   overflow: hidden;
 }

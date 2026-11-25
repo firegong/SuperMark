@@ -9,7 +9,7 @@ import { expandImports, extractAbbreviations, extractHeader, toLines, type Docum
 
 /**
  * gsync Markdown: the dialect of the gsync Markdown → Confluence tool, as documented in
- * docs/reference/GSYNC-MARKDOWN-SYNTAX.md (based on gsync's own parser, `mdparser`).
+ * docs/reference/GMARKDOWN-SYNTAX.md (based on gsync's own parser, `mdparser`).
  *
  * The preview follows gsync's output, with three intentional differences:
  * - math and abbreviation definitions inside fenced code are left alone (gsync changes them);

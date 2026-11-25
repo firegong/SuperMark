@@ -1,7 +1,7 @@
 import type { MarkdownRenderOptions } from '../../types';
 
 /**
- * Shared types of the gsync parser (docs/reference/GSYNC-MARKDOWN-SYNTAX.md).
+ * Shared types of the gsync parser (docs/reference/GMARKDOWN-SYNTAX.md).
  */
 
 /** A source line after pre-processing; `line` is the 0-based line in the edited document. */

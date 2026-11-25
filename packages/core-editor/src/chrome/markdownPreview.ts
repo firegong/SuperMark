@@ -704,7 +704,12 @@ function createPreviewPane(): HTMLElement {
   previewState.body = null;
 
   const pane = createElement('div', 'markedit-markdown-preview-pane');
-  document.body.appendChild(pane);
+  const mainArea = document.getElementById('markedit-main-area');
+  if (mainArea !== null) {
+    mainArea.appendChild(pane);
+  } else {
+    document.body.appendChild(pane);
+  }
 
   const body = createElement('div', 'markedit-preview-body', pane);
   body.addEventListener('scroll', handlePreviewScroll, { passive: true });
@@ -727,7 +732,12 @@ function ensureResizer(): HTMLElement | null {
   }
 
   const resizer = createElement('div', 'markedit-preview-resizer');
-  document.body.appendChild(resizer);
+  const mainArea = document.getElementById('markedit-main-area');
+  if (mainArea !== null) {
+    mainArea.appendChild(resizer);
+  } else {
+    document.body.appendChild(resizer);
+  }
 
   resizer.addEventListener('mousedown', event => {
     previewState.isDragging = true;
@@ -843,7 +853,10 @@ function setupGlobalListeners(): void {
       return;
     }
 
-    const ratio = Math.max(0.25, Math.min(0.75, event.clientX / window.innerWidth));
+    const mainArea = document.getElementById('markedit-main-area');
+    const bounds = mainArea?.getBoundingClientRect() ?? { left: 0, width: window.innerWidth };
+    const relativeX = event.clientX - bounds.left;
+    const ratio = Math.max(0.15, Math.min(0.85, relativeX / Math.max(1, bounds.width)));
     previewState.splitRatio = ratio;
     applyLayout();
   });

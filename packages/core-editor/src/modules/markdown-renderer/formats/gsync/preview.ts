@@ -5,7 +5,7 @@ import { resolvePreviewImages } from '../../../../common/documentPath';
 import type { PreviewRenderer } from '../../types';
 
 /**
- * Preview for gsync Markdown (docs/reference/GSYNC-MARKDOWN-SYNTAX.md): an HTML fragment, plus
+ * Preview for gsync Markdown (docs/reference/GMARKDOWN-SYNTAX.md): an HTML fragment, plus
  * files brought in with `@import "path"` (read ahead; the preview renders again when they arrive)
  * and code tabs (`::: code-tabs`).
  */

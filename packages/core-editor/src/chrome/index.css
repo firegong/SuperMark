@@ -1418,52 +1418,76 @@ body.markedit-reduce-transparency .markedit-chrome-panel {
 /* Markdown preview */
 
 .markedit-mode-split #editor {
+  position: relative;
+  width: 50%;
+  height: 100%;
+  z-index: 1;
+}
+
+body > .markedit-mode-split #editor {
   position: fixed;
   left: 0;
   top: 0;
   bottom: 0;
-  width: 50%;
   height: 100vh;
-  z-index: 1;
 }
 
 body.markedit-mode-preview #editor {
   visibility: hidden !important;
   pointer-events: none !important;
-  position: fixed !important;
+  position: absolute !important;
   inset: 0 !important;
   z-index: 0 !important;
 }
 
 .markedit-markdown-preview-pane {
-  position: fixed;
-  top: 0;
-  right: 0;
-  bottom: 0;
+  position: relative;
   width: 50%;
-  height: 100vh;
-  z-index: 50;
+  height: 100%;
+  z-index: 10;
   display: flex;
   flex-direction: column;
   background-color: var(--preview-bg, var(--chrome-bg-solid, #ffffff));
   color: var(--preview-fg, var(--chrome-text, #1f2328));
+  overflow: hidden;
+}
+
+body > .markedit-markdown-preview-pane {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  height: 100vh;
+  z-index: 50;
 }
 
 .markedit-mode-preview .markedit-markdown-preview-pane {
-  left: 260px;
-  width: calc(100vw - 260px);
+  left: 0;
+  width: 100%;
+}
+
+body > .markedit-mode-preview .markedit-markdown-preview-pane {
+  left: 0;
+  width: 100vw;
 }
 
 .markedit-preview-resizer {
-  position: fixed;
+  position: absolute;
   left: 50%;
   top: 0;
   bottom: 0;
   width: 6px;
-  z-index: 3;
+  margin-left: -3px;
+  z-index: 25;
   cursor: col-resize;
   background: var(--chrome-border);
   transition: background-color 140ms ease;
+}
+
+body > .markedit-preview-resizer {
+  position: fixed;
+  margin-left: 0;
+  z-index: 3;
 }
 
 .markedit-preview-resizer:hover {
