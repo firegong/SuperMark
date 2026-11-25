@@ -225,14 +225,16 @@ impl ExtensionManager {
             let Some(file_name) = script_path.file_name().and_then(|n| n.to_str()) else {
                 continue;
             };
+            // Policy: only themes are allowed from MarkEdit extensions.
+            // Feature scripts (parsers, renderers, etc.) are restricted to self-developed
+            // extensions (supermarkdown, gsync), which are built-in and handled separately.
+            if !is_theme_script(file_name) {
+                continue;
+            }
             let Ok(source) = fs::read_to_string(&script_path) else {
                 continue;
             };
-            let source = if is_theme_script(file_name) {
-                apply_theme_patch(&source)
-            } else {
-                source
-            };
+            let source = apply_theme_patch(&source);
             bootstrap.scripts.push(ExtensionScript {
                 path: script_path.to_string_lossy().into_owned(),
                 capability: file_name.to_string(),
@@ -295,15 +297,15 @@ impl ExtensionManager {
             let Some(file_name) = script_path.file_name().and_then(|n| n.to_str()) else {
                 continue;
             };
+            // Policy: only themes are allowed from MarkEdit extensions.
+            if !is_theme_script(file_name) {
+                continue;
+            }
             let Ok(js_source) = fs::read_to_string(&script_path) else {
                 continue;
             };
             let capability = file_name.to_string();
-            let js_source = if is_theme_script(file_name) {
-                apply_theme_patch(&js_source)
-            } else {
-                js_source
-            };
+            let js_source = apply_theme_patch(&js_source);
             let path_str = script_path.to_string_lossy().into_owned();
 
             descriptors.push(ScriptDescriptor {
@@ -578,7 +580,7 @@ mod tests {
         )
         .expect("write css");
         fs::write(
-            mgr.scripts_dir().join("hello-plugin.js"),
+            mgr.scripts_dir().join("markedit-theme-hello.js"),
             "MarkEdit.onAppReady(() => console.log('ready'));",
         )
         .expect("write js");
@@ -590,7 +592,7 @@ mod tests {
         assert!(bootstrap.contains(".cm-editor { font-size: 18px; }"));
         assert!(bootstrap.contains("__prepareScriptContexts__"));
         assert!(bootstrap.contains("__runScriptWithContext__"));
-        assert!(bootstrap.contains("hello-plugin.js"));
+        assert!(bootstrap.contains("markedit-theme-hello.js"));
         assert!(bootstrap.contains("MarkEdit.onAppReady"));
     }
 
@@ -626,7 +628,7 @@ mod tests {
         let mgr = ExtensionManager::new(tmp.path());
         mgr.ensure_directories().expect("ensure dirs");
         // ESM syntax is a parse error inside a function body; it must not break the bootstrap.
-        fs::write(mgr.scripts_dir().join("broken.js"), "import x from 'y';\n}}}")
+        fs::write(mgr.scripts_dir().join("markedit-theme-broken.js"), "import x from 'y';\n}}}")
             .expect("write js");
         mgr.config().reconcile_installed(&mgr.scripts_dir()).expect("reconcile");
 
@@ -642,9 +644,9 @@ mod tests {
         mgr.ensure_directories().expect("ensure dirs");
 
         for (name, body) in [
-            ("aaa-first.js", "// aaa"),
-            ("bbb-second.js", "// bbb"),
-            ("ccc-disabled.js", "// ccc"),
+            ("markedit-theme-aaa-first.js", "// aaa"),
+            ("markedit-theme-bbb-second.js", "// bbb"),
+            ("markedit-theme-ccc-disabled.js", "// ccc"),
         ] {
             fs::write(mgr.scripts_dir().join(name), body).expect("write script");
         }
@@ -654,7 +656,7 @@ mod tests {
         // Disable "bbb" and reorder: ccc (even though disabled) stays in record order.
         config.update(|updated| {
             let mut records = std::mem::take(&mut updated.installed);
-            if let Some(bbb) = records.iter_mut().find(|record| record.id == "bbb-second") {
+            if let Some(bbb) = records.iter_mut().find(|record| record.id == "markedit-theme-bbb-second") {
                 bbb.enabled = Some(false);
             }
             records.rotate_left(1);
@@ -667,14 +669,14 @@ mod tests {
         assert!(raw.contains(SCHEMA_URL));
 
         let bootstrap = mgr.build_extension_bootstrap_js();
-        assert!(bootstrap.contains("aaa-first.js"));
-        assert!(!bootstrap.contains("bbb-second.js"), "disabled record must be excluded: {bootstrap}");
-        assert!(bootstrap.contains("ccc-disabled.js"));
+        assert!(bootstrap.contains("markedit-theme-aaa-first.js"));
+        assert!(!bootstrap.contains("markedit-theme-bbb-second.js"), "disabled record must be excluded: {bootstrap}");
+        assert!(bootstrap.contains("markedit-theme-ccc-disabled.js"));
 
         // Record order wins: with rotate_left the first descriptor is bbb (excluded),
         // so the first prepared context must be ccc.
-        let ccc_pos = bootstrap.find("ccc-disabled.js").expect("ccc present");
-        let aaa_pos = bootstrap.find("aaa-first.js").expect("aaa present");
+        let ccc_pos = bootstrap.find("markedit-theme-ccc-disabled.js").expect("ccc present");
+        let aaa_pos = bootstrap.find("markedit-theme-aaa-first.js").expect("aaa present");
         assert!(ccc_pos < aaa_pos, "installed[] order must be respected");
     }
 
@@ -684,7 +686,7 @@ mod tests {
         let mgr = ExtensionManager::new(tmp.path());
         mgr.ensure_directories().expect("ensure dirs");
 
-        fs::write(mgr.scripts_dir().join("toggle.js"), "// toggle").expect("write script");
+        fs::write(mgr.scripts_dir().join("markedit-theme-toggle.js"), "// toggle").expect("write script");
         let config = mgr.config();
         config.reconcile_installed(&mgr.scripts_dir()).expect("reconcile");
         config

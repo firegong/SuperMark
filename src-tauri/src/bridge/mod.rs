@@ -811,7 +811,7 @@ mod tests {
         let doc_mgr = DocumentManager::with_data_dir(tmp.path().to_path_buf());
         doc_mgr.extensions().ensure_directories().unwrap();
         fs::write(
-            doc_mgr.extensions().scripts_dir().join("ext.js"),
+            doc_mgr.extensions().scripts_dir().join("markedit-theme-ext.js"),
             "MarkEdit.onAppReady(() => {});",
         )
         .unwrap();
@@ -828,7 +828,7 @@ mod tests {
 
         // A multi-megabyte extension (like markedit-preview.js) must not travel as an eval'd script.
         fs::write(
-            doc_mgr.extensions().scripts_dir().join("big.js"),
+            doc_mgr.extensions().scripts_dir().join("markedit-theme-big.js"),
             format!("/* {} */", "x".repeat(6 * 1024 * 1024)),
         )
         .unwrap();
@@ -841,7 +841,7 @@ mod tests {
         assert!(reply["restoreText"].is_null());
         let scripts = reply["extensions"]["scripts"].as_array().expect("scripts");
         assert_eq!(scripts.len(), 2);
-        assert!(scripts.iter().any(|script| script["capability"] == "ext.js"
+        assert!(scripts.iter().any(|script| script["capability"] == "markedit-theme-ext.js"
             && script["source"] == "MarkEdit.onAppReady(() => {});"));
 
         // Unsaved text recovered from a backup is delivered once.
