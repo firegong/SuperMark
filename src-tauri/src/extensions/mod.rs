@@ -15,9 +15,29 @@ use std::path::{Path, PathBuf};
 /// (id, name, description)
 pub const BUILTIN_EXTENSIONS: &[(&str, &str, &str)] = &[
     (
+        "extended",
+        "Extended (GFM + Math + Diagrams)",
+        "Markdown parser: GitHub Flavored Markdown plus math, diagrams and more. Choose it in View → Markdown Parser.",
+    ),
+    (
         "supermarkdown",
         "Markdown Super Set",
         "Markdown parser: MultiMarkdown 6 with Pandoc, GFM and Obsidian syntax, merged table cells, cross references, run/render chunks, includes and more. Choose it in View → Markdown Parser.",
+    ),
+    (
+        "gfm",
+        "GitHub Flavored Markdown (GFM)",
+        "Markdown parser: standard GitHub Flavored Markdown. Choose it in View → Markdown Parser.",
+    ),
+    (
+        "commonmark",
+        "CommonMark (Strict)",
+        "Markdown parser: strict CommonMark. Choose it in View → Markdown Parser.",
+    ),
+    (
+        "micromark",
+        "micromark (CommonMark + GFM)",
+        "Markdown parser: micromark CommonMark + GFM. Choose it in View → Markdown Parser.",
     ),
     (
         "gmarkdown",
@@ -39,7 +59,11 @@ pub struct BuiltinExtension {
 /// The built-in extension that provides a Markdown parser (renderer id → extension id).
 pub fn builtin_for_parser(parser_id: &str) -> Option<&'static str> {
     match parser_id {
+        "extended" => Some("extended"),
         "super" => Some("supermarkdown"),
+        "gfm" => Some("gfm"),
+        "commonmark" => Some("commonmark"),
+        "micromark" => Some("micromark"),
         "gmarkdown" => Some("gmarkdown"),
         _ => None,
     }
@@ -611,13 +635,14 @@ mod tests {
         mgr.ensure_directories().expect("ensure dirs");
 
         let state = mgr.get_manager_state(false, "1.0.0");
-        assert_eq!(state.builtins.len(), 2);
-        assert_eq!(state.builtins[0].id, "supermarkdown");
-        assert!(state.builtins[0].enabled);
+        assert_eq!(state.builtins.len(), 6);
+        let sm_index = state.builtins.iter().position(|b| b.id == "supermarkdown").expect("supermarkdown builtin");
+        assert!(state.builtins[sm_index].enabled);
         assert!(mgr.extension_bootstrap().disabled_builtins.is_empty());
 
         let off = mgr.set_extension_enabled("supermarkdown", false, "1.0.0").expect("disable");
-        assert!(!off.builtins[0].enabled);
+        let sm_index = off.builtins.iter().position(|b| b.id == "supermarkdown").expect("supermarkdown builtin");
+        assert!(!off.builtins[sm_index].enabled);
         assert!(off.installed.is_empty(), "built-ins are not installed[] records");
         assert_eq!(mgr.extension_bootstrap().disabled_builtins, vec!["supermarkdown".to_string()]);
         assert!(!mgr.is_builtin_enabled("supermarkdown"));
@@ -626,7 +651,8 @@ mod tests {
         mgr.set_extension_enabled("supermarkdown", false, "1.0.0").expect("disable again");
         assert_eq!(mgr.config().read().disabled_builtins.len(), 1);
         let on = mgr.set_extension_enabled("supermarkdown", true, "1.0.0").expect("enable");
-        assert!(on.builtins[0].enabled);
+        let sm_index = on.builtins.iter().position(|b| b.id == "supermarkdown").expect("supermarkdown builtin");
+        assert!(on.builtins[sm_index].enabled);
         assert!(mgr.is_builtin_enabled("supermarkdown"));
     }
 
