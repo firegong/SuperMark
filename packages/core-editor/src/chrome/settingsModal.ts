@@ -737,10 +737,10 @@ export function createSettingsModal(
 
   const tabsRow = createElement('div', 'markedit-chrome-settings-tabs', header);
   const tabs: Record<SettingsTab, string> = {
-    editor: 'Editor',
-    preview: 'Preview',
-    assistant: 'Assistant',
     general: 'General',
+    editor: 'Editor',
+    assistant: 'Assistant',
+    preview: 'Preview',
     window: 'Window',
   };
   const tabButtons = new Map<SettingsTab, HTMLButtonElement>();
