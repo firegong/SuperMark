@@ -13,11 +13,18 @@ use std::path::{Path, PathBuf};
 /// Extensions that ship with the app. They are listed in Extensions → Installed like
 /// default-installed extensions and can be turned off, but not uninstalled.
 /// (id, name, description)
-pub const BUILTIN_EXTENSIONS: &[(&str, &str, &str)] = &[(
-    "supermarkdown",
-    "Markdown Super Set",
-    "Markdown parser: MultiMarkdown 6 with Pandoc, GFM and Obsidian syntax, merged table cells, cross references, run/render chunks, includes and more. Choose it in View → Markdown Parser.",
-)];
+pub const BUILTIN_EXTENSIONS: &[(&str, &str, &str)] = &[
+    (
+        "supermarkdown",
+        "Markdown Super Set",
+        "Markdown parser: MultiMarkdown 6 with Pandoc, GFM and Obsidian syntax, merged table cells, cross references, run/render chunks, includes and more. Choose it in View → Markdown Parser.",
+    ),
+    (
+        "gmarkdown",
+        "gMarkdown Set",
+        "Markdown parser: gMarkdown Format with @import/@include, code tabs, diagrams, tables and more. Choose it in View → Markdown Parser.",
+    ),
+];
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -33,6 +40,7 @@ pub struct BuiltinExtension {
 pub fn builtin_for_parser(parser_id: &str) -> Option<&'static str> {
     match parser_id {
         "super" => Some("supermarkdown"),
+        "gmarkdown" => Some("gmarkdown"),
         _ => None,
     }
 }
@@ -603,7 +611,7 @@ mod tests {
         mgr.ensure_directories().expect("ensure dirs");
 
         let state = mgr.get_manager_state(false, "1.0.0");
-        assert_eq!(state.builtins.len(), 1);
+        assert_eq!(state.builtins.len(), 2);
         assert_eq!(state.builtins[0].id, "supermarkdown");
         assert!(state.builtins[0].enabled);
         assert!(mgr.extension_bootstrap().disabled_builtins.is_empty());
