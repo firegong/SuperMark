@@ -68,7 +68,7 @@ Status Legend: ✅ Implemented · ⚠️ Partially Implemented · ⛔ Not Implem
 | ID | Requirement | Status | Notes |
 | --- | --- | --- | --- |
 | FR-05.1 | Split / Markdown view preview, auto-refresh on edit | ✅ | |
-| FR-05.2 | Pluggable parsers: CommonMark, GFM, Extended (default), Markdown Super Set, micromark, gsync Markdown, markdown-it (extension) | ✅ | Each format has its own module folder (parser + preview); shared features centralized. Parser contract test suite |
+| FR-05.2 | Pluggable parsers: CommonMark, GFM, Extended (default), Markdown Super Set, micromark, gmarkdown Markdown, markdown-it (extension) | ✅ | Each format has its own module folder (parser + preview); shared features centralized. Parser contract test suite |
 | FR-05.3 | Markdown Super Set syntax (`MarkdownSuperSetGrammar.md` §0–30) | ⚠️ | Code execution chunks (§13), chunk cache, PNG diagrams, note embeds pending |
 | FR-05.4 | Diagrams (Mermaid, PlantUML, D2, Graphviz, draw.io): local tools with Kroki server fallback | ✅ | |
 | FR-05.5 | Math rendering (LaTeX → MathML, offline) | ✅ | |

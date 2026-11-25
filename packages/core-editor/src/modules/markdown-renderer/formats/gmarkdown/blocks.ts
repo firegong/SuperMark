@@ -8,15 +8,15 @@ import {
   safeId,
   splitTrailingAttributes,
   group,
-  type GsyncAttributes,
-  type GsyncContext,
-  type GsyncLine,
+  type GmarkdownAttributes,
+  type GmarkdownContext,
+  type GmarkdownLine,
 } from './context';
 import { InlineRenderer } from './inline';
 import { isTableStart, TableRenderer } from './tables';
 
 /**
- * gsync block syntax (§4), tried in its priority order: blank line → HTML comment → fenced code
+ * gmarkdown block syntax (§4), tried in its priority order: blank line → HTML comment → fenced code
  * → container / `???` → ATX heading → horizontal rule → blockquote → lists → `Table:` caption →
  * GFM table → raw HTML block → paragraph. Definition lists, footnotes and math blocks are
  * recognised before paragraphs.
@@ -44,16 +44,16 @@ const alertTypes = new Set(['note', 'tip', 'important', 'warning', 'caution']);
 const bulletMarkers = ['disc', 'circle', 'square', 'hollow-square'];
 const orderedTypes = ['A', 'a', 'I', 'i'];
 
-function isBlank(line: GsyncLine | undefined): boolean {
+function isBlank(line: GmarkdownLine | undefined): boolean {
   return line !== undefined && line.notice === undefined && line.rawHtml !== true && line.text.trim() === '';
 }
 
-function attributeHtml(attributes: GsyncAttributes | null): string {
+function attributeHtml(attributes: GmarkdownAttributes | null): string {
   const id = safeId(attributes?.id ?? null);
   return id === null ? '' : ` id="${escapeHtml(id)}"`;
 }
 
-function extraClasses(attributes: GsyncAttributes | null): string {
+function extraClasses(attributes: GmarkdownAttributes | null): string {
   return safeClasses(attributes?.classes ?? []).join(' ');
 }
 
@@ -69,7 +69,7 @@ export class BlockRenderer {
   readonly inline: InlineRenderer;
   private readonly tables: TableRenderer;
 
-  constructor(private readonly context: GsyncContext) {
+  constructor(private readonly context: GmarkdownContext) {
     this.inline = new InlineRenderer(context);
     this.tables = new TableRenderer(this.inline);
   }
@@ -78,7 +78,7 @@ export class BlockRenderer {
    * First pass: headings (so `@ref(id)` shows heading text anywhere in the document) and
    * footnote definitions (so references before their definition work).
    */
-  collectReferences(lines: GsyncLine[]): void {
+  collectReferences(lines: GmarkdownLine[]): void {
     const seen = new Map<string, number>();
     let fence: string | null = null;
     for (let index = 0; index < lines.length; index += 1) {
@@ -102,7 +102,7 @@ export class BlockRenderer {
       }
       const footnote = footnoteDefinition.exec(line.text);
       if (footnote !== null && !this.context.footnoteDefinitions.has(footnote[1])) {
-        const body: GsyncLine[] = [{ text: footnote[2], line: line.line }];
+        const body: GmarkdownLine[] = [{ text: footnote[2], line: line.line }];
         while (index + 1 < lines.length && !isBlank(lines[index + 1]) && !footnoteDefinition.test(lines[index + 1].text)) {
           index += 1;
           body.push(lines[index]);
@@ -112,7 +112,7 @@ export class BlockRenderer {
     }
   }
 
-  private headingParts(raw: string, used: Map<string, number>): { id: string; text: string; attributes: GsyncAttributes | null } {
+  private headingParts(raw: string, used: Map<string, number>): { id: string; text: string; attributes: GmarkdownAttributes | null } {
     const withoutClosing = raw.replace(/(?:^|[ \t]+)#+[ \t]*$/, '');
     const { text, attributes } = splitTrailingAttributes(withoutClosing);
     const base = safeId(attributes?.id ?? null) ?? headingId(text);
@@ -121,7 +121,7 @@ export class BlockRenderer {
     return { id: count === 0 ? base : `${base}-${count}`, text: text.trim(), attributes };
   }
 
-  render(lines: GsyncLine[]): string {
+  render(lines: GmarkdownLine[]): string {
     if (this.context.depth >= maxNestingDepth) {
       return `<p>${escapeHtml(lines.map(line => line.text).join('\n'))}</p>`;
     }
@@ -133,7 +133,7 @@ export class BlockRenderer {
     }
   }
 
-  private renderBlocks(lines: GsyncLine[]): string {
+  private renderBlocks(lines: GmarkdownLine[]): string {
     let html = '';
     let index = 0;
     let pendingCaption: string | null = null;
@@ -286,7 +286,7 @@ export class BlockRenderer {
     return html;
   }
 
-  private commentEnd(lines: GsyncLine[], index: number): number {
+  private commentEnd(lines: GmarkdownLine[], index: number): number {
     for (let cursor = index; cursor < lines.length; cursor += 1) {
       const text = cursor === index ? lines[cursor].text.replace(/^\s*<!--/, '') : lines[cursor].text;
       if (text.includes('-->')) {
@@ -297,7 +297,7 @@ export class BlockRenderer {
   }
 
   /** `` ```lang key="value" {attrs}`` (§4.5); diagrams become images (§9.1). */
-  private fencedCode(lines: GsyncLine[], index: number, fence: RegExpExecArray): { html: string; consumed: number } {
+  private fencedCode(lines: GmarkdownLine[], index: number, fence: RegExpExecArray): { html: string; consumed: number } {
     const indent = fence[1].length;
     const marker = fence[2];
     const body: string[] = [];
@@ -331,13 +331,13 @@ export class BlockRenderer {
     if (diagramLanguages.has(lang.toLowerCase())) {
       const diagram = this.context.hooks.renderDiagram(lang, code);
       if (diagram !== null) {
-        const caption = title === null ? '' : `<p class="gsync-figure-caption"><em>${this.inline.render(title)}</em></p>`;
-        return { html: `<div ${blockAttributes(line, 'gsync-diagram')}>${diagram}${caption}</div>`, consumed: cursor - index };
+        const caption = title === null ? '' : `<p class="gmarkdown-figure-caption"><em>${this.inline.render(title)}</em></p>`;
+        return { html: `<div ${blockAttributes(line, 'gmarkdown-diagram')}>${diagram}${caption}</div>`, consumed: cursor - index };
       }
     }
 
     const highlighted = lang === '' ? escapeHtml(code) : this.context.hooks.highlightCode(code, lang);
-    const titleHtml = title === null ? '' : `<div class="gsync-code-title">${this.inline.render(title)}</div>`;
+    const titleHtml = title === null ? '' : `<div class="gmarkdown-code-title">${this.inline.render(title)}</div>`;
     const titleAttribute = title === null ? '' : ` data-title="${escapeHtml(title)}"`;
     return {
       html: `<div ${blockAttributes(line, extraClasses(attributes))}${titleAttribute}${attributeHtml(attributes)}>${titleHtml}${codeBlockHtml(highlighted, lang)}</div>`,
@@ -346,7 +346,7 @@ export class BlockRenderer {
   }
 
   /** `$$` … `$$` on their own lines, or `$$…$$` alone on a line (§7). */
-  private mathBlock(lines: GsyncLine[], index: number): { html: string; consumed: number } {
+  private mathBlock(lines: GmarkdownLine[], index: number): { html: string; consumed: number } {
     const line = lines[index];
     const single = mathLine.exec(line.text);
     if (single !== null) {
@@ -363,7 +363,7 @@ export class BlockRenderer {
   }
 
   /** `::: type [title] [{attrs}]` … `:::`, nested; `code-tabs` splits at `@tab` (§4.9). */
-  private container(lines: GsyncLine[], index: number, open: RegExpExecArray): { html: string; consumed: number } {
+  private container(lines: GmarkdownLine[], index: number, open: RegExpExecArray): { html: string; consumed: number } {
     let depth = 1;
     let cursor = index + 1;
     let fence: string | null = null;
@@ -405,8 +405,8 @@ export class BlockRenderer {
     };
   }
 
-  private codeTabs(inner: GsyncLine[], line: number): string {
-    const tabs: { title: string; lines: GsyncLine[] }[] = [];
+  private codeTabs(inner: GmarkdownLine[], line: number): string {
+    const tabs: { title: string; lines: GmarkdownLine[] }[] = [];
     let fence: string | null = null;
     for (const entry of inner) {
       const fenceMatch = /^ {0,3}(`{3,}|~{3,})/.exec(entry.text);
@@ -433,13 +433,13 @@ export class BlockRenderer {
   }
 
   /** `??? [type] "title"` with content indented by 4 spaces or a tab (§4.10). */
-  private collapsible(lines: GsyncLine[], index: number, open: RegExpExecArray): { html: string; consumed: number } {
+  private collapsible(lines: GmarkdownLine[], index: number, open: RegExpExecArray): { html: string; consumed: number } {
     const header = (group(open, 2) ?? '').trim();
     const titleMatch = /"([^"]*)"\s*$/.exec(header);
     const type = (titleMatch === null ? header : header.slice(0, titleMatch.index)).trim().split(/\s+/)[0] || 'details';
     const title = titleMatch === null ? type : titleMatch[1];
 
-    const body: GsyncLine[] = [];
+    const body: GmarkdownLine[] = [];
     let cursor = index + 1;
     while (cursor < lines.length) {
       const text = lines[cursor].text;
@@ -461,7 +461,7 @@ export class BlockRenderer {
   }
 
   /** ATX heading with optional `{#id .class}` (§3); ids keep Hangul and are unique. */
-  private heading(line: GsyncLine, level: number, raw: string): string {
+  private heading(line: GmarkdownLine, level: number, raw: string): string {
     const { id, text, attributes } = this.headingParts(raw, this.context.headingIds);
     const classes = ['markedit-preview-heading', ...safeClasses(attributes?.classes ?? [])].join(' ');
     const safe = escapeHtml(id);
@@ -469,8 +469,8 @@ export class BlockRenderer {
   }
 
   /** `>` lines with lazy continuation; a blank line ends it; `[!TYPE]` makes an alert (§4.3, §8). */
-  private blockquote(lines: GsyncLine[], index: number): { html: string; consumed: number } {
-    const inner: GsyncLine[] = [];
+  private blockquote(lines: GmarkdownLine[], index: number): { html: string; consumed: number } {
+    const inner: GmarkdownLine[] = [];
     let cursor = index;
     while (cursor < lines.length && !isBlank(lines[cursor]) && lines[cursor].notice === undefined && lines[cursor].rawHtml !== true) {
       const text = lines[cursor].text;
@@ -496,7 +496,7 @@ export class BlockRenderer {
   }
 
   /** Lists (§4.4): nesting by indentation, no blocks inside items, a blank line ends the list. */
-  private list(lines: GsyncLine[], index: number): { html: string; consumed: number } {
+  private list(lines: GmarkdownLine[], index: number): { html: string; consumed: number } {
     const entries: ListEntry[] = [];
     let cursor = index;
     while (cursor < lines.length) {
@@ -572,7 +572,7 @@ export class BlockRenderer {
   }
 
   /** `Term` then `: definition` / `~ definition` (one blank line allowed), §4.11. */
-  private definitionList(lines: GsyncLine[], index: number): { html: string; consumed: number } | null {
+  private definitionList(lines: GmarkdownLine[], index: number): { html: string; consumed: number } | null {
     const definitionAt = (cursor: number) => {
       if (cursor < lines.length && definitionLine.test(lines[cursor].text)) {
         return cursor;
@@ -599,11 +599,11 @@ export class BlockRenderer {
         cursor += 1;
       }
     }
-    return { html: `<dl ${blockAttributes(lines[index].line, 'gsync-definitions')}>${html}</dl>`, consumed: Math.max(1, cursor - index) };
+    return { html: `<dl ${blockAttributes(lines[index].line, 'gmarkdown-definitions')}>${html}</dl>`, consumed: Math.max(1, cursor - index) };
   }
 
   /** Lines until a blank line or another block; every line break is `<br>` (§4.1). */
-  private paragraph(lines: GsyncLine[], index: number): { html: string; consumed: number } {
+  private paragraph(lines: GmarkdownLine[], index: number): { html: string; consumed: number } {
     const content: string[] = [];
     let cursor = index;
     while (cursor < lines.length) {
@@ -629,7 +629,7 @@ export class BlockRenderer {
 
     // `{…}` at the end belongs to the paragraph, unless it follows a link or image `)` (§4.1).
     let source = content.join('\n');
-    let attributes: GsyncAttributes | null = null;
+    let attributes: GmarkdownAttributes | null = null;
     const trailing = /[ \t]*\{([^{}]*)\}$/.exec(source);
     if (trailing !== null && source[trailing.index - 1] !== ')') {
       attributes = splitTrailingAttributes(source).attributes;

@@ -1,11 +1,11 @@
 import { describe, expect, jest, test } from '@jest/globals';
-import { builtInParsers, defaultParser, commonmarkEngine, gfmEngine, extendedEngine, gsyncEngine, superMarkdownEngine } from '../src/modules/markdown-renderer/formats';
+import { builtInParsers, defaultParser, commonmarkEngine, gfmEngine, extendedEngine, gmarkdownEngine, superMarkdownEngine } from '../src/modules/markdown-renderer/formats';
 import { markdownItEngine } from '../src/modules/markdown-renderer/formats/markdownIt';
 import type { MarkdownRendererEngine } from '../src/modules/markdown-renderer';
 import { framePreview, htmlPreview, previewFor, registerMarkdownFormat, registerMarkdownRenderer, type PreviewHost, type PreviewRenderer } from '../src/modules/markdown-renderer';
 import { builtInFormats } from '../src/modules/markdown-renderer/formats';
 import { superSetPreview } from '../src/modules/markdown-renderer/formats/markdownSuperSet';
-import { gsyncPreview } from '../src/modules/markdown-renderer/formats/gsync';
+import { gmarkdownPreview } from '../src/modules/markdown-renderer/formats/gmarkdown';
 
 const host = (): PreviewHost & { [K in keyof PreviewHost]: jest.Mock } => ({
   rerender: jest.fn(),
@@ -21,8 +21,8 @@ describe('Format modules, one folder each', () => {
   });
 
   test('the built-in parsers keep the ids the settings save, in menu order', () => {
-    expect(builtInParsers.map(parser => parser.id)).toEqual(['commonmark', 'gfm', 'extended', 'super', 'micromark', 'gsync']);
-    expect(defaultParser).toBe(extendedEngine);
+    expect(builtInParsers.map(parser => parser.id)).toEqual(['commonmark', 'gfm', 'extended', 'super', 'micromark', 'gmarkdown']);
+    expect(defaultParser).toBe(superMarkdownEngine);
     expect(superMarkdownEngine.name).toBe('Markdown Super Set');
   });
 
@@ -47,7 +47,7 @@ describe('Previews', () => {
     expect(previewFor(gfmEngine)).toBe(htmlPreview);
     expect(previewFor(extendedEngine)).toBe(htmlPreview);
     expect(previewFor(superMarkdownEngine)).toBe(superSetPreview);
-    expect(previewFor(gsyncEngine)).toBe(gsyncPreview);
+    expect(previewFor(gmarkdownEngine)).toBe(gmarkdownPreview);
     // Complete, self-styled documents go into a frame.
     expect(previewFor(markdownItEngine)).toBe(framePreview);
   });

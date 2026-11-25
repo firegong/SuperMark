@@ -4,7 +4,7 @@
 //! ```json
 //! {
 //!   "$schema": "https://raw.githubusercontent.com/MarkEdit-app/schemas/main/extensions.json",
-//!   "registry.url": "https://raw.githubusercontent.com/MarkEdit-app/extensions/main/index.json",
+//!   "registry.url": "https://raw.githubusercontent.com/firegong/SuperMark-extensions/main/index.json",
 //!   "registry.updateBehavior": "quiet",
 //!   "installed": [
 //!     { "id": "...", "version": null, "url": null, "sha256": "...", "file": "....js",
@@ -23,7 +23,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub const DEFAULT_REGISTRY_URL: &str =
-    "https://raw.githubusercontent.com/MarkEdit-app/extensions/main/index.json";
+    "https://raw.githubusercontent.com/firegong/SuperMark-extensions/main/index.json";
 pub const SCHEMA_URL: &str =
     "https://raw.githubusercontent.com/MarkEdit-app/schemas/main/extensions.json";
 

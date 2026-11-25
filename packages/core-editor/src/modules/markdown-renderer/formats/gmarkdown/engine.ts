@@ -4,26 +4,26 @@ import { renderDiagramWithPlugin, renderMathWithPlugin } from '../../plugins/reg
 import { diagramBlockHtml } from '../../plugins/builtin';
 import { escapeHtml } from '../../utils';
 import { BlockRenderer } from './blocks';
-import type { Abbreviation, GsyncContext, GsyncHooks, GsyncOptions } from './context';
+import type { Abbreviation, GmarkdownContext, GmarkdownHooks, GmarkdownOptions } from './context';
 import { expandImports, extractAbbreviations, extractHeader, toLines, type DocumentHeader } from './preprocess';
 
 /**
- * gsync Markdown: the dialect of the gsync Markdown → Confluence tool, as documented in
- * docs/reference/GMARKDOWN-SYNTAX.md (based on gsync's own parser, `mdparser`).
+ * gmarkdown Markdown: the dialect of the gmarkdown Markdown → Confluence tool, as documented in
+ * docs/reference/GMARKDOWN-SYNTAX.md (based on gmarkdown's own parser, `mdparser`).
  *
- * The preview follows gsync's output, with three intentional differences:
- * - math and abbreviation definitions inside fenced code are left alone (gsync changes them);
- * - `[[page]]` links to `page.md`, so the link opens the document in the app (gsync: page.html);
- * - front matter and metadata comments, which gsync removes, are shown in a header panel.
+ * The preview follows gmarkdown's output, with three intentional differences:
+ * - math and abbreviation definitions inside fenced code are left alone (gmarkdown changes them);
+ * - `[[page]]` links to `page.md`, so the link opens the document in the app (gmarkdown: page.html);
+ * - front matter and metadata comments, which gmarkdown removes, are shown in a header panel.
  *
  * The format module (engine + preview) is index.ts.
  */
 
-const hooks: GsyncHooks = {
+const hooks: GmarkdownHooks = {
   highlightCode,
   renderMath: (latex, displayMode) => renderMathWithPlugin(latex, displayMode),
   renderDiagram: (lang, code) => {
-    // PlantUML and Graphviz (§9.1); Mermaid stays a code block, as in gsync.
+    // PlantUML and Graphviz (§9.1); Mermaid stays a code block, as in gmarkdown.
     const pluginLang = lang.toLowerCase() === 'puml' ? 'plantuml' : lang.toLowerCase();
     const rendered = renderDiagramWithPlugin(pluginLang, code);
     return rendered === null ? null : diagramBlockHtml(pluginLang, code, rendered);
@@ -49,15 +49,15 @@ function headerHtml(header: DocumentHeader): string {
   const frontMatter = header.frontMatter === null
     ? ''
     : `<details><summary>Front Matter</summary><pre>${escapeHtml(header.frontMatter)}</pre></details>`;
-  return `<div class="markedit-preview-frontmatter gsync-header">${frontMatter}${table}</div>`;
+  return `<div class="markedit-preview-frontmatter gmarkdown-header">${frontMatter}${table}</div>`;
 }
 
-function renderGsync(markdown: string, options?: GsyncOptions): string {
+function renderGmarkdown(markdown: string, options?: GmarkdownOptions): string {
   const { header, body } = extractHeader(toLines(markdown));
   const imported = expandImports(body, options ?? {});
   const { abbreviations, body: lines } = extractAbbreviations(imported);
 
-  const context: GsyncContext = {
+  const context: GmarkdownContext = {
     hooks,
     abbreviations,
     abbreviationPattern: abbreviationPattern(abbreviations),
@@ -73,14 +73,14 @@ function renderGsync(markdown: string, options?: GsyncOptions): string {
   return headerHtml(header) + content + blocks.footnotes();
 }
 
-export const gsyncEngine: MarkdownRendererEngine = {
-  id: 'gsync',
-  name: 'gmarkdown set',
-  standard: 'gsync',
+export const gmarkdownEngine: MarkdownRendererEngine = {
+  id: 'gmarkdown',
+  name: 'gMarkdown set',
+  standard: 'gmarkdown',
   render(markdown: string, options?: MarkdownRenderOptions): string {
-    return renderGsync(markdown, options as GsyncOptions | undefined);
+    return renderGmarkdown(markdown, options as GmarkdownOptions | undefined);
   },
   renderMath: (latex, displayMode) => renderMathWithPlugin(latex, displayMode),
 };
 
-export type { GsyncOptions } from './context';
+export type { GmarkdownOptions } from './context';

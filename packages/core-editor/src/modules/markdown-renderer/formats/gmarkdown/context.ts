@@ -1,11 +1,11 @@
 import type { MarkdownRenderOptions } from '../../types';
 
 /**
- * Shared types of the gsync parser (docs/reference/GMARKDOWN-SYNTAX.md).
+ * Shared types of the gmarkdown parser (docs/reference/GMARKDOWN-SYNTAX.md).
  */
 
 /** A source line after pre-processing; `line` is the 0-based line in the edited document. */
-export interface GsyncLine {
+export interface GmarkdownLine {
   text: string;
   line: number;
   /** HTML imported with `@import "x.html"` (sanitized when rendered). */
@@ -14,14 +14,14 @@ export interface GsyncLine {
   notice?: string;
 }
 
-export interface GsyncOptions extends MarkdownRenderOptions {
+export interface GmarkdownOptions extends MarkdownRenderOptions {
   /** Reads a file for `@import "path"`; `null` when it cannot be read. */
   includeResolver?: (path: string, fromPath: string | null) => string | null;
   /** Path of the edited document, for relative `@import` paths. */
   documentPath?: string | null;
 }
 
-export interface GsyncHooks {
+export interface GmarkdownHooks {
   highlightCode(code: string, lang: string): string;
   renderMath(latex: string, displayMode: boolean): string;
   /** A rendered diagram (PlantUML, Graphviz), or null when it cannot be rendered. */
@@ -33,12 +33,12 @@ export interface Abbreviation {
   title: string;
 }
 
-export interface GsyncContext {
-  hooks: GsyncHooks;
+export interface GmarkdownContext {
+  hooks: GmarkdownHooks;
   abbreviations: Abbreviation[];
   /** One pattern matching every abbreviation, longest first; null without abbreviations. */
   abbreviationPattern: RegExp | null;
-  footnoteDefinitions: Map<string, GsyncLine[]>;
+  footnoteDefinitions: Map<string, GmarkdownLine[]>;
   footnoteOrder: string[];
   /** Heading ids already used (ids are made unique within the document). */
   headingIds: Map<string, number>;
@@ -57,15 +57,15 @@ export function group(match: RegExpExecArray, index: number): string | undefined
 export const maxNestingDepth = 64;
 
 /** `{#id .class key=value key="value with space" flag}` (§6). */
-export interface GsyncAttributes {
+export interface GmarkdownAttributes {
   id: string | null;
   classes: string[];
   values: Map<string, string>;
   flags: string[];
 }
 
-export function parseAttributes(source: string): GsyncAttributes {
-  const result: GsyncAttributes = { id: null, classes: [], values: new Map(), flags: [] };
+export function parseAttributes(source: string): GmarkdownAttributes {
+  const result: GmarkdownAttributes = { id: null, classes: [], values: new Map(), flags: [] };
   const token = /\s*(?:#([^\s"'{}]+)|\.([^\s"'{}]+)|([A-Za-z_][\w:.-]*)=(?:"([^"]*)"|'([^']*)'|([^\s"'{}]+))|([A-Za-z_][\w:.-]*))/y;
   let index = 0;
   while (index < source.length) {
@@ -113,7 +113,7 @@ export function safeSize(value: string | undefined): string | null {
 }
 
 /** Trailing `{…}` of a line: the attributes and the line without them. */
-export function splitTrailingAttributes(text: string): { text: string; attributes: GsyncAttributes | null } {
+export function splitTrailingAttributes(text: string): { text: string; attributes: GmarkdownAttributes | null } {
   const match = /[ \t]*\{([^{}]*)\}[ \t]*$/.exec(text);
   if (match === null) {
     return { text, attributes: null };

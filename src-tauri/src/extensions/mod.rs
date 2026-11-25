@@ -227,7 +227,7 @@ impl ExtensionManager {
             };
             // Policy: only themes are allowed from MarkEdit extensions.
             // Feature scripts (parsers, renderers, etc.) are restricted to self-developed
-            // extensions (supermarkdown, gsync), which are built-in and handled separately.
+            // extensions (supermarkdown, gmarkdown), which are built-in and handled separately.
             if !is_theme_script(file_name) {
                 continue;
             }

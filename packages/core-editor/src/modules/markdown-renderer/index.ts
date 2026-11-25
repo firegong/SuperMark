@@ -119,7 +119,7 @@ export function renderMermaid(code: string): string {
 
 export { commonmarkEngine, gfmEngine, extendedEngine, superMarkdownEngine };
 export { SuperMarkdownEngine, clearSuperSetIncludes } from './formats/markdownSuperSet';
-export { builtInFormats, defaultFormat, builtInParsers, defaultParser, gsyncEngine, micromarkEngine } from './formats';
+export { builtInFormats, defaultFormat, builtInParsers, defaultParser, gmarkdownEngine, micromarkEngine } from './formats';
 export { markdownItEngine, markdownItEngineId, markdownItFormat, isMarkdownItAvailable } from './formats/markdownIt';
 export { htmlPreview } from './preview/htmlPreview';
 export { framePreview, previewFrame, removePreviewFrame } from './preview/framePreview';

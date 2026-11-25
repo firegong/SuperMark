@@ -6,7 +6,7 @@ import { gfmFormat } from './gfm';
 import { extendedFormat } from './extended';
 import { superSetFormat } from './markdownSuperSet';
 import { micromarkFormat } from './micromark';
-import { gsyncFormat } from './gsync';
+import { gmarkdownFormat } from './gmarkdown';
 
 /**
  * The Markdown formats that ship with the app, one folder each, in the order of
@@ -25,10 +25,10 @@ export const builtInFormats: readonly MarkdownFormat[] = [
   extendedFormat,
   superSetFormat,
   micromarkFormat,
-  gsyncFormat,
+  gmarkdownFormat,
 ];
 
-export const defaultFormat: MarkdownFormat = extendedFormat;
+export const defaultFormat: MarkdownFormat = superSetFormat;
 
 /** The built-in parsers (the engines of builtInFormats). */
 export const builtInParsers: readonly MarkdownRendererEngine[] = builtInFormats.map(format => format.engine);
@@ -43,10 +43,10 @@ export function defaultPreviewFor(engine: MarkdownRendererEngine): PreviewRender
   return engine.renderDocument !== undefined ? framePreview : htmlPreview;
 }
 
-export { commonmarkFormat, gfmFormat, extendedFormat, superSetFormat, micromarkFormat, gsyncFormat };
+export { commonmarkFormat, gfmFormat, extendedFormat, superSetFormat, micromarkFormat, gmarkdownFormat };
 export { commonmarkEngine } from './commonmark';
 export { gfmEngine } from './gfm';
 export { extendedEngine } from './extended';
 export { superMarkdownEngine } from './markdownSuperSet';
 export { micromarkEngine } from './micromark';
-export { gsyncEngine } from './gsync';
+export { gmarkdownEngine } from './gmarkdown';

@@ -1,7 +1,7 @@
-import type { Abbreviation, GsyncLine, GsyncOptions } from './context';
+import type { Abbreviation, GmarkdownLine, GmarkdownOptions } from './context';
 
 /**
- * gsync pre-processing (§1): document header (§2), `@import` (§9.3) and abbreviations (§9.2).
+ * gmarkdown pre-processing (§1): document header (§2), `@import` (§9.3) and abbreviations (§9.2).
  * Line numbers of the edited document are kept on every line; imported lines take the number
  * of their `@import` line, so preview sync still points somewhere sensible.
  */
@@ -19,7 +19,7 @@ export interface DocumentHeader {
   metadata: { key: string; value: string }[];
 }
 
-export function toLines(text: string, fixedLine?: number): GsyncLine[] {
+export function toLines(text: string, fixedLine?: number): GmarkdownLine[] {
   return text
     .replace(/^\uFEFF/, '')
     .replace(/\r\n?/g, '\n')
@@ -28,7 +28,7 @@ export function toLines(text: string, fixedLine?: number): GsyncLine[] {
 }
 
 /** YAML (`---` … `---`/`...`) or TOML (`+++` … `+++`) front matter at the top. */
-function frontMatterEnd(lines: GsyncLine[]): number {
+function frontMatterEnd(lines: GmarkdownLine[]): number {
   const first = lines[0]?.text.trim();
   if (first !== '---' && first !== '+++') {
     return -1;
@@ -42,7 +42,7 @@ function frontMatterEnd(lines: GsyncLine[]): number {
   return -1;
 }
 
-export function stripFrontMatter(lines: GsyncLine[]): { frontMatter: string | null; body: GsyncLine[] } {
+export function stripFrontMatter(lines: GmarkdownLine[]): { frontMatter: string | null; body: GmarkdownLine[] } {
   const end = frontMatterEnd(lines);
   if (end === -1) {
     return { frontMatter: null, body: lines };
@@ -54,10 +54,10 @@ export function stripFrontMatter(lines: GsyncLine[]): { frontMatter: string | nu
 }
 
 /** Front matter and the metadata comments right after it (§2.1, §2.2), removed from the body. */
-export function extractHeader(lines: GsyncLine[]): { header: DocumentHeader; body: GsyncLine[] } {
+export function extractHeader(lines: GmarkdownLine[]): { header: DocumentHeader; body: GmarkdownLine[] } {
   const { frontMatter, body } = stripFrontMatter(lines);
   const metadata: { key: string; value: string }[] = [];
-  const keep: GsyncLine[] = [];
+  const keep: GmarkdownLine[] = [];
   let scanning = true;
   for (const line of body) {
     if (scanning) {
@@ -82,8 +82,8 @@ function isFenceLine(text: string): RegExpExecArray | null {
 }
 
 /** Calls `visit` for each line outside fenced code; lines inside fences are passed through. */
-function mapOutsideFences(lines: GsyncLine[], visit: (line: GsyncLine) => GsyncLine[] | null): GsyncLine[] {
-  const result: GsyncLine[] = [];
+function mapOutsideFences(lines: GmarkdownLine[], visit: (line: GmarkdownLine) => GmarkdownLine[] | null): GmarkdownLine[] {
+  const result: GmarkdownLine[] = [];
   let fence: string | null = null;
   for (const line of lines) {
     const fenceMatch = line.rawHtml === true ? null : isFenceLine(line.text);
@@ -172,14 +172,14 @@ function csvTable(text: string): string[] {
 }
 
 /** Expands `@import "path"` at the start of a line, outside code (§9.3). */
-export function expandImports(lines: GsyncLine[], options: GsyncOptions, fromPath: string | null = options.documentPath ?? null, stack: string[] = []): GsyncLine[] {
+export function expandImports(lines: GmarkdownLine[], options: GmarkdownOptions, fromPath: string | null = options.documentPath ?? null, stack: string[] = []): GmarkdownLine[] {
   return mapOutsideFences(lines, line => {
     const directive = /^@import[ \t]+"([^"]+)"[ \t]*$/.exec(line.text);
     if (directive === null) {
       return null;
     }
     const path = directive[1];
-    const notice = (message: string): GsyncLine[] => [{ text: '', line: line.line, notice: `@import "${path}": ${message}` }];
+    const notice = (message: string): GmarkdownLine[] => [{ text: '', line: line.line, notice: `@import "${path}": ${message}` }];
     const resolver = options.includeResolver;
     if (resolver === undefined) {
       return notice('file imports are not available in this preview');
@@ -219,7 +219,7 @@ export function expandImports(lines: GsyncLine[], options: GsyncOptions, fromPat
 }
 
 /** Collects `*[ABBR]: title` lines outside code (§9.2); the first definition wins. */
-export function extractAbbreviations(lines: GsyncLine[]): { abbreviations: Abbreviation[]; body: GsyncLine[] } {
+export function extractAbbreviations(lines: GmarkdownLine[]): { abbreviations: Abbreviation[]; body: GmarkdownLine[] } {
   const abbreviations: Abbreviation[] = [];
   const body = mapOutsideFences(lines, line => {
     const definition = /^\*\[([^\]]+)\]:[ \t]*(.*)$/.exec(line.text);

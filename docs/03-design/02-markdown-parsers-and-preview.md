@@ -33,15 +33,15 @@ packages/core-editor/src/
 │  │  ├─ extended/             Extended (default)            — same
 │  │  ├─ markdownSuperSet/     Markdown Super Set — own engine (engine·blocks·inline·attributes·context) + preview.ts (@include, tab sets)
 │  │  ├─ micromark/            micromark — parser.ts (micromark → mdast → shared mdast renderer) + HTML preview
-│  │  ├─ gsync/                gsync Markdown — engine.ts (preprocess·blocks·tables·inline·context) + preview.ts (@import, code tabs)
+│  │  ├─ gmarkdown/                gmarkdown Markdown — engine.ts (preprocess·blocks·tables·inline·context) + preview.ts (@import, code tabs)
 │  │  └─ markdownIt/           markdown-it (provided only when the MarkEdit Preview extension is installed) + frame preview
 │  ├─ preview/                 preview parts shared by formats
 │  │  ├─ htmlPreview.ts        HTML fragment insertion
 │  │  ├─ framePreview.ts       show a complete HTML document in an isolated frame
-│  │  ├─ tabSets.ts            tab set click handling (Super Set, gsync)
+│  │  ├─ tabSets.ts            tab set click handling (Super Set, gmarkdown)
 │  │  └─ includeLoader.ts      pre-read and cache @include / @import files
 │  ├─ core/blockEngine.ts      block/inline engine shared by CommonMark·GFM·Extended
-│  ├─ core/htmlSanitizer.ts    raw HTML filter (shared by Markdown Super Set and gsync)
+│  ├─ core/htmlSanitizer.ts    raw HTML filter (shared by Markdown Super Set and gmarkdown)
 │  ├─ core/mdastRenderer.ts    mdast syntax tree → preview HTML (shared by tree-based parsers)
 │  └─ plugins/                 diagram, math, code highlighting renderers
 └─ chrome/
@@ -84,7 +84,7 @@ Every parser implements `MarkdownRendererEngine` (`types.ts`).
 | GitHub Flavored Markdown (`gfm`) | `formats/gfm/` | same | CommonMark + tables, task lists, strikethrough, autolinks, footnotes, code highlighting |
 | Extended Markdown (`extended`, default) | `formats/extended/` | same | GFM + front matter, math, diagrams such as Mermaid, callouts |
 | Markdown Super Set (`super`) | `formats/markdownSuperSet/` | own engine | MultiMarkdown 6 + Pandoc·GFM·Obsidian syntax, cell merging, cross-references, execution/render chunks, file inclusion, etc. (`docs/05-testing/samples/MarkdownSuperSetGrammar.md`) |
-| gsync Markdown (`gsync`) | `formats/gsync/` | own engine | gsync (Markdown → Confluence tool) syntax (`docs/reference/GMARKDOWN-SYNTAX.md`): line break inside a paragraph = `<br>`, blockquote ending in a blank line, lists without blank lines with depth markers, MPE tables (3 caption types, `>` and trailing empty cells, `^` merging, lists and `!` nested tables inside cells), `:::` containers, code tabs, `???` foldables, attribute blocks `{…}`, `@ref`, wikilinks, abbreviations, `@import` (md·csv·html·code), typography, alerts, PlantUML·Graphviz diagrams |
+| gmarkdown Markdown (`gmarkdown`) | `formats/gmarkdown/` | own engine | gmarkdown (Markdown → Confluence tool) syntax (`docs/reference/GMARKDOWN-SYNTAX.md`): line break inside a paragraph = `<br>`, blockquote ending in a blank line, lists without blank lines with depth markers, MPE tables (3 caption types, `>` and trailing empty cells, `^` merging, lists and `!` nested tables inside cells), `:::` containers, code tabs, `???` foldables, attribute blocks `{…}`, `@ref`, wikilinks, abbreviations, `@import` (md·csv·html·code), typography, alerts, PlantUML·Graphviz diagrams |
 | micromark (`micromark`) | `formats/micromark/` | micromark → mdast → `core/mdastRenderer.ts` | Strict CommonMark + GFM (tables, task lists, strikethrough, autolinks, footnotes) + math. Diagrams and code highlighting via shared plugins. No front matter or callouts |
 | markdown-it (`markdown-it`) | `formats/markdownIt/` | MarkEdit Preview extension | Added to the list only when the extension is installed. Returns a complete document via `renderDocument` |
 
@@ -107,7 +107,7 @@ Every parser implements `MarkdownRendererEngine` (`types.ts`).
 | Code block (language label, Copy button) | `codeBlockHtml(code, lang)` | Code copy |
 | Table `markedit-preview-table` | `tableOpenTag()` | Table styling |
 
-### 3.4 gsync Format Design (`formats/gsync/`)
+### 3.4 gmarkdown Format Design (`formats/gmarkdown/`)
 
 | File | Role |
 | --- | --- |
@@ -116,14 +116,14 @@ Every parser implements `MarkdownRendererEngine` (`types.ts`).
 | `inline.ts` | Protects code, math, images, links, autolinks as placeholders, then applies emphasis, strikethrough, typography, abbreviations. Limits the search range for closing markers so pathological input stays linear |
 | `tables.ts` | Tables, caption priority (comment > `Table:` line > MPE caption row), cell merging, inline syntax inside cells |
 
-Differences from gsync output (preview purpose):
+Differences from gmarkdown output (preview purpose):
 
-| Item | gsync | This parser |
+| Item | gmarkdown | This parser |
 | --- | --- | --- |
-| Math and abbreviation definitions inside code | Converted (gsync bug) | Left untouched |
+| Math and abbreviation definitions inside code | Converted (gmarkdown bug) | Left untouched |
 | `[[page]]` | `page.html` | `page.md` — so the document opens in the app |
 | Front matter / metadata comments | Removed from output | Shown in a panel at the top of the preview (for inspection) |
-| Mermaid | Left as code block | Same (matches gsync) |
+| Mermaid | Left as code block | Same (matches gmarkdown) |
 
 ### 3.5 Shared Engine (`core/blockEngine.ts`) Processing Order
 
@@ -154,7 +154,7 @@ Editor change ─(MutationObserver, 50ms delay)─▶ markdownPreview.updateCont
    └─ previewFor(engine).render(body, text, engine, previewHost)
          ├─ htmlPreview      : body.innerHTML = engine.render(text) → host.didRenderHtml()
          ├─ superSetPreview  : engine.render(text, includeOptions) + tab sets → host.didRenderHtml()
-         ├─ gsyncPreview     : engine.render(text, includeOptions) + code tabs → host.didRenderHtml()
+         ├─ gmarkdownPreview     : engine.render(text, includeOptions) + code tabs → host.didRenderHtml()
          └─ framePreview     : engine.renderDocument(text) → <iframe sandbox="allow-same-origin"> → host.didLoadFrame()
 ```
 
@@ -178,10 +178,10 @@ Editor change ─(MutationObserver, 50ms delay)─▶ markdownPreview.updateCont
 | Links | Navigation is blocked. `#anchor` scrolls inside the preview; anything else is forwarded to the host's `open_link` (ARCH-001 §6 security) |
 | Scroll sync | Linear interpolation between `data-line` anchors, so both sides reach top/bottom together. Paused while editing or when there is a selection. Frame previews match by heading text |
 
-### 4.3 Format-Specific Previews (`formats/markdownSuperSet/preview.ts`, `formats/gsync/preview.ts`)
+### 4.3 Format-Specific Previews (`formats/markdownSuperSet/preview.ts`, `formats/gmarkdown/preview.ts`)
 
-- `@include path` (Super Set), `@import "path"` (gsync): rendering is synchronous, so included files are pre-read and cached (shared `preview/includeLoader.ts`); on first encounter a "loading" line is shown until the host read arrives, then re-rendered. The cache is cleared when the document changes or the window regains focus.
-- Tab sets (Super Set §26, gsync code tabs, shared `preview/tabSets.ts`): clicking a tab switches the panel and invalidates scroll anchors.
+- `@include path` (Super Set), `@import "path"` (gmarkdown): rendering is synchronous, so included files are pre-read and cached (shared `preview/includeLoader.ts`); on first encounter a "loading" line is shown until the host read arrives, then re-rendered. The cache is cleared when the document changes or the window regains focus.
+- Tab sets (Super Set §26, gmarkdown code tabs, shared `preview/tabSets.ts`): clicking a tab switches the panel and invalidates scroll anchors.
 
 ---
 
@@ -200,7 +200,7 @@ Editor change ─(MutationObserver, 50ms delay)─▶ markdownPreview.updateCont
 
 | Threat | Mitigation |
 | --- | --- |
-| Script in raw HTML | Shared engine escapes HTML. Markdown Super Set and gsync use the tag-level filter in `core/htmlSanitizer.ts` (blocks script/style/iframe/form/etc., removes event attributes) |
+| Script in raw HTML | Shared engine escapes HTML. Markdown Super Set and gmarkdown use the tag-level filter in `core/htmlSanitizer.ts` (blocks script/style/iframe/form/etc., removes event attributes) |
 | Dangerous URLs | `isUnsafeUrl`: control characters stripped, then `javascript:`, `vbscript:`, `data:` blocked |
 | Extension renderer documents | Isolated in `sandbox="allow-same-origin"` frame (no scripts), separated from app CSS |
 | Link clicks | Host `open_link`: only http(s)/mailto leave the app; documents open in the app; other files are only revealed in the file manager (never executed) |
@@ -215,7 +215,7 @@ Editor change ─(MutationObserver, 50ms delay)─▶ markdownPreview.updateCont
 | --- | --- |
 | `test/parsersAndPreviews.test.ts` | Format modules (parser/preview pairing), parser list/ids, per-parser syntax differences, per-format preview, format registration/replacement, frame render cancellation |
 | `test/parserContract.test.ts` | Preview markup contract for every built-in parser (block/checkbox line numbers, code blocks, tables) |
-| `test/gsyncParser.test.ts` | gsync syntax checked section by section (§2–9), full reference document render |
+| `test/gmarkdownParser.test.ts` | gmarkdown syntax checked section by section (§2–9), full reference document render |
 | `test/micromarkParser.test.ts` | micromark syntax accuracy, safety, Korean heading ids, pathological-input handling |
 | `test/superMarkdown.test.ts`, `superMarkdownMetadata.test.ts` | Markdown Super Set syntax overall, Korean metadata keys |
 | `test/syntaxHighlight.test.ts` | Per-language tokenization, theme classes, 4+ backtick fences |

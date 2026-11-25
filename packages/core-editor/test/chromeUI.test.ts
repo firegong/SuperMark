@@ -380,19 +380,12 @@ describe('Extensions Manager', () => {
     expect(invokeMock).toHaveBeenCalledWith('extensions_get_state', { forceRefresh: false });
 
     const cards = document.querySelectorAll('.markedit-chrome-extensions-card');
-    expect(cards.length).toBe(2);
-    expect(cards[0].textContent).toContain('MarkEdit Preview');
-    expect(cards[0].textContent).toContain('Featured');
-    expect(cards[1].textContent).toContain('Catppuccin Theme');
+    expect(cards.length).toBe(1);
+    expect(cards[0].textContent).toContain('Catppuccin Theme');
 
     const icons = document.querySelectorAll('.markedit-ext-icon');
-    expect(icons.length).toBe(2);
+    expect(icons.length).toBe(1);
 
-    const previewImg = document.querySelector('.markedit-chrome-extensions-card-icon .markedit-ext-icon-img') as HTMLImageElement | null;
-    expect(previewImg).not.toBeNull();
-    expect(previewImg?.src).toBe('https://github.com/MarkEdit-app.png?size=80');
-
-    expect(document.querySelector('.markedit-ext-verified-seal')).not.toBeNull();
     expect(document.querySelector('.markedit-ext-theme-preview')).not.toBeNull();
     expect(document.querySelectorAll('.markedit-ext-theme-pane').length).toBe(2);
   });
@@ -463,16 +456,6 @@ describe('Extensions Manager', () => {
     installButton.click();
 
     expect(invokeMock).toHaveBeenCalledWith('extensions_install', { id: 'markedit-theme-catppuccin' });
-  });
-
-  test('clicking Update on a discover card invokes extensions_update', async () => {
-    await openAndRender('discover');
-
-    const updateButton = document.querySelector('[data-action="update"][data-extension-id="markedit-preview"]') as HTMLButtonElement;
-    expect(updateButton).not.toBeNull();
-    updateButton.click();
-
-    expect(invokeMock).toHaveBeenCalledWith('extensions_update', { id: 'markedit-preview' });
   });
 
   test('Installed tab lists extensions and supports toggle/uninstall', async () => {
@@ -719,7 +702,7 @@ describe('Settings Modal', () => {
 
     const tabs = document.querySelectorAll('.markedit-chrome-settings-tab');
     expect(tabs.length).toBe(5);
-    expect(Array.from(tabs).map(tab => tab.textContent)).toEqual(['Editor', 'Preview', 'Assistant', 'General', 'Window']);
+    expect(Array.from(tabs).map(tab => tab.textContent)).toEqual(['General', 'Editor', 'Assistant', 'Preview', 'Window']);
 
     // A drop-down whose button and options show each theme's colors.
     expect(themeButton().dataset.value).toBe(sampleSettings.theme);

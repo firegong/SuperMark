@@ -1,10 +1,10 @@
 import { blockAttributes, tableOpenTag, taskCheckboxHtml } from '../../previewMarkup';
 import { escapeHtml } from '../../utils';
-import { group, safeClasses, safeId, type GsyncAttributes, type GsyncLine } from './context';
+import { group, safeClasses, safeId, type GmarkdownAttributes, type GmarkdownLine } from './context';
 import type { InlineRenderer } from './inline';
 
 /**
- * gsync tables: GFM tables (§4.6), MPE captions and merged cells (§4.7), and the syntax inside
+ * gmarkdown tables: GFM tables (§4.6), MPE captions and merged cells (§4.7), and the syntax inside
  * cells (§4.8): lists, task lists, separators and `!`-delimited nested tables.
  */
 
@@ -47,9 +47,9 @@ function isSeparatorRow(line: string): boolean {
 }
 
 /** A table starts here: a row with `|`, then a separator row. */
-export function isTableStart(lines: GsyncLine[], index: number): boolean {
+export function isTableStart(lines: GmarkdownLine[], index: number): boolean {
   const header = lines[index];
-  const separator = lines[index + 1] as GsyncLine | undefined;
+  const separator = lines[index + 1] as GmarkdownLine | undefined;
   return header.rawHtml !== true && header.text.includes('|') && separator !== undefined && isSeparatorRow(separator.text);
 }
 
@@ -116,7 +116,7 @@ export class TableRenderer {
    * Renders the table starting at `index` (header + separator + rows, then an optional `{…}`
    * line). `caption` comes from a `<!-- table title -->` comment or a `Table:` line.
    */
-  render(lines: GsyncLine[], index: number, caption: string | null): { html: string; consumed: number } {
+  render(lines: GmarkdownLine[], index: number, caption: string | null): { html: string; consumed: number } {
     const header = splitRow(lines[index].text);
     const aligns: Align[] = splitRow(lines[index + 1].text).map(cell => {
       const left = cell.startsWith(':');
@@ -131,8 +131,8 @@ export class TableRenderer {
       cursor += 1;
     }
 
-    let attributes: GsyncAttributes | null = null;
-    const attributeLine = lines[cursor] as GsyncLine | undefined;
+    let attributes: GmarkdownAttributes | null = null;
+    const attributeLine = lines[cursor] as GmarkdownLine | undefined;
     const attributeMatch = attributeLine === undefined ? null : /^\s*\{([^{}]*)\}\s*$/.exec(attributeLine.text);
     if (attributeMatch !== null) {
       attributes = parseTableAttributes(attributeMatch[1]);
@@ -186,7 +186,7 @@ export class TableRenderer {
     const classes = safeClasses(attributes?.classes ?? []);
     const id = safeId(attributes?.id ?? null);
     const open = tableOpenTag(classes.join(' '), id === null ? '' : ` id="${escapeHtml(id)}"`);
-    const captionHtml = caption === null ? '' : `<p class="gsync-table-caption"><strong>${this.inline.render(caption)}</strong></p>`;
+    const captionHtml = caption === null ? '' : `<p class="gmarkdown-table-caption"><strong>${this.inline.render(caption)}</strong></p>`;
     return {
       html: `<div ${blockAttributes(lines[index].line)}>${captionHtml}${open}${headerHtml}<tbody>${bodyHtml}</tbody></table></div>`,
       consumed: cursor - index,
@@ -206,7 +206,7 @@ export class TableRenderer {
     const flushList = () => {
       if (list !== null) {
         const tag = list.ordered ? 'ol' : 'ul';
-        html += `<${tag} class="gsync-cell-list">${list.items.join('')}</${tag}>`;
+        html += `<${tag} class="gmarkdown-cell-list">${list.items.join('')}</${tag}>`;
         list = null;
       }
     };
@@ -258,18 +258,18 @@ export class TableRenderer {
     const split = (part: string) => part.slice(1, -1).split('!').map(cell => cell.trim());
     const separator = split(parts[1]);
     if (!separator.every(cell => /^-{3,}$/.test(cell))) {
-      // Malformed: the text as written (gsync adds a parse warning comment).
+      // Malformed: the text as written (gmarkdown adds a parse warning comment).
       return null;
     }
     const header = split(parts[0]);
     const rows = parts.slice(2).map(split);
     const head = `<thead><tr>${header.map(cell => `<th>${this.inline.render(cell)}</th>`).join('')}</tr></thead>`;
     const body = rows.map(row => `<tr>${row.map(cell => `<td>${this.inline.render(cell)}</td>`).join('')}</tr>`).join('');
-    return `<table class="gsync-nested-table">${head}<tbody>${body}</tbody></table>`;
+    return `<table class="gmarkdown-nested-table">${head}<tbody>${body}</tbody></table>`;
   }
 }
 
-function parseTableAttributes(source: string): GsyncAttributes {
+function parseTableAttributes(source: string): GmarkdownAttributes {
   const classes: string[] = [];
   let id: string | null = null;
   for (const token of source.trim().split(/\s+/)) {

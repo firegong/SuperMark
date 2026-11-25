@@ -1,7 +1,7 @@
 import type { SuperMarkdownOptions } from '../formats/markdownSuperSet/context';
 
 /**
- * Files for Markdown Super Set `@include path` (§27) and gsync `@import "path"` in the preview.
+ * Files for Markdown Super Set `@include path` (§27) and gmarkdown `@import "path"` in the preview.
  *
  * Rendering is synchronous, so included files are read ahead of time: the resolver answers
  * from a cache, and a file it has not seen yet is fetched from the desktop host (relative to
@@ -88,7 +88,7 @@ async function loadFile(path: string, onLoaded: () => void): Promise<void> {
 
 /** Options for SuperMarkdown rendering in the preview; `onLoaded` re-renders the preview. */
 export function includeOptions(markdown: string, onLoaded: () => void): IncludeOptions | undefined {
-  // `@include path` (Markdown Super Set) and `@import "path"` (gsync).
+  // `@include path` (Markdown Super Set) and `@import "path"` (gmarkdown).
   if (!/^@(?:include|import)[ \t]/m.test(markdown) || hostApi()?.getFileContent === undefined) {
     return undefined;
   }

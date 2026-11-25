@@ -5,12 +5,12 @@ import { resolvePreviewImages } from '../../../../common/documentPath';
 import type { PreviewRenderer } from '../../types';
 
 /**
- * Preview for gsync Markdown (docs/reference/GMARKDOWN-SYNTAX.md): an HTML fragment, plus
+ * Preview for gmarkdown Markdown (docs/reference/GMARKDOWN-SYNTAX.md): an HTML fragment, plus
  * files brought in with `@import "path"` (read ahead; the preview renders again when they arrive)
  * and code tabs (`::: code-tabs`).
  */
-export const gsyncPreview: PreviewRenderer = {
-  id: 'gsync',
+export const gmarkdownPreview: PreviewRenderer = {
+  id: 'gmarkdown',
   render(body, text, engine, host) {
     removePreviewFrame(body);
     body.innerHTML = engine.render(text, includeOptions(text, () => host.rerender()));

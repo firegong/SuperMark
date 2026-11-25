@@ -1,9 +1,9 @@
 import { filterHtmlTag, htmlTagPattern } from '../../core/htmlSanitizer';
 import { escapeHtml, isUnsafeUrl } from '../../utils';
-import { group, headingId, parseAttributes, safeClasses, safeSize, type GsyncAttributes, type GsyncContext } from './context';
+import { group, headingId, parseAttributes, safeClasses, safeSize, type GmarkdownAttributes, type GmarkdownContext } from './context';
 
 /**
- * gsync inline syntax (§5), in its processing order: code, escapes, images, links, wiki links,
+ * gmarkdown inline syntax (§5), in its processing order: code, escapes, images, links, wiki links,
  * `@ref`, strikethrough, bold italic, bold, italic, autolinks, bare URLs, e-mail addresses and
  * typography. Constructs that later steps must not touch are replaced by placeholders first.
  *
@@ -68,7 +68,7 @@ function linkDestination(text: string, start: number): { url: string; title: str
 }
 
 /** `{…}` right after a link or image. */
-function trailingAttributes(text: string, start: number): { attributes: GsyncAttributes; end: number } | null {
+function trailingAttributes(text: string, start: number): { attributes: GmarkdownAttributes; end: number } | null {
   if (text[start] !== '{') {
     return null;
   }
@@ -79,7 +79,7 @@ function trailingAttributes(text: string, start: number): { attributes: GsyncAtt
   return { attributes: parseAttributes(text.slice(start + 1, close)), end: close + 1 };
 }
 
-function attributeHtml(attributes: GsyncAttributes | null, baseClass = ''): string {
+function attributeHtml(attributes: GmarkdownAttributes | null, baseClass = ''): string {
   const classes = [baseClass, ...safeClasses(attributes?.classes ?? [])].filter(name => name !== '');
   const id = attributes?.id;
   let html = classes.length > 0 ? ` class="${escapeHtml(classes.join(' '))}"` : '';
@@ -106,7 +106,7 @@ function wikiHref(target: string): string {
 export class InlineRenderer {
   private placeholders: string[] = [];
 
-  constructor(private readonly context: GsyncContext) {}
+  constructor(private readonly context: GmarkdownContext) {}
 
   render(text: string): string {
     const saved = this.placeholders;

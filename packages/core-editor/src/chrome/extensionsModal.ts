@@ -80,7 +80,7 @@ const behaviorLabels: Record<ExtensionUpdateBehavior, string> = {
 
 const categoryLabels: Record<'all' | 'extension' | 'theme', string> = {
   all: 'All',
-  extension: 'Extensions',
+  extension: 'Extensions (themes only)',
   theme: 'Themes',
 };
 
@@ -438,9 +438,9 @@ export function createExtensionsModal(
     return state.catalog
       .filter(entry => {
         const matchesCategory = discoverCategory === 'all'
-          ? true
+          ? entry.category === 'theme'
           : discoverCategory === 'extension'
-            ? entry.category !== 'theme'
+            ? false
             : entry.category === 'theme';
         return matchesCategory && matchesSearch(entry, searchQuery);
       })

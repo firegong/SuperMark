@@ -2733,35 +2733,35 @@ li.markedit-preview-task-item > p {
   display: none;
 }
 
-/* gsync Markdown (formats/gsync, docs/reference/GMARKDOWN-SYNTAX.md) */
+/* gmarkdown Markdown (formats/gmarkdown, docs/reference/GMARKDOWN-SYNTAX.md) */
 
-.markedit-preview-body .gsync-header details summary {
+.markedit-preview-body .gmarkdown-header details summary {
   cursor: pointer;
   font-weight: 600;
 }
 
-.markedit-preview-body .gsync-header pre {
+.markedit-preview-body .gmarkdown-header pre {
   margin: 6px 0 0;
   font-size: 12px;
   white-space: pre-wrap;
 }
 
-.markedit-preview-body .gsync-table-caption {
+.markedit-preview-body .gmarkdown-table-caption {
   margin: 0 0 6px;
 }
 
-.markedit-preview-body .gsync-code-title {
+.markedit-preview-body .gmarkdown-code-title {
   margin: 12px 0 -10px;
   font-size: 0.9em;
   font-weight: 600;
   opacity: 0.85;
 }
 
-.markedit-preview-body .gsync-diagram {
+.markedit-preview-body .gmarkdown-diagram {
   margin: 16px 0;
 }
 
-.markedit-preview-body .gsync-figure-caption {
+.markedit-preview-body .gmarkdown-figure-caption {
   text-align: center;
   font-size: 0.92em;
   opacity: 0.85;
@@ -2820,11 +2820,11 @@ li.markedit-preview-task-item > p {
 .markedit-preview-body ul[data-marker="square"] { list-style-type: square; }
 .markedit-preview-body ul[data-marker="hollow-square"] { list-style-type: "▫ "; }
 
-.markedit-preview-body .gsync-definitions dt {
+.markedit-preview-body .gmarkdown-definitions dt {
   font-weight: 600;
 }
 
-.markedit-preview-body .gsync-definitions dd {
+.markedit-preview-body .gmarkdown-definitions dd {
   margin: 0 0 8px 24px;
 }
 
@@ -2832,18 +2832,18 @@ li.markedit-preview-task-item > p {
   margin: 4px 0;
 }
 
-.markedit-preview-body .gsync-cell-list {
+.markedit-preview-body .gmarkdown-cell-list {
   margin: 0;
   padding-left: 18px;
 }
 
-.markedit-preview-body table.gsync-nested-table {
+.markedit-preview-body table.gmarkdown-nested-table {
   border-collapse: collapse;
   font-size: 0.95em;
 }
 
-.markedit-preview-body table.gsync-nested-table th,
-.markedit-preview-body table.gsync-nested-table td {
+.markedit-preview-body table.gmarkdown-nested-table th,
+.markedit-preview-body table.gmarkdown-nested-table td {
   padding: 2px 8px;
   border: 1px solid rgba(127, 127, 127, 0.4);
 }
