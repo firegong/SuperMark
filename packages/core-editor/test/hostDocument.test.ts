@@ -1,7 +1,6 @@
 import { describe, expect, test, beforeEach, jest } from '@jest/globals';
 import * as editor from './utils/editor';
 import { applyExtensions, loadHostDocument, reloadDocumentFromHost } from '../src/hostDocument';
-import { getActiveMarkdownRenderer, listMarkdownRenderers, setActiveMarkdownRenderer } from '../src/modules/markdown-renderer';
 import { listThemeExtensions, setThemeExtension, themeExtensionLabel } from '../src/chrome/themeExtensions';
 
 // resetEditor rebuilds the whole editor (covered by core tests); here it only needs the text.

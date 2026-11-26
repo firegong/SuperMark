@@ -738,12 +738,15 @@ function renderFolderTree(rootNode: FolderNode, container: HTMLElement): void {
 
   const rootChevron = document.createElement('span');
   rootChevron.className = 'markedit-filetree-arrow';
-  const isRootExpanded = expandedPaths.has(rootNode.path);
-  rootChevron.innerHTML = isRootExpanded ? ICONS.chevronDown : ICONS.chevronRight;
+  // Root folder is always expanded (Windows path matching can otherwise leave it collapsed).
+  if (!expandedPaths.has(rootNode.path)) {
+    expandedPaths.add(rootNode.path);
+  }
+  rootChevron.innerHTML = ICONS.chevronDown;
 
   const rootIcon = document.createElement('span');
   rootIcon.className = 'markedit-filetree-icon';
-  rootIcon.innerHTML = isRootExpanded ? ICONS.folderOpen : ICONS.folderClosed;
+  rootIcon.innerHTML = ICONS.folderOpen;
 
   const rootLabel = document.createElement('span');
   rootLabel.className = 'markedit-filetree-label root-name';
@@ -753,7 +756,7 @@ function renderFolderTree(rootNode: FolderNode, container: HTMLElement): void {
 
   const rootChildrenContainer = document.createElement('div');
   rootChildrenContainer.className = 'markedit-filetree-children-container';
-  rootChildrenContainer.style.display = isRootExpanded ? 'block' : 'none';
+  rootChildrenContainer.style.display = 'block';
 
   rootHeader.addEventListener('click', () => {
     const nextExpanded = !expandedPaths.has(rootNode.path);

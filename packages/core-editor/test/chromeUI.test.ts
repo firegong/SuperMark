@@ -7,13 +7,7 @@ import { createLivePreviewExtension, livePreviewExtension } from '../src/chrome/
 import { beginExtensionScript, endExtensionScript, resetThemeContributions } from '../src/chrome/themeExtensions';
 import {
   renderMarkdownToHtml,
-  setMarkdownSyntaxStandard,
-  getMarkdownSyntaxStandard,
-  registerMarkdownRenderer,
-  setActiveMarkdownRenderer,
   getActiveMarkdownRenderer,
-  renderMarkdown,
-  type MarkdownRendererEngine,
 } from '../src/modules/markdown-renderer';
 import * as editor from './utils/editor';
 import { initChromeUI } from '../src/chrome';

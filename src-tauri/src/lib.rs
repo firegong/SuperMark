@@ -701,8 +701,11 @@ fn build_folder_tree(root: &std::path::Path) -> FolderNode {
 #[tauri::command]
 async fn list_folder_tree(folder: String) -> Result<FolderNode, String> {
     let root = std::path::PathBuf::from(&folder);
+    if !root.exists() {
+        return Err(format!("path does not exist: {}", folder));
+    }
     if !root.is_dir() {
-        return Err("not a directory".to_string());
+        return Err(format!("not a directory: {}", folder));
     }
     Ok(build_folder_tree(&root))
 }
@@ -933,8 +936,10 @@ pub fn create_editor_window<R: Runtime>(
         .inner_size(960.0, 680.0)
         .min_inner_size(420.0, 300.0)
         .initialization_script(&init_script)
+        .visible(false)
         .build()?;
     fit_window_to_screen(&window, false);
+    let _ = window.show();
     let _ = window.set_focus();
     persist_last_session(app, None);
     Ok(window)
@@ -1030,10 +1035,11 @@ pub fn run() {
                 .min_inner_size(main_config.min_width.unwrap_or(420.0), main_config.min_height.unwrap_or(300.0))
                 .resizable(main_config.resizable)
                 .initialization_script(&init_script)
+                .visible(false)
                 .build()?;
+            fit_window_to_screen(&main_window, true);
             let _ = main_window.show();
             let _ = main_window.set_focus();
-            fit_window_to_screen(&main_window, true);
 
             let doc_mgr = app.state::<DocumentManager>();
 
