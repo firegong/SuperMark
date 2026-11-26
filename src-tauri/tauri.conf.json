@@ -5,6 +5,8 @@
   "version": "0.4.1",
   "identifier": "app.markedit.rust",
   "build": {
+    "beforeDevCommand": "yarn --cwd ../packages/core-editor dev",
+    "beforeBuildCommand": "yarn --cwd ../packages/core-editor build",
     "frontendDist": "../packages/core-editor/dist",
     "devUrl": "http://localhost:5173"
   },
