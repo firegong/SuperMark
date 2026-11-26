@@ -1,6 +1,6 @@
 [package]
 name = "supermark"
-version = "0.4.1"
+version = "0.4.2"
 description = "SuperMark — Markdown editor for Windows (Tauri v2 + WebView2 + CodeMirror 6 CoreEditor)"
 authors = ["SuperMark Contributors"]
 license = "MIT"
