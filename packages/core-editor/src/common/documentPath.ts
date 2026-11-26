@@ -62,12 +62,14 @@ export function resolveImageUrl(src: string): string | null {
   const absolute = decoded.startsWith('/') || decoded.startsWith('\\')
     ? decoded
     : base + decoded;
+  // Normalize separators to forward slashes for Tauri's asset protocol (Windows).
+  const normalized = absolute.replace(/\\/g, '/');
   const conv = (window as unknown as { __TAURI_INTERNALS__?: { convertFileSrc?: (p: string, protocol?: string) => string } }).__TAURI_INTERNALS__?.convertFileSrc;
   if (typeof conv !== 'function') {
     return null;
   }
   try {
-    return conv(absolute, 'asset');
+    return conv(normalized, 'asset');
   } catch {
     return null;
   }

@@ -847,7 +847,7 @@ function renderDirectoryNode(node: FolderNode, parentEl: HTMLElement, depth: num
 
 function renderFileNode(node: FolderNode, parentEl: HTMLElement, depth: number): void {
   const currentPath = getDocumentPath();
-  const isActive = currentPath !== null && (currentPath === node.path || currentPath.endsWith(node.path));
+  const isActive = currentPath !== null && (currentPath.toLowerCase() === node.path.toLowerCase() || currentPath.toLowerCase().endsWith(node.path.toLowerCase()));
 
   const fileItem = document.createElement('div');
   fileItem.className = `markedit-filetree-item markedit-filetree-file${isActive ? ' is-active' : ''}`;

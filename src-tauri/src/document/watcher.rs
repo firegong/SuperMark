@@ -117,3 +117,33 @@ impl ExternalFileWatcher {
         guard.contains_key(&target)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_path;
+    use std::path::PathBuf;
+
+    #[test]
+    fn normalize_strips_unc_prefix() {
+        let p = PathBuf::from(r"\\?\C:\foo\bar.md");
+        assert_eq!(normalize_path(&p), PathBuf::from("C:/foo/bar.md"));
+    }
+
+    #[test]
+    fn normalize_converts_backslashes() {
+        let p = PathBuf::from(r"C:\foo\bar\baz.md");
+        assert_eq!(normalize_path(&p), PathBuf::from("C:/foo/bar/baz.md"));
+    }
+
+    #[test]
+    fn normalize_unc_server_path() {
+        let p = PathBuf::from(r"\\?\UNC\server\share\file.md");
+        assert_eq!(normalize_path(&p), PathBuf::from("//server/share/file.md"));
+    }
+
+    #[test]
+    fn normalize_leaves_forward_slashes() {
+        let p = PathBuf::from("/tmp/foo.md");
+        assert_eq!(normalize_path(&p), PathBuf::from("/tmp/foo.md"));
+    }
+}
