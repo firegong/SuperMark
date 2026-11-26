@@ -3,6 +3,7 @@ pub mod diagnostics;
 pub mod diagrams;
 pub mod document;
 pub mod extensions;
+pub mod git;
 pub mod licenses;
 pub mod menu;
 pub mod links;
@@ -653,12 +654,6 @@ struct FolderNode {
     children: Vec<FolderNode>,
 }
 
-fn is_markdown(path: &std::path::Path) -> bool {
-    match path.extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase()) {
-        Some(ext) => matches!(ext.as_str(), "md" | "markdown" | "mdown" | "mkd" | "mkdn" | "txt"),
-        None => false,
-    }
-}
 
 fn build_folder_tree(root: &std::path::Path) -> FolderNode {
     let mut children = Vec::new();
@@ -673,7 +668,7 @@ fn build_folder_tree(root: &std::path::Path) -> FolderNode {
             }
             if path.is_dir() {
                 dirs.push(path);
-            } else if is_markdown(&path) {
+            } else {
                 files.push(path);
             }
         }
@@ -748,6 +743,51 @@ async fn replace_in_files(
         use_regex,
     };
     search::replace_in_files(&folder, &query, &replacement, opts, target_file.as_deref())
+}
+
+#[tauri::command]
+async fn git_status(folder: String) -> Result<git::GitStatus, String> {
+    git::status(&folder)
+}
+
+#[tauri::command]
+async fn git_diff(folder: String, path: String, staged: bool) -> Result<String, String> {
+    git::diff(&folder, &path, staged)
+}
+
+#[tauri::command]
+async fn git_stage(folder: String, paths: Vec<String>) -> Result<(), String> {
+    git::stage(&folder, &paths)
+}
+
+#[tauri::command]
+async fn git_unstage(folder: String, paths: Vec<String>) -> Result<(), String> {
+    git::unstage(&folder, &paths)
+}
+
+#[tauri::command]
+async fn git_commit(folder: String, message: String) -> Result<String, String> {
+    git::commit(&folder, &message)
+}
+
+#[tauri::command]
+async fn git_branches(folder: String) -> Result<Vec<String>, String> {
+    git::branches(&folder)
+}
+
+#[tauri::command]
+async fn git_checkout(folder: String, branch: String) -> Result<(), String> {
+    git::checkout(&folder, &branch)
+}
+
+#[tauri::command]
+async fn git_discard(folder: String, paths: Vec<String>) -> Result<(), String> {
+    git::discard(&folder, &paths)
+}
+
+#[tauri::command]
+async fn git_is_repo(folder: String) -> Result<bool, String> {
+    Ok(git::is_repo(&folder))
 }
 
 #[tauri::command]
@@ -1364,6 +1404,15 @@ pub fn run() {
             list_folder_tree,
             search_in_folder,
             replace_in_files,
+            git_status,
+            git_diff,
+            git_stage,
+            git_unstage,
+            git_commit,
+            git_branches,
+            git_checkout,
+            git_discard,
+            git_is_repo,
             extensions_bootstrap,
             diagram_tools_status,
             install_extension_from_url,

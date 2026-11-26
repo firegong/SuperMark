@@ -437,3 +437,128 @@ body.is-col-resizing * {
   height: 100%;
   overflow: hidden;
 }
+
+/* Search panel */
+.markedit-search-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  height: 100%;
+  overflow: auto;
+  box-sizing: border-box;
+}
+
+.markedit-search-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.markedit-search-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.markedit-search-toggles {
+  display: flex;
+  gap: 4px;
+}
+
+.markedit-search-toggle {
+  padding: 2px 6px;
+  font-size: 11px;
+  min-width: 28px;
+}
+
+.markedit-search-toggle-active {
+  background: var(--markedit-accent, #007acc);
+  color: #fff;
+}
+
+.markedit-search-action {
+  padding: 2px 8px;
+  font-size: 12px;
+}
+
+.markedit-search-status {
+  font-size: 11px;
+  opacity: 0.7;
+  padding: 2px 0;
+}
+
+.markedit-search-results {
+  flex: 1 1 auto;
+  overflow: auto;
+  font-size: 12px;
+}
+
+.markedit-search-file {
+  font-weight: 600;
+  padding: 6px 2px 2px;
+  opacity: 0.85;
+  cursor: default;
+}
+
+.markedit-search-matches {
+  padding-left: 4px;
+}
+
+.markedit-search-match-item {
+  display: flex;
+  gap: 6px;
+  padding: 2px 4px;
+  cursor: pointer;
+  border-radius: 3px;
+}
+
+.markedit-search-match-item:hover {
+  background: var(--markedit-hover, rgba(127,127,127,0.15));
+}
+
+.markedit-search-lineno {
+  opacity: 0.5;
+  min-width: 24px;
+  text-align: right;
+  flex: 0 0 auto;
+}
+
+.markedit-search-line {
+  flex: 1 1 auto;
+  white-space: pre;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.markedit-search-match {
+  background: rgba(255, 200, 0, 0.4);
+  border-radius: 2px;
+}
+
+/* Git panel */
+.markedit-git-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  height: 100%;
+  overflow: auto;
+  box-sizing: border-box;
+  font-size: 12px;
+}
+.markedit-git-header { font-weight: 600; }
+.markedit-git-branch { font-size: 13px; }
+.markedit-git-statusline { opacity: 0.7; font-size: 11px; }
+.markedit-git-commitrow { display: flex; flex-direction: column; gap: 6px; }
+.markedit-git-commitmsg { width: 100%; box-sizing: border-box; resize: vertical; min-height: 40px; }
+.markedit-git-commitbtn { align-self: flex-end; }
+.markedit-git-section { margin-top: 6px; }
+.markedit-git-section-title { font-weight: 600; padding: 4px 0; opacity: 0.8; text-transform: uppercase; font-size: 11px; }
+.markedit-git-list { display: flex; flex-direction: column; }
+.markedit-git-item { display: flex; align-items: center; gap: 6px; padding: 3px 4px; border-radius: 3px; cursor: pointer; }
+.markedit-git-item:hover { background: var(--markedit-hover, rgba(127,127,127,0.15)); }
+.markedit-git-item-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.markedit-git-item-status { flex: 0 0 auto; font-size: 11px; opacity: 0.7; width: 14px; text-align: center; }
+.markedit-git-item-actions { display: flex; gap: 2px; }
+.markedit-git-action { padding: 0 4px; font-size: 12px; cursor: pointer; }
+.markedit-git-empty { opacity: 0.6; padding: 12px; text-align: center; }

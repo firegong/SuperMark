@@ -38,7 +38,7 @@ function escapeHtml(s: string): string {
 export function renderSearch(container: HTMLElement): void {
   container.innerHTML = '';
 
-  const root = createElement('div', 'markedit-search-panel');
+  const root = createElement('div', 'markedit-search-panel', container);
 
   // Query row
   const queryRow = createElement('div', 'markedit-search-row', root);
@@ -158,7 +158,11 @@ export function renderSearch(container: HTMLElement): void {
         const lineNo = createElement('span', 'markedit-search-lineno', item);
         lineNo.textContent = String(m.line_number);
         const line = createElement('span', 'markedit-search-line', item);
-        line.innerHTML = highlightLine(m.line_text.trim(), m.start, m.end);
+        const trimmed = m.line_text.trimStart();
+        const leading = m.line_text.length - trimmed.length;
+        const start = Math.max(0, m.start - leading);
+        const end = Math.max(start, m.end - leading);
+        line.innerHTML = highlightLine(trimmed, start, end);
         item.addEventListener('click', () => {
           void openFileAt(f.path, m.line_number);
         });
@@ -171,10 +175,17 @@ export function renderSearch(container: HTMLElement): void {
     if (inv === undefined) return;
     try {
       await inv('open_document', { path });
-      setTimeout(() => {
+      let attempts = 0;
+      const tryGoto = () => {
         const sel = (window as unknown as { webModules?: { selection?: { gotoLine: (a: { lineNumber: number }) => void } } }).webModules?.selection;
-        sel?.gotoLine({ lineNumber: line });
-      }, 300);
+        if (sel !== undefined) {
+          sel.gotoLine({ lineNumber: line });
+        } else if (attempts < 10) {
+          attempts += 1;
+          setTimeout(tryGoto, 100);
+        }
+      };
+      setTimeout(tryGoto, 200);
     } catch (err) {
       console.error('[MarkEdit] open failed:', err);
     }

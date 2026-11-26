@@ -196,3 +196,41 @@ pub fn replace_in_files(
     }
     Ok(total)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::tempdir;
+
+    #[test]
+    fn finds_matches_in_files() {
+        let dir = tempdir().unwrap();
+        fs::write(dir.path().join("a.md"), "hello world\nfoo bar\n").unwrap();
+        fs::write(dir.path().join("b.txt"), "no match here\n").unwrap();
+        let res = search_in_folder(dir.path().to_str().unwrap(), "hello", SearchOptions { case_sensitive: false, whole_word: false, use_regex: false }, 100).unwrap();
+        assert_eq!(res.total_matches, 1);
+        assert_eq!(res.files.len(), 1);
+        assert_eq!(res.files[0].matches[0].line_number, 1);
+    }
+
+    #[test]
+    fn case_sensitive_and_regex() {
+        let dir = tempdir().unwrap();
+        fs::write(dir.path().join("a.md"), "Hello HELLO hello\n").unwrap();
+        let res = search_in_folder(dir.path().to_str().unwrap(), "hello", SearchOptions { case_sensitive: true, whole_word: false, use_regex: false }, 100).unwrap();
+        assert_eq!(res.total_matches, 1);
+        let res2 = search_in_folder(dir.path().to_str().unwrap(), "H(e|a)llo", SearchOptions { case_sensitive: false, whole_word: false, use_regex: true }, 100).unwrap();
+        assert_eq!(res2.total_matches, 3);
+    }
+
+    #[test]
+    fn replace_in_files_works() {
+        let dir = tempdir().unwrap();
+        fs::write(dir.path().join("a.md"), "foo bar foo\n").unwrap();
+        let n = replace_in_files(dir.path().to_str().unwrap(), "foo", "baz", SearchOptions { case_sensitive: false, whole_word: false, use_regex: false }, None).unwrap();
+        assert_eq!(n, 2);
+        let content = fs::read_to_string(dir.path().join("a.md")).unwrap();
+        assert_eq!(content, "baz bar baz\n");
+    }
+}

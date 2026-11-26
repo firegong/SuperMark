@@ -1,5 +1,6 @@
 import { getDocumentPath } from '../common/documentPath';
 import { renderSearch } from './searchPanel';
+import { renderGit } from './gitPanel';
 
 export type SidebarTab = 'files' | 'outline' | string;
 
@@ -91,6 +92,13 @@ const ICONS = {
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
       <circle cx="11" cy="11" r="7"></circle>
       <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+    </svg>`,
+  git: `
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="6" cy="6" r="2.5"></circle>
+      <circle cx="6" cy="18" r="2.5"></circle>
+      <circle cx="18" cy="12" r="2.5"></circle>
+      <path d="M6 8.5v7M8.5 6.5l7 4"></path>
     </svg>`,
   outline: `
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
@@ -384,6 +392,42 @@ function registerDefaultTabs(): void {
       renderSearch(container);
     },
     getHeaderActions: () => [
+      {
+        id: 'close-sidebar',
+        title: 'Close Side Bar',
+        iconSvg: ICONS.close,
+        onClick: () => {
+          setSidebarVisible(false);
+        },
+      },
+    ],
+  });
+
+  // 4. Source Control (Git) Tab
+  registerSidebarTab({
+    id: 'git',
+    title: 'SOURCE CONTROL',
+    tooltip: 'Source Control (Git)',
+    iconSvg: ICONS.git,
+    render: (container) => {
+      renderGit(container);
+    },
+    onActivate: () => {
+      const pane = getOrCreatePane('git');
+      const r = (pane as unknown as { __refreshGit?: () => void }).__refreshGit;
+      if (typeof r === 'function') r();
+    },
+    getHeaderActions: () => [
+      {
+        id: 'refresh-git',
+        title: 'Refresh',
+        iconSvg: ICONS.refresh,
+        onClick: () => {
+          const pane = getOrCreatePane('git');
+          const r = (pane as unknown as { __refreshGit?: () => void }).__refreshGit;
+          if (typeof r === 'function') r();
+        },
+      },
       {
         id: 'close-sidebar',
         title: 'Close Side Bar',

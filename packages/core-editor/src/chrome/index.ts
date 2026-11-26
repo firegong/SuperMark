@@ -13,6 +13,7 @@ import { showContextMenu } from './contextMenu';
 import { createExtensionsModal, ExtensionsManagerTab } from './extensionsModal';
 import { createSettingsModal, SettingsTab } from './settingsModal';
 import { createVersionHistoryModal } from './versionHistoryModal';
+import { toggleSidebar, setActiveTab, isSidebarVisible } from './sidebar';
 import {
   getMarkdownPreviewMode,
   setMarkdownPreviewMode,
@@ -362,6 +363,15 @@ export function initChromeUI(): void {
     } else if (event.shiftKey && !event.altKey && (event.key === 'V' || event.key === 'v')) {
       // Ctrl+Shift+V (as in VS Code). Ctrl+Alt+P was avoided: Ctrl+Alt is AltGr on many layouts.
       chromeUI.toggleMarkdownPreview('preview');
+      event.preventDefault();
+    } else if (event.shiftKey && !event.altKey && (event.key === 'F' || event.key === 'f')) {
+      // Ctrl+Shift+F: search in files sidebar.
+      if (!isSidebarVisible()) toggleSidebar(true);
+      setActiveTab('search', true);
+      event.preventDefault();
+    } else if (event.shiftKey && !event.altKey && (event.key === 'E' || event.key === 'e')) {
+      if (!isSidebarVisible()) toggleSidebar(true);
+      setActiveTab('files', true);
       event.preventDefault();
     }
   };
