@@ -437,10 +437,11 @@ export function createExtensionsModal(
   function getFilteredCatalog(): ExtensionCatalogEntry[] {
     return state.catalog
       .filter(entry => {
+        const isSelfDeveloped = (entry.author ?? '').toLowerCase() === 'firegong';
         const matchesCategory = discoverCategory === 'all'
-          ? entry.category === 'theme'
+          ? (entry.category === 'theme' || isSelfDeveloped)
           : discoverCategory === 'extension'
-            ? false
+            ? isSelfDeveloped
             : entry.category === 'theme';
         return matchesCategory && matchesSearch(entry, searchQuery);
       })
