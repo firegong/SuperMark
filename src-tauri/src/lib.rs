@@ -7,6 +7,7 @@ pub mod licenses;
 pub mod menu;
 pub mod links;
 pub mod settings;
+pub mod search;
 pub mod updates;
 
 use bridge::{dispatch_bridge_message, BridgeMessage, WebBridge};
@@ -716,6 +717,40 @@ async fn pick_folder() -> Result<Option<String>, String> {
 }
 
 #[tauri::command]
+async fn search_in_folder(
+    folder: String,
+    query: String,
+    case_sensitive: bool,
+    whole_word: bool,
+    use_regex: bool,
+) -> Result<search::SearchResult, String> {
+    let opts = search::SearchOptions {
+        case_sensitive,
+        whole_word,
+        use_regex,
+    };
+    search::search_in_folder(&folder, &query, opts, 5000)
+}
+
+#[tauri::command]
+async fn replace_in_files(
+    folder: String,
+    query: String,
+    replacement: String,
+    case_sensitive: bool,
+    whole_word: bool,
+    use_regex: bool,
+    target_file: Option<String>,
+) -> Result<usize, String> {
+    let opts = search::SearchOptions {
+        case_sensitive,
+        whole_word,
+        use_regex,
+    };
+    search::replace_in_files(&folder, &query, &replacement, opts, target_file.as_deref())
+}
+
+#[tauri::command]
 async fn pick_file() -> Result<Option<String>, String> {
     Ok(rfd::FileDialog::new()
         .add_filter("Markdown", &["md", "markdown", "mdown", "mkd", "txt"])
@@ -1327,6 +1362,8 @@ pub fn run() {
             pick_file,
             watch_document,
             list_folder_tree,
+            search_in_folder,
+            replace_in_files,
             extensions_bootstrap,
             diagram_tools_status,
             install_extension_from_url,

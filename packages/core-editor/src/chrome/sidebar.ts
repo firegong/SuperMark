@@ -1,4 +1,5 @@
 import { getDocumentPath } from '../common/documentPath';
+import { renderSearch } from './searchPanel';
 
 export type SidebarTab = 'files' | 'outline' | string;
 
@@ -85,6 +86,11 @@ const ICONS = {
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
       <path d="M15.5 2H6.5A2.5 2.5 0 0 0 4 4.5v13A2.5 2.5 0 0 0 6.5 20H15.5A2.5 2.5 0 0 0 18 17.5V4.5A2.5 2.5 0 0 0 15.5 2z"/>
       <path d="M18 6h1.5A2.5 2.5 0 0 1 22 8.5v11A2.5 2.5 0 0 1 19.5 22H9.5A2.5 2.5 0 0 1 7 19.5V18"/>
+    </svg>`,
+  search: `
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="11" cy="11" r="7"></circle>
+      <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
     </svg>`,
   outline: `
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
@@ -368,6 +374,27 @@ function registerDefaultTabs(): void {
       },
     ],
   });
+  // 3. Search Tab
+  registerSidebarTab({
+    id: 'search',
+    title: 'SEARCH',
+    tooltip: 'Search in Files (Ctrl+Shift+F)',
+    iconSvg: ICONS.search,
+    render: (container) => {
+      renderSearch(container);
+    },
+    getHeaderActions: () => [
+      {
+        id: 'close-sidebar',
+        title: 'Close Side Bar',
+        iconSvg: ICONS.close,
+        onClick: () => {
+          setSidebarVisible(false);
+        },
+      },
+    ],
+  });
+
 }
 
 // -----------------------------------------------------------------------------
@@ -696,6 +723,7 @@ export async function openFolder(path: string): Promise<void> {
   try {
     const tree = (await inv('list_folder_tree', { folder: path })) as FolderNode;
     currentFolderPath = path;
+    (window as unknown as { __markeditCurrentFolderPath?: string | null }).__markeditCurrentFolderPath = path;
     currentFolderTree = tree;
     expandedPaths.add(path);
 
