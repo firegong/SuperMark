@@ -26,7 +26,7 @@ import {
 registerBuiltinRendererPlugins();
 
 const placeholderPattern = new RegExp(`${placeholderStart}([XTE]):([^${placeholderEnd}]*)${placeholderEnd}`, 'g');
-// Keys in any script (`제목: …`), not only ASCII.
+// Keys in any script (`title: …`), not only ASCII.
 const metadataKeyPattern = /^([\p{L}\p{N}_][\p{L}\p{N} _.-]{0,40}?):(?:[ \t]+(.*))?$/u;
 
 interface Metadata {
@@ -318,8 +318,8 @@ function renderToc(context: SuperContext, depth: number): string {
 }
 
 /**
- * "식 [#eq:energy]" should read "식 (1)", not "식 식 (1)": when the text right before a
- * reference already ends with the label's leading word (식, 그림, 표, 목록, …), drop it.
+ * "Eq. [#eq:energy]" should read "Eq. (1)", not "Eq. Eq. (1)": when the text right before a
+ * reference already ends with the label's leading word (Eq., Fig., Table, List, …), drop it.
  */
 function omitRepeatedWord(label: string, before: string): string {
   const space = label.indexOf(' ');

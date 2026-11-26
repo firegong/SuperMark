@@ -29,7 +29,7 @@ export function emptyAttributes(): AttributeSet {
  * Tokenizes `.class #id key=value key="quoted value" keyword`.
  *
  * Unquoted values may contain spaces as long as the following words are not another `key=`
- * token (`caption=계산 예시 label=x` → caption is `계산 예시`), matching the §13.2 example.
+ * token (`caption=example label=x` → caption is `example`), matching the §13.2 example.
  */
 export function parseAttributes(source: string): AttributeSet {
   const result = emptyAttributes();

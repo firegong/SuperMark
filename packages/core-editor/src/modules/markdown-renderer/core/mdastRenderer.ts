@@ -51,7 +51,7 @@ function plainText(node: Nodes): string {
   return text;
 }
 
-/** Heading ids in any script (`## 설계` → `설계`), unique within the document. */
+/** Heading ids in any script (`## design` → `design`), unique within the document. */
 function slug(text: string): string {
   const base = text
     .toLowerCase()

@@ -1,12 +1,10 @@
-# `src-tauri` (Windows Native Host)
+This directory contains the Tauri v2 (Rust + Microsoft Edge WebView2) based Windows native host application code.
 
-이 디렉터리에는 Tauri v2 (Rust + Microsoft Edge WebView2) 기반의 Windows 네이티브 호스트 애플리케이션 코드가 위치합니다.
-
-## 모듈 구조 (예정)
-- `src/main.rs` / `src/lib.rs`: 앱 엔트리포인트 및 Tauri 빌더 설정
-- `src/bridge/`:
-  - `generated/`: `ts-gyb`가 자동 생성한 Native/Web RPC 트레잇 및 공유 DTO
-  - `dispatcher.rs`: WebView2 ↔ Rust 브리지 메시지 라우터
-- `src/document/`: `NSDocument`를 대체하는 문서 세션, 인코딩/줄바꿈 처리, 파일 워처, 자동 백업 관리
-- `src/menu/`: Windows 네이티브 메뉴바 및 컨텍스트 메뉴 (`muda`)
-- `src/settings/`: `%APPDATA%/MarkEdit/settings.json` 및 유저 스크립트/스타일 로더
+## Module structure (planned)
+- `src/main.rs` / `src/lib.rs`: app entry point and Tauri builder setup
+- `src/document/`: document sessions replacing `NSDocument`, encoding/line-break handling, file watcher, auto-backup management
+- `src/menu/`: Windows native menu bar and context menus (`muda`)
+- `src/settings/`: `%APPDATA%/SuperMark/settings.json` and user script/style loader
+- `src/extensions/`: extension manager
+- `src/diagrams/`: local diagram rendering (plantuml, d2, mermaid)
+- `src/bridge/`: WebView2 ↔ Rust bridge message router
