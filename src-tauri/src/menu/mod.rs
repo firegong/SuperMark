@@ -471,6 +471,9 @@ pub fn build_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> 
             &MenuItemBuilder::with_id("edit.copy_line_down", shortcut_hint("Copy Line Down", "Shift+Alt+Down"))
                 .build(app)?,
         )
+        .item(&MenuItemBuilder::with_id("edit.delete_line", shortcut_hint("Delete Line", "Ctrl+Shift+K")).build(app)?)
+        .item(&MenuItemBuilder::with_id("edit.insert_blank_line", "Insert Blank Line").build(app)?)
+        .item(&MenuItemBuilder::with_id("edit.split_line", shortcut_hint("Split Line", "Ctrl+Enter")).build(app)?)
         .separator()
         .item(
             &MenuItemBuilder::with_id("edit.indent_more", shortcut_hint("Indent More", "Ctrl+]"))
@@ -958,6 +961,21 @@ pub fn menu_id_to_web_script(menu_id: &str) -> Option<String> {
             "format",
             "performEditCommand",
             Some(json!({ "command": "toggleBlockComment" })),
+        )),
+        "edit.delete_line" => Some(WebBridge::format_call(
+            "format",
+            "performEditCommand",
+            Some(json!({ "command": "deleteLine" })),
+        )),
+        "edit.insert_blank_line" => Some(WebBridge::format_call(
+            "format",
+            "performEditCommand",
+            Some(json!({ "command": "insertBlankLine" })),
+        )),
+        "edit.split_line" => Some(WebBridge::format_call(
+            "format",
+            "performEditCommand",
+            Some(json!({ "command": "splitLine" })),
         )),
         "edit.format_document" => Some(WebBridge::format_call(
             "format",
@@ -1970,6 +1988,15 @@ mod tests {
         assert!(table.contains("\"itemName\":\"Item\""));
 
         let fmt_doc = menu_id_to_web_script("edit.format_document").expect("edit.format_document");
+
+        let del_line = menu_id_to_web_script("edit.delete_line").expect("edit.delete_line");
+        assert!(del_line.contains("\"command\":\"deleteLine\""));
+
+        let ins_blank = menu_id_to_web_script("edit.insert_blank_line").expect("edit.insert_blank_line");
+        assert!(ins_blank.contains("\"command\":\"insertBlankLine\""));
+
+        let split = menu_id_to_web_script("edit.split_line").expect("edit.split_line");
+        assert!(split.contains("\"command\":\"splitLine\""));
         assert!(fmt_doc.contains("formatContent"));
 
         let settings = menu_id_to_web_script("app.settings").expect("app.settings");

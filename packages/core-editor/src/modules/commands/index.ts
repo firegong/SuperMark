@@ -16,6 +16,9 @@ import {
   selectParentSyntax,
   toggleBlockComment,
   toggleComment,
+  deleteLine,
+  insertBlankLine,
+  splitLine,
 } from '@codemirror/commands';
 
 import { EditCommand } from './types';
@@ -167,6 +170,9 @@ export function performEditCommand(command: EditCommand) {
     case EditCommand.copyLineDown: copyLineDown(editor); break;
     case EditCommand.toggleLineComment: toggleLineComment(editor); break;
     case EditCommand.toggleBlockComment: toggleBlockComment(editor); break;
+    case EditCommand.deleteLine: deleteLine(editor); break;
+    case EditCommand.insertBlankLine: insertBlankLine(editor); break;
+    case EditCommand.splitLine: splitLine(editor); break;
     default: break;
   }
 }

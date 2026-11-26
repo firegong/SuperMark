@@ -10,4 +10,7 @@ export enum EditCommand {
   copyLineDown = 'copyLineDown',
   toggleLineComment = 'toggleLineComment',
   toggleBlockComment = 'toggleBlockComment',
+  deleteLine = 'deleteLine',
+  insertBlankLine = 'insertBlankLine',
+  splitLine = 'splitLine',
 }

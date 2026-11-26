@@ -7,6 +7,8 @@ import { observeChanges } from '../src/modules/input';
 
 import * as editor from './utils/editor';
 import * as commands from '../src/modules/commands';
+import { EditCommand } from '../src/modules/commands/types';
+import { performEditCommand } from '../src/modules/commands';
 
 describe('Commands module', () => {
   test('test toggleBold', () => {
@@ -367,4 +369,29 @@ describe('page scrolling', () => {
     expect(runBinding('PageDown')).toBe(true);
     expect(calls).toEqual([{ top: window.editor.defaultLineHeight }]);
   });
+
+describe('EditCommand new operations', () => {
+  test('deleteLine removes the current line', () => {
+    editor.setUp('line1\nline2\nline3');
+    editor.selectRange(7, 7); // on line2
+    performEditCommand(EditCommand.deleteLine);
+    expect(editor.getText()).toBe('line1\nline3');
+  });
+
+  test('insertBlankLine adds a blank line below', () => {
+    editor.setUp('hello');
+    editor.selectRange(0, 0);
+    performEditCommand(EditCommand.insertBlankLine);
+    // should contain a blank line
+    expect(editor.getText().split('\n').length).toBeGreaterThanOrEqual(2);
+  });
+
+  test('splitLine splits at cursor', () => {
+    editor.setUp('hello world');
+    editor.selectRange(5, 5);
+    performEditCommand(EditCommand.splitLine);
+    expect(editor.getText()).toBe('hello\n world');
+  });
+});
+
 });
