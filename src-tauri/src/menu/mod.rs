@@ -31,12 +31,7 @@ static VIEW_STATE: Mutex<Option<ViewState>> = Mutex::new(None);
 
 /// Markdown parsers offered in View → Markdown Parser (id, label).
 pub const MARKDOWN_PARSERS: &[(&str, &str)] = &[
-    ("extended", "Extended (GFM + Math + Diagrams)"),
     ("super", "Markdown Super Set"),
-    ("gfm", "GitHub Flavored Markdown (GFM)"),
-    ("commonmark", "CommonMark (Strict)"),
-    ("micromark", "micromark (CommonMark + GFM)"),
-    ("gmarkdown", "gMarkdown set"),
     ("markdown-it", "markdown-it (MarkEdit Preview)"),
 ];
 
@@ -2068,7 +2063,6 @@ mod tests {
         let mgr = ExtensionManager::new(tmp.path());
         mgr.ensure_directories().expect("dirs");
 
-        assert!(parser_available("extended", Some(&mgr)));
         assert!(parser_available("super", Some(&mgr)));
         assert!(!parser_available("markdown-it", Some(&mgr)), "extension not installed");
 
@@ -2079,8 +2073,6 @@ mod tests {
         mgr.set_extension_enabled("markedit-preview", false, "1.0.0").expect("disable");
         assert!(!parser_available("markdown-it", Some(&mgr)));
 
-        mgr.set_extension_enabled("supermarkdown", false, "1.0.0").expect("disable builtin");
-        assert!(!parser_available("super", Some(&mgr)));
         assert!(parser_menu_script("view.parser.markdown-it").is_some());
     }
 

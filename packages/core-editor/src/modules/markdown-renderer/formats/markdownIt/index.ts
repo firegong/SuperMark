@@ -1,4 +1,4 @@
-import { extendedEngine } from '../extended';
+import { superMarkdownEngine as extendedEngine } from '../markdownSuperSet';
 import type { MarkdownFormat, MarkdownRendererEngine } from '../../types';
 import { framePreview } from '../../preview/framePreview';
 

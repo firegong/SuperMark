@@ -32,7 +32,7 @@ describe('markdown-it parser from the MarkEdit Preview extension', () => {
   afterEach(() => {
     delete globals.MarkEditRenderHtml;
     syncExtensionRenderers([]);
-    setActiveMarkdownRenderer('extended');
+    setActiveMarkdownRenderer('super');
     if (globals.MarkEdit.userSettings !== undefined) {
       delete globals.MarkEdit.userSettings.markdownRenderer;
     }
@@ -46,7 +46,7 @@ describe('markdown-it parser from the MarkEdit Preview extension', () => {
     setActiveMarkdownRenderer('markdown-it');
     syncExtensionRenderers([]);
     expect(listMarkdownRenderers().map(engine => engine.id)).not.toContain('markdown-it');
-    expect(getActiveMarkdownRenderer().id).toBe('extended');
+    expect(getActiveMarkdownRenderer().id).toBe('super');
 
     // Script listed but its renderer is missing (older extension version).
     delete globals.MarkEditRenderHtml;
@@ -73,7 +73,7 @@ describe('markdown-it parser from the MarkEdit Preview extension', () => {
     expect(frame?.srcdoc).toContain('<style>h1{color:red}</style>');
 
     // Back to a built-in parser: fragments again, no frame.
-    setActiveMarkdownRenderer('extended');
+    setActiveMarkdownRenderer('super');
     setMarkdownPreviewMode('editor');
     setMarkdownPreviewMode('split');
     expect(document.querySelector('.markedit-preview-body > iframe')).toBeNull();

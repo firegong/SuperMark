@@ -46,9 +46,7 @@ export interface ExtensionBootstrap {
 }
 
 /** Built-in extension id → the Markdown renderer it provides. */
-const builtinRenderers: Record<string, string> = {
-  supermarkdown: 'super',
-};
+const builtinRenderers: Record<string, string> = {};
 
 /** Applies the on/off state of built-in extensions (their renderers come and go). */
 export function applyBuiltinExtensions(disabled: string[]): void {
@@ -57,9 +55,8 @@ export function applyBuiltinExtensions(disabled: string[]): void {
     activeChanged = setMarkdownRendererAvailable(renderer, !disabled.includes(builtin)) || activeChanged;
   }
 
-  // The active parser was turned off: switch to Extended (re-renders, updates the View menu).
   if (activeChanged) {
-    switchRenderer('extended');
+    switchRenderer('super');
   }
 }
 
@@ -120,7 +117,7 @@ export function syncExtensionRenderers(scripts: { capability: string }[]): void 
   }
 
   if (setMarkdownRendererAvailable(markdownItEngineId, false)) {
-    switchRenderer('extended');
+    switchRenderer('super');
   }
 }
 

@@ -1197,7 +1197,6 @@ describe('Markdown Preview Rendering', () => {
   test('renderMarkdownToHtml renders inline math as MathML', () => {
     const html = renderMarkdownToHtml('The equation $E = mc^2$ is famous.');
     expect(html).toContain('<math xmlns="http://www.w3.org/1998/Math/MathML"');
-    expect(html).toContain('<span class="markedit-math-inline">');
     expect(html).toContain('<mi>E</mi>');
     expect(html).toContain('<mn>2</mn>');
   });
@@ -1223,68 +1222,8 @@ describe('Markdown Preview Rendering', () => {
     const html = renderMarkdownToHtml('- [ ] task a\n- [x] task b');
     expect(html).toContain('<ul class="markedit-preview-list markedit-preview-task-list">');
     expect(html).toContain('markedit-preview-task-item');
-    expect(html).toContain('<input type="checkbox" class="markedit-preview-task-checkbox"');
-    expect(html).not.toContain('<p ');
-  });
-});
-
-describe('Markdown Syntax Standard Switching', () => {
-  afterEach(() => {
-    setMarkdownSyntaxStandard('extended');
-  });
-
-  test('commonmark only renders CommonMark elements', () => {
-    setMarkdownSyntaxStandard('commonmark');
-    const html = renderMarkdown('# Heading\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n- [ ] task\n\n~~strike~~\n\n$E=mc^2$\n\n```mermaid\ngraph TD\nA --> B\n```\n\n> [!NOTE]\n> note');
-
-    expect(html).toContain('<h1');
-    expect(html).not.toContain('<table');
-    expect(html).not.toContain('markedit-preview-task-checkbox');
-    expect(html).not.toContain('<del>');
-    expect(html).not.toContain('<math');
-    expect(html).not.toContain('markedit-mermaid-svg');
-    expect(html).not.toContain('markedit-preview-alert');
-  });
-
-  test('gfm renders tables, task lists, and strikethrough', () => {
-    setMarkdownSyntaxStandard('gfm');
-    const html = renderMarkdown('| a | b |\n|---|---|\n| 1 | 2 |\n\n- [ ] task\n\n~~strike~~\n\n$E=mc^2$');
-
-    expect(html).toContain('<table');
     expect(html).toContain('markedit-preview-task-checkbox');
-    expect(html).toContain('<del>');
-    expect(html).not.toContain('<math');
-  });
-
-  test('extended renders math, mermaid, callouts, and frontmatter', () => {
-    setMarkdownSyntaxStandard('extended');
-    const html = renderMarkdown('---\ntitle: doc\n---\n\n$E=mc^2$\n\n```mermaid\ngraph TD\nA[Start] --> B[End]\n```\n\n> [!NOTE]\n> note');
-
-    expect(html).toContain('markedit-preview-frontmatter');
-    expect(html).toContain('<math');
-    expect(html).toContain('markedit-mermaid-svg');
-    expect(html).toContain('markedit-preview-alert');
-  });
-
-  test('registering and activating a custom renderer swaps output', () => {
-    setMarkdownSyntaxStandard('extended');
-
-    const customEngine: MarkdownRendererEngine = {
-      id: 'custom-test',
-      name: 'Custom Test Renderer',
-      standard: 'custom',
-      render: () => '<div class="custom-renderer-output">CUSTOM</div>',
-    };
-
-    registerMarkdownRenderer(customEngine);
-    setActiveMarkdownRenderer('custom-test');
-
-    expect(getActiveMarkdownRenderer().id).toBe('custom-test');
-    expect(renderMarkdown('# Hello')).toBe('<div class="custom-renderer-output">CUSTOM</div>');
-    expect(getMarkdownSyntaxStandard()).toBe('custom');
-
-    setActiveMarkdownRenderer('extended');
-    expect(renderMarkdown('# Hello')).toContain('<h1');
+    expect(html).not.toContain('<p ');
   });
 });
 

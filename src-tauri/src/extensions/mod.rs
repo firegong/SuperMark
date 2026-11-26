@@ -13,38 +13,7 @@ use std::path::{Path, PathBuf};
 /// Extensions that ship with the app. They are listed in Extensions → Installed like
 /// default-installed extensions and can be turned off, but not uninstalled.
 /// (id, name, description)
-pub const BUILTIN_EXTENSIONS: &[(&str, &str, &str)] = &[
-    (
-        "extended",
-        "Extended (GFM + Math + Diagrams)",
-        "Markdown parser: GitHub Flavored Markdown plus math, diagrams and more. Choose it in View → Markdown Parser.",
-    ),
-    (
-        "supermarkdown",
-        "Markdown Super Set",
-        "Markdown parser: MultiMarkdown 6 with Pandoc, GFM and Obsidian syntax, merged table cells, cross references, run/render chunks, includes and more. Choose it in View → Markdown Parser.",
-    ),
-    (
-        "gfm",
-        "GitHub Flavored Markdown (GFM)",
-        "Markdown parser: standard GitHub Flavored Markdown. Choose it in View → Markdown Parser.",
-    ),
-    (
-        "commonmark",
-        "CommonMark (Strict)",
-        "Markdown parser: strict CommonMark. Choose it in View → Markdown Parser.",
-    ),
-    (
-        "micromark",
-        "micromark (CommonMark + GFM)",
-        "Markdown parser: micromark CommonMark + GFM. Choose it in View → Markdown Parser.",
-    ),
-    (
-        "gmarkdown",
-        "gMarkdown Set",
-        "Markdown parser: gMarkdown Format with @import/@include, code tabs, diagrams, tables and more. Choose it in View → Markdown Parser.",
-    ),
-];
+pub const BUILTIN_EXTENSIONS: &[(&str, &str, &str)] = &[];
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -58,15 +27,8 @@ pub struct BuiltinExtension {
 
 /// The built-in extension that provides a Markdown parser (renderer id → extension id).
 pub fn builtin_for_parser(parser_id: &str) -> Option<&'static str> {
-    match parser_id {
-        "extended" => Some("extended"),
-        "super" => Some("supermarkdown"),
-        "gfm" => Some("gfm"),
-        "commonmark" => Some("commonmark"),
-        "micromark" => Some("micromark"),
-        "gmarkdown" => Some("gmarkdown"),
-        _ => None,
-    }
+    let _ = parser_id;
+    None
 }
 
 pub fn is_builtin_extension(id: &str) -> bool {
@@ -166,6 +128,18 @@ fn is_theme_script(file_name: &str) -> bool {
     file_name.to_lowercase().starts_with("markedit-theme-")
 }
 
+/// Self-developed feature extensions (parsers, tools) shipped under the `supermark-` prefix.
+fn is_self_developed_feature(file_name: &str) -> bool {
+    file_name.to_lowercase().starts_with("supermark-")
+}
+
+/// Whether an installed script is allowed to load:
+/// - themes from MarkEdit (`markedit-theme-*`), and
+/// - self-developed feature extensions (`supermark-*`).
+fn is_allowed_script(file_name: &str) -> bool {
+    is_theme_script(file_name) || is_self_developed_feature(file_name)
+}
+
 #[derive(Debug, Clone)]
 pub struct ExtensionManager {
     data_dir: PathBuf,
@@ -257,16 +231,18 @@ impl ExtensionManager {
             let Some(file_name) = script_path.file_name().and_then(|n| n.to_str()) else {
                 continue;
             };
-            // Policy: only themes are allowed from MarkEdit extensions.
-            // Feature scripts (parsers, renderers, etc.) are restricted to self-developed
-            // extensions (supermarkdown, gmarkdown), which are built-in and handled separately.
-            if !is_theme_script(file_name) {
+            // Policy: themes from MarkEdit + self-developed feature extensions (supermark-*).
+            if !is_allowed_script(file_name) {
                 continue;
             }
             let Ok(source) = fs::read_to_string(&script_path) else {
                 continue;
             };
-            let source = apply_theme_patch(&source);
+            let source = if is_theme_script(file_name) {
+                apply_theme_patch(&source)
+            } else {
+                source
+            };
             bootstrap.scripts.push(ExtensionScript {
                 path: script_path.to_string_lossy().into_owned(),
                 capability: file_name.to_string(),
@@ -329,15 +305,19 @@ impl ExtensionManager {
             let Some(file_name) = script_path.file_name().and_then(|n| n.to_str()) else {
                 continue;
             };
-            // Policy: only themes are allowed from MarkEdit extensions.
-            if !is_theme_script(file_name) {
+            // Policy: themes from MarkEdit + self-developed feature extensions (supermark-*).
+            if !is_allowed_script(file_name) {
                 continue;
             }
             let Ok(js_source) = fs::read_to_string(&script_path) else {
                 continue;
             };
             let capability = file_name.to_string();
-            let js_source = apply_theme_patch(&js_source);
+            let js_source = if is_theme_script(file_name) {
+                apply_theme_patch(&js_source)
+            } else {
+                js_source
+            };
             let path_str = script_path.to_string_lossy().into_owned();
 
             descriptors.push(ScriptDescriptor {
@@ -635,25 +615,8 @@ mod tests {
         mgr.ensure_directories().expect("ensure dirs");
 
         let state = mgr.get_manager_state(false, "1.0.0");
-        assert_eq!(state.builtins.len(), 6);
-        let sm_index = state.builtins.iter().position(|b| b.id == "supermarkdown").expect("supermarkdown builtin");
-        assert!(state.builtins[sm_index].enabled);
+        assert_eq!(state.builtins.len(), 0);
         assert!(mgr.extension_bootstrap().disabled_builtins.is_empty());
-
-        let off = mgr.set_extension_enabled("supermarkdown", false, "1.0.0").expect("disable");
-        let sm_index = off.builtins.iter().position(|b| b.id == "supermarkdown").expect("supermarkdown builtin");
-        assert!(!off.builtins[sm_index].enabled);
-        assert!(off.installed.is_empty(), "built-ins are not installed[] records");
-        assert_eq!(mgr.extension_bootstrap().disabled_builtins, vec!["supermarkdown".to_string()]);
-        assert!(!mgr.is_builtin_enabled("supermarkdown"));
-
-        // Idempotent and reversible.
-        mgr.set_extension_enabled("supermarkdown", false, "1.0.0").expect("disable again");
-        assert_eq!(mgr.config().read().disabled_builtins.len(), 1);
-        let on = mgr.set_extension_enabled("supermarkdown", true, "1.0.0").expect("enable");
-        let sm_index = on.builtins.iter().position(|b| b.id == "supermarkdown").expect("supermarkdown builtin");
-        assert!(on.builtins[sm_index].enabled);
-        assert!(mgr.is_builtin_enabled("supermarkdown"));
     }
 
     #[test]

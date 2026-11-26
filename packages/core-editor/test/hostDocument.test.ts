@@ -82,20 +82,6 @@ describe('host document loading', () => {
     expect(window.editor.state.doc.toString()).toBe('from disk');
   });
 
-  test('turning off the SuperMarkdown built-in extension hides its parser', () => {
-    setActiveMarkdownRenderer('super');
-
-    applyExtensions({ styles: [], scripts: [], disabledBuiltins: ['supermarkdown'] });
-    expect(listMarkdownRenderers().map(engine => engine.id)).not.toContain('super');
-    expect(getActiveMarkdownRenderer().id).toBe('extended');
-    expect(() => setActiveMarkdownRenderer('super')).toThrow();
-
-    applyExtensions({ styles: [], scripts: [], disabledBuiltins: [] });
-    expect(listMarkdownRenderers().map(engine => engine.id)).toContain('super');
-    setActiveMarkdownRenderer('super');
-    expect(getActiveMarkdownRenderer().id).toBe('super');
-    setActiveMarkdownRenderer('extended');
-  });
 
   // A stand-in for the `markedit-theming` library the theme extensions bundle: each script
   // writes its theme into customThemes; assigning config.theme re-applies (recorded here).

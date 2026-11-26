@@ -1,3 +1,5 @@
+import 'mdast-util-gfm';
+import 'mdast-util-math';
 import type {
   Definition,
   FootnoteDefinition,

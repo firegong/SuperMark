@@ -1,4 +1,4 @@
-import { builtInFormats, builtInParsers, defaultParser, defaultPreviewFor, commonmarkEngine, gfmEngine, extendedEngine, superMarkdownEngine } from './formats';
+import { builtInFormats, builtInParsers, defaultParser, defaultPreviewFor, superMarkdownEngine } from './formats';
 import type { MarkdownFormat, MarkdownRendererEngine, MarkdownRenderOptions, MarkdownSyntaxStandard, MarkdownBlockPlugin, MarkdownInlinePlugin, PreviewHost, PreviewRenderer } from './types';
 
 // Formats live in formats/, one folder each (parser + preview); this module keeps the list and
@@ -117,9 +117,9 @@ export function renderMermaid(code: string): string {
   return activeEngine.renderMermaid?.(code) ?? '';
 }
 
-export { commonmarkEngine, gfmEngine, extendedEngine, superMarkdownEngine };
+export { superMarkdownEngine };
 export { SuperMarkdownEngine, clearSuperSetIncludes } from './formats/markdownSuperSet';
-export { builtInFormats, defaultFormat, builtInParsers, defaultParser, gmarkdownEngine, micromarkEngine } from './formats';
+export { builtInFormats, defaultFormat, builtInParsers, defaultParser } from './formats';
 export { markdownItEngine, markdownItEngineId, markdownItFormat, isMarkdownItAvailable } from './formats/markdownIt';
 export { htmlPreview } from './preview/htmlPreview';
 export { framePreview, previewFrame, removePreviewFrame } from './preview/framePreview';

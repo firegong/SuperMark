@@ -21,7 +21,7 @@ import { registerBuiltinRendererPlugins } from '../src/modules/markdown-renderer
 import { renderLatexToMathML } from '../src/modules/markdown-renderer/plugins/mathPlugin';
 import { renderDrawioToSvg, compressedDiagramPayload } from '../src/modules/markdown-renderer/plugins/drawio';
 import { SuperMarkdownEngine } from '../src/modules/markdown-renderer/formats/markdownSuperSet';
-import { extendedEngine } from '../src/modules/markdown-renderer/formats';
+import { superMarkdownEngine } from '../src/modules/markdown-renderer/formats';
 
 registerBuiltinRendererPlugins();
 
@@ -104,7 +104,7 @@ describe('LaTeX math plugin', () => {
   });
 
   test('extended engine passes unescaped LaTeX to the plugin', () => {
-    const html = extendedEngine.render('Matrix $\\begin{pmatrix} a & b \\end{pmatrix}$ and $a<b$.');
+    const html = superMarkdownEngine.render('Matrix $\\begin{pmatrix} a & b \\end{pmatrix}$ and $a<b$.');
     expect(html.match(/<mtd/g)?.length).toBe(2);
     expect(html).toContain('<mo>&lt;</mo>');
   });
@@ -242,7 +242,7 @@ describe('diagram and math samples', () => {
 
   test.each([
     ['SuperMarkdown', (markdown: string) => new SuperMarkdownEngine().render(markdown)],
-    ['Extended', (markdown: string) => extendedEngine.render(markdown)],
+    ['Extended', (markdown: string) => superMarkdownEngine.render(markdown)],
   ])('%s renders every diagram block through a plugin', (_name, render) => {
     const html = render(source);
     for (const lang of ['mermaid', 'plantuml', 'puml', 'd2', 'drawio']) {

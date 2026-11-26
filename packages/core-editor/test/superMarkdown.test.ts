@@ -22,7 +22,7 @@ describe('SuperMarkdown engine selection', () => {
     setActiveMarkdownRenderer('super');
     expect(getMarkdownSyntaxStandard()).toBe('super');
     expect(renderMarkdown('H~2~O')).toContain('<sub>2</sub>');
-    setActiveMarkdownRenderer('extended');
+    setActiveMarkdownRenderer('super');
   });
 });
 
@@ -439,28 +439,6 @@ describe('SuperMarkdown: divs, tabs, TOC, includes, keys (§16–29)', () => {
     expect(html).toContain('<kbd class="msm-kbd">Ctrl</kbd>+<kbd class="msm-kbd">S</kbd>');
     expect(html).toContain('<a href="u">link</a>');
     expect(html).not.toContain('<kbd class="msm-kbd">1</kbd>');
-  });
-});
-
-describe('Extended engine regression', () => {
-  test('a lone pipe line does not hang the default engine', () => {
-    setActiveMarkdownRenderer('extended');
-    expect(renderMarkdown('| a')).toContain('| a');
-    expect(renderMarkdown('| a | b |\nplain')).toContain('plain');
-  });
-
-  test('data-line stays absolute for front matter, nested lists and quotes', () => {
-    setActiveMarkdownRenderer('extended');
-    const html = renderMarkdown('---\ntitle: x\n---\n- [ ] a\n- top\n  - [ ] nested\n\n> quoted');
-    expect(html).toContain('data-line="3"');
-    expect(html).toContain('class="markedit-preview-task-checkbox" data-line="5"');
-    expect(html).toContain('data-line="7">quoted');
-  });
-
-  test('javascript: URLs with control-character prefixes are rejected', () => {
-    setActiveMarkdownRenderer('extended');
-    expect(renderMarkdown('[x](\u0001javascript:alert%281%29)')).not.toContain('href');
-    expect(renderMarkdown('[x]( JAVASCRIPT:alert)')).not.toContain('href');
   });
 });
 

@@ -44,6 +44,7 @@ import type { MarkdownRendererEngine, DiagramPlugin, MathPlugin } from '../modul
 import {
   registerDiagramPlugin,
   registerMathPlugin,
+  getActiveMarkdownRenderer,
   listDiagramPlugins,
   setDiagramServer,
   setDiagramRendering,
@@ -226,6 +227,12 @@ export function initChromeUI(): void {
     },
     registerMarkdownRenderer(engine) {
       registerMarkdownRenderer(engine);
+      // Honor a saved parser choice once the extension that provides it has loaded.
+      const savedSettings = (MarkEdit as unknown as { userSettings?: Record<string, unknown> } | undefined)?.userSettings;
+      const savedRenderer = savedSettings?.markdownRenderer ?? savedSettings?.['preview.markdownRenderer'];
+      if (savedRenderer === engine.id && getActiveMarkdownRenderer().id !== engine.id) {
+        setMarkdownRenderer(engine.id);
+      }
     },
     setMarkdownRenderer(id) {
       setMarkdownRenderer(id);
