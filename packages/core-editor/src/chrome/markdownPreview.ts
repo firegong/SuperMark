@@ -285,6 +285,7 @@ const previewHost: PreviewHost = {
     const showMenuFromEvent = (event: MouseEvent): void => {
       event.preventDefault();
       event.stopPropagation();
+      frameDocument.body.style.outline = '3px solid red';
       showPreviewContextMenu(event.clientX, event.clientY);
     };
     frameDocument.addEventListener('contextmenu', showMenuFromEvent, true);
