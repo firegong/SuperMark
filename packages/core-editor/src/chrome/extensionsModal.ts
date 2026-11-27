@@ -748,6 +748,10 @@ export function createExtensionsModal(
       }
 
       for (const record of state.installed) {
+        const catalog = getCatalogEntry(record.id);
+        const isTheme = (record.id).toLowerCase().startsWith('markedit-theme-') || (record.file).toLowerCase().startsWith('markedit-theme-');
+        const isSelfDeveloped = (catalog?.author ?? '').toLowerCase() === 'firegong' || (record.id).toLowerCase().startsWith('supermark-');
+        if (!isTheme && !isSelfDeveloped) continue;
         body.appendChild(renderInstalledRow(record));
       }
     } else {
@@ -757,6 +761,10 @@ export function createExtensionsModal(
       }
 
       for (const update of state.updates) {
+        const catalog = getCatalogEntry(update.id);
+        const isTheme = (update.id).toLowerCase().startsWith('markedit-theme-');
+        const isSelfDeveloped = (catalog?.author ?? '').toLowerCase() === 'firegong' || (update.id).toLowerCase().startsWith('supermark-');
+        if (!isTheme && !isSelfDeveloped) continue;
         body.appendChild(renderUpdateRow(update));
       }
     }
