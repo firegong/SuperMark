@@ -51,6 +51,7 @@ const previewState: {
 
 let editorContainer: HTMLElement | null = null;
 let mutationObserver: MutationObserver | null = null;
+let liveSyncRaf: number | null = null;
 
 function getEditorView(): typeof window.editor | undefined {
   return window.editor as typeof window.editor | undefined;
@@ -842,6 +843,23 @@ function startLiveSync(): void {
   target.addEventListener('keyup', handleEditorInputForPreview);
   window.addEventListener('focus', handleWindowFocusForPreview);
 
+  // Fallback: poll the editor document so preview updates even if DOM input
+  // events are swallowed by CodeMirror or the IME.
+  let lastDoc = getEditorView()?.state.doc ?? null;
+  const tick = () => {
+    if (previewState.mode === 'editor') {
+      liveSyncRaf = null;
+      return;
+    }
+    const doc = getEditorView()?.state.doc ?? null;
+    if (doc !== null && doc !== lastDoc) {
+      lastDoc = doc;
+      handleEditorInputForPreview();
+    }
+    liveSyncRaf = requestAnimationFrame(tick);
+  };
+  liveSyncRaf = requestAnimationFrame(tick);
+
   if (mutationObserver === null) {
     mutationObserver = new MutationObserver(() => {
       if (previewState.mode !== 'editor') {
@@ -863,6 +881,10 @@ function stopLiveSync(): void {
   editor?.dom.removeEventListener('input', handleEditorInputForPreview);
   editor?.dom.removeEventListener('keyup', handleEditorInputForPreview);
   window.removeEventListener('focus', handleWindowFocusForPreview);
+  if (liveSyncRaf !== null) {
+    cancelAnimationFrame(liveSyncRaf);
+    liveSyncRaf = null;
+  }
   mutationObserver?.disconnect();
   mutationObserver = null;
 }
