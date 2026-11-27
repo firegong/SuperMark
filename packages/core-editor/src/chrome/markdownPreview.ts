@@ -53,6 +53,17 @@ let editorContainer: HTMLElement | null = null;
 let mutationObserver: MutationObserver | null = null;
 let liveSyncRaf: number | null = null;
 
+// Right-clicking inside the preview re-renders it instead of relying on the
+// (often broken) native "Reload frame" action of the preview iframe.
+document.addEventListener('contextmenu', (event: MouseEvent) => {
+  const pane = previewState.pane;
+  if (pane === null || !(event.target instanceof Node) || !pane.contains(event.target)) {
+    return;
+  }
+  event.preventDefault();
+  updateContent(true);
+});
+
 function getEditorView(): typeof window.editor | undefined {
   return window.editor as typeof window.editor | undefined;
 }
