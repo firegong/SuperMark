@@ -124,6 +124,17 @@ function showPreviewContextMenu(x: number, y: number): void {
   menu.style.fontFamily = 'system-ui, sans-serif';
   menu.style.fontSize = '13px';
 
+  // Determine whether the preview currently has a text selection.
+  let hasSelection = false;
+  try {
+    const pane = previewState.pane;
+    const doc = (pane === null ? null : pane.querySelector<HTMLIFrameElement>('iframe.markedit-preview-frame')?.contentDocument ?? null);
+    const selection = doc?.getSelection() ?? null;
+    hasSelection = selection !== null && selection.isCollapsed === false && selection.rangeCount > 0;
+  } catch {
+    hasSelection = false;
+  }
+
   const makeItem = (label: string, action: () => void): HTMLElement => {
     const item = document.createElement('div');
     item.textContent = label;
@@ -143,7 +154,7 @@ function showPreviewContextMenu(x: number, y: number): void {
     return item;
   };
 
-  menu.appendChild(makeItem('Copy', () => {
+  menu.appendChild(makeItem(hasSelection ? 'Copy' : 'Copy All', () => {
     void copyPreviewContent();
   }));
   menu.appendChild(makeItem('Reload', () => {
