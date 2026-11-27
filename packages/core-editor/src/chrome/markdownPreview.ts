@@ -185,12 +185,17 @@ function showPreviewContextMenu(x: number, y: number): void {
 
 document.addEventListener('contextmenu', (event: MouseEvent) => {
   const pane = previewState.pane;
-  if (pane === null || !(event.target instanceof Node) || !pane.contains(event.target)) {
+  if (pane === null) {
+    return;
+  }
+  const path = event.composedPath();
+  const inPreview = path.some((node) => node === pane || (node instanceof Node && pane.contains(node)));
+  if (!inPreview) {
     return;
   }
   event.preventDefault();
   showPreviewContextMenu(event.clientX, event.clientY);
-});
+}, true);
 
 function getEditorView(): typeof window.editor | undefined {
   return window.editor as typeof window.editor | undefined;
