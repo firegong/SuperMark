@@ -1,4 +1,5 @@
-import { replaceText, resetEditor, ReplaceGranularity } from './core';
+import { replaceText, resetEditor, ReplaceGranularity, getEditorText } from './core';
+import { isContentDirty, markContentClean } from './modules/history';
 import { setDocumentPath } from './common/documentPath';
 import { notifyAppReady } from './api/methods';
 import {
@@ -217,14 +218,34 @@ let externalChangePromptOpen = false;
   if (externalChangeTimer !== undefined) {
     clearTimeout(externalChangeTimer);
   }
-  externalChangeTimer = setTimeout(() => {
+  externalChangeTimer = setTimeout(async () => {
     externalChangeTimer = undefined;
     externalChangePromptOpen = true;
-    const reload = window.confirm('The file has been changed on disk. Reload it?');
-    externalChangePromptOpen = false;
-    if (reload) {
-      void reloadDocumentFromHost();
+    const dirty = isContentDirty();
+    if (!dirty) {
+      // No unsaved changes: silently apply the external version.
+      await reloadDocumentFromHost();
+      externalChangePromptOpen = false;
+      return;
     }
+
+    // Unsaved changes present: warn and offer to back them up before reloading.
+    const reload = window.confirm(
+      'The file changed on disk while you have unsaved changes. ' +
+        'Back up your changes and reload from disk? (Cancel keeps your changes.)',
+    );
+    if (reload) {
+      try {
+        const invoke = invokeHost();
+        if (invoke !== undefined) {
+          await invoke('save_idle_backup', { text: getEditorText() });
+        }
+      } catch (error) {
+        console.error('[MarkEdit] Failed to back up unsaved changes:', error);
+      }
+      await reloadDocumentFromHost();
+    }
+    externalChangePromptOpen = false;
   }, 500);
 };
 
@@ -235,13 +256,20 @@ export async function reloadDocumentFromHost(): Promise<void> {
     return;
   }
 
-  const reply = await invoke('document_content');
+  // Prefer reading the (possibly externally changed) file from disk.
+  let reply: unknown;
+  try {
+    reply = await invoke('reload_document_from_disk');
+  } catch {
+    reply = await invoke('document_content');
+  }
   if (isObject(reply)) {
     if (typeof reply.filePath === 'string' || reply.filePath === null) {
       setDocumentPath((reply.filePath as string | null) ?? null);
     }
     if (typeof reply.text === 'string') {
       await resetEditor(reply.text);
+      markContentClean();
     }
   }
 }

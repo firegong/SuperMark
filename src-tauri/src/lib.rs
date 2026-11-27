@@ -865,6 +865,25 @@ async fn document_content(window: WebviewWindow, doc_mgr: State<'_, DocumentMana
     }))
 }
 
+#[tauri::command]
+async fn reload_document_from_disk(window: WebviewWindow, doc_mgr: State<'_, DocumentManager>) -> Result<Value, String> {
+    let label = window.label().to_string();
+    let path = doc_mgr.with_session(&label, |s| s.file_path.clone());
+    let Some(path) = path else {
+        return Err("No file path".to_string());
+    };
+    let text = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    let normalized = text.replace("\r\n", "\n").replace('\r', "\n");
+    doc_mgr.with_session(&label, |s| {
+        s.content_cache = normalized.clone();
+        s.is_dirty = false;
+    });
+    Ok(serde_json::json!({
+        "text": normalized,
+        "filePath": path.to_string_lossy().into_owned(),
+    }))
+}
+
 /// Installed extensions as data, for reloading them (`window.__markeditReloadExtensions__`).
 #[tauri::command]
 async fn extensions_bootstrap(
@@ -1397,6 +1416,7 @@ pub fn run() {
             diagram_render_local,
             view_state_changed,
             document_content,
+            reload_document_from_disk,
             open_document,
             pick_folder,
             pick_file,
