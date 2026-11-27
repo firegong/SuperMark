@@ -1,7 +1,7 @@
 # SuperMark Software Requirements Specification (SRS)
 
 - **Document ID**: `REQ-002`
-- **Date**: 2026-11-08 (initial), 2026-11-21 (revised based on current implementation)
+- **Date**: 2026-11-08 (initial), 2026-11-21 (revised), 2026-11-28 (added search, git, external-change, preview features)
 - **Status**: v2.0
 - **Related Documents**: `ARCH-001`, `ARCH-002`, `DES-001`–`DES-003`
 
