@@ -272,6 +272,11 @@ const previewHost: PreviewHost = {
     // Links: same-document anchors scroll, others open outside the preview (open_link).
     frameDocument.addEventListener('click', event => handlePreviewLinkClick(event, frameDocument));
     attachFrameScrollSync(frameDocument);
+    // Right-click inside the preview frame opens our custom menu (Copy/Copy All + Reload).
+    frameDocument.addEventListener('contextmenu', (event: MouseEvent) => {
+      event.preventDefault();
+      showPreviewContextMenu(event.clientX, event.clientY);
+    });
     realignAfterRender();
   },
   didChangeLayout() {
