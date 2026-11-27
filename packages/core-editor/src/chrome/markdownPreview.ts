@@ -108,75 +108,79 @@ async function copyPreviewContent(): Promise<void> {
 }
 
 function showPreviewContextMenu(x: number, y: number): void {
-  hidePreviewContextMenu();
-  const menu = document.createElement('div');
-  menu.className = 'markedit-preview-context-menu';
-  menu.style.position = 'fixed';
-  menu.style.left = `${x}px`;
-  menu.style.top = `${y}px`;
-  menu.style.zIndex = '100000';
-  menu.style.background = '#ffffff';
-  menu.style.border = '1px solid #d0d0d0';
-  menu.style.borderRadius = '6px';
-  menu.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
-  menu.style.padding = '4px 0';
-  menu.style.minWidth = '120px';
-  menu.style.fontFamily = 'system-ui, sans-serif';
-  menu.style.fontSize = '13px';
-
-  // Determine whether the preview currently has a text selection.
-  let hasSelection = false;
   try {
-    const pane = previewState.pane;
-    const doc = (pane === null ? null : pane.querySelector<HTMLIFrameElement>('iframe.markedit-preview-frame')?.contentDocument ?? null);
-    const selection = doc?.getSelection() ?? null;
-    hasSelection = selection !== null && selection.isCollapsed === false && selection.rangeCount > 0;
-  } catch {
-    hasSelection = false;
+    hidePreviewContextMenu();
+    const menu = document.createElement('div');
+    menu.className = 'markedit-preview-context-menu';
+    menu.style.position = 'fixed';
+    menu.style.left = `${x}px`;
+    menu.style.top = `${y}px`;
+    menu.style.zIndex = '100000';
+    menu.style.background = '#ffffff';
+    menu.style.border = '1px solid #d0d0d0';
+    menu.style.borderRadius = '6px';
+    menu.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+    menu.style.padding = '4px 0';
+    menu.style.minWidth = '120px';
+    menu.style.fontFamily = 'system-ui, sans-serif';
+    menu.style.fontSize = '13px';
+
+    // Determine whether the preview currently has a text selection.
+    let hasSelection = false;
+    try {
+      const pane = previewState.pane;
+      const doc = (pane === null ? null : pane.querySelector<HTMLIFrameElement>('iframe.markedit-preview-frame')?.contentDocument ?? null);
+      const selection = doc?.getSelection() ?? null;
+      hasSelection = selection !== null && selection.isCollapsed === false && selection.rangeCount > 0;
+    } catch {
+      hasSelection = false;
+    }
+
+    const makeItem = (label: string, action: () => void): HTMLElement => {
+      const item = document.createElement('div');
+      item.textContent = label;
+      item.style.padding = '6px 14px';
+      item.style.cursor = 'pointer';
+      item.addEventListener('mouseenter', () => {
+        item.style.background = '#e8f0fe';
+      });
+      item.addEventListener('mouseleave', () => {
+        item.style.background = 'transparent';
+      });
+      item.addEventListener('click', (e) => {
+        e.stopPropagation();
+        hidePreviewContextMenu();
+        action();
+      });
+      return item;
+    };
+
+    menu.appendChild(makeItem(hasSelection ? 'Copy' : 'Copy All', () => {
+      void copyPreviewContent();
+    }));
+    menu.appendChild(makeItem('Reload', () => {
+      updateContent(true);
+    }));
+
+    document.body.appendChild(menu);
+    previewContextMenu = menu;
+
+    // Keep the menu on screen.
+    const rect = menu.getBoundingClientRect();
+    if (rect.right > window.innerWidth) {
+      menu.style.left = `${Math.max(4, window.innerWidth - rect.width - 4)}px`;
+    }
+    if (rect.bottom > window.innerHeight) {
+      menu.style.top = `${Math.max(4, window.innerHeight - rect.height - 4)}px`;
+    }
+
+    setTimeout(() => {
+      document.addEventListener('click', hidePreviewContextMenu, { once: true });
+      document.addEventListener('contextmenu', hidePreviewContextMenu, { once: true });
+    }, 0);
+  } catch (error) {
+    console.error('preview context menu failed', error);
   }
-
-  const makeItem = (label: string, action: () => void): HTMLElement => {
-    const item = document.createElement('div');
-    item.textContent = label;
-    item.style.padding = '6px 14px';
-    item.style.cursor = 'pointer';
-    item.addEventListener('mouseenter', () => {
-      item.style.background = '#e8f0fe';
-    });
-    item.addEventListener('mouseleave', () => {
-      item.style.background = 'transparent';
-    });
-    item.addEventListener('click', (e) => {
-      e.stopPropagation();
-      hidePreviewContextMenu();
-      action();
-    });
-    return item;
-  };
-
-  menu.appendChild(makeItem(hasSelection ? 'Copy' : 'Copy All', () => {
-    void copyPreviewContent();
-  }));
-  menu.appendChild(makeItem('Reload', () => {
-    updateContent(true);
-  }));
-
-  document.body.appendChild(menu);
-  previewContextMenu = menu;
-
-  // Keep the menu on screen.
-  const rect = menu.getBoundingClientRect();
-  if (rect.right > window.innerWidth) {
-    menu.style.left = `${Math.max(4, window.innerWidth - rect.width - 4)}px`;
-  }
-  if (rect.bottom > window.innerHeight) {
-    menu.style.top = `${Math.max(4, window.innerHeight - rect.height - 4)}px`;
-  }
-
-  setTimeout(() => {
-    document.addEventListener('click', hidePreviewContextMenu, { once: true });
-    document.addEventListener('contextmenu', hidePreviewContextMenu, { once: true });
-  }, 0);
 }
 
 document.addEventListener('contextmenu', (event: MouseEvent) => {
@@ -273,10 +277,16 @@ const previewHost: PreviewHost = {
     frameDocument.addEventListener('click', event => handlePreviewLinkClick(event, frameDocument));
     attachFrameScrollSync(frameDocument);
     // Right-click inside the preview frame opens our custom menu (Copy/Copy All + Reload).
-    frameDocument.addEventListener('contextmenu', (event: MouseEvent) => {
+    const showMenuFromEvent = (event: MouseEvent): void => {
       event.preventDefault();
+      event.stopPropagation();
       showPreviewContextMenu(event.clientX, event.clientY);
-    });
+    };
+    frameDocument.addEventListener('contextmenu', showMenuFromEvent, true);
+    frameDocument.body.addEventListener('contextmenu', showMenuFromEvent, true);
+    if (frameDocument.defaultView !== null) {
+      frameDocument.defaultView.addEventListener('contextmenu', showMenuFromEvent, true);
+    }
     realignAfterRender();
   },
   didChangeLayout() {
