@@ -33,7 +33,7 @@ Status Legend: ✅ Implemented · ⚠️ Partially Implemented · ⛔ Not Implem
 | --- | --- | --- | --- |
 | FR-02.1 | Open, save, save-as for `.md`, `.markdown`, `.txt`, `.textbundle`, `.textpack` | ⚠️ | Open/save implemented. TextBundle folder picker/filter in dialog not yet fully supported |
 | FR-02.2 | Modified indicator in window title (`●`), prompt to save on closing dirty documents | ✅ | |
-| FR-02.3 | External file change detection: reload if clean, notify/diff/merge if dirty | ⛔ | Watcher code present but unlinked |
+| FR-02.3 | External file change detection: auto-reload if clean; warn and back up unsaved changes, then reload if dirty | ✅ | Rust watcher + `reload_document_from_disk`; frontend auto-apply when clean, confirm + `save_idle_backup` when dirty |
 | FR-02.4 | Auto-backup of unsaved documents and crash recovery | ✅ | Prompt on startup, preserved on decline |
 | FR-02.5 | Recent documents list | ✅ | Up to 15 items |
 | FR-02.6 | Encoding detection (BOM, UTF-8, heuristic), reopen with encoding, save in original format | ✅ | |
@@ -61,6 +61,8 @@ Status Legend: ✅ Implemented · ⚠️ Partially Implemented · ⛔ Not Implem
 | FR-04.2 | Native APIs for extensions: context menu, alerts, text prompts, open/save panels, clipboard, files | ⚠️ | Alerts limited to standard buttons, text prompt returns early, open/save panels pending (`ARCH-002`) |
 | FR-04.3 | Extensions manager: discover, install, update, remove, disable, sha256 checksums, update behavior selection | ✅ | Added |
 | FR-04.4 | Theme extensions selectable in settings (only chosen theme applies) | ✅ | Added |
+| FR-04.6 | Extension policy: only MarkEdit themes (`markedit-theme-*`) and self-developed feature extensions (`supermark-*`) are allowed; other feature scripts blocked | ✅ | Rust `is_allowed_script`; UI Discover/Installed/Updates filtered to themes + self-developed (author `firegong`) |
+| FR-04.7 | Own extension registry and updates: `firegong/SuperMark-extensions`; proof-of-concept parser extension `firegong/SuperMark-Plain-Parser` | ✅ | DEFAULT_REGISTRY_URL updated; parser registration via `MarkEdit.registerMarkdownRenderer` |
 | FR-04.5 | Secret storage for extensions | ⚠️ | Plaintext file; Windows Credential Manager integration pending |
 
 ### FR-05: Markdown Preview & Parsers (`DES-002`)
@@ -68,13 +70,32 @@ Status Legend: ✅ Implemented · ⚠️ Partially Implemented · ⛔ Not Implem
 | ID | Requirement | Status | Notes |
 | --- | --- | --- | --- |
 | FR-05.1 | Split / Markdown view preview, auto-refresh on edit | ✅ | |
-| FR-05.2 | Pluggable parsers: CommonMark, GFM, Extended (default), Markdown Super Set, micromark, gmarkdown Markdown, markdown-it (extension) | ✅ | Each format has its own module folder (parser + preview); shared features centralized. Parser contract test suite |
+| FR-05.2 | Pluggable parsers: Markdown Super Set (default), markdown-it (extension). Other legacy parsers backed up on `backup/all-parsers` branch and provided as separate parser repositories | ✅ | Generic registration API `MarkEdit.registerMarkdownRenderer(engine)`; saved-preference handling on registration |
 | FR-05.3 | Markdown Super Set syntax (`MarkdownSuperSetGrammar.md` §0–30) | ⚠️ | Code execution chunks (§13), chunk cache, PNG diagrams, note embeds pending |
 | FR-05.4 | Diagrams (Mermaid, PlantUML, D2, Graphviz, draw.io): local tools with Kroki server fallback | ✅ | |
 | FR-05.5 | Math rendering (LaTeX → MathML, offline) | ✅ | |
 | FR-05.6 | Syntax highlighting in preview code blocks (theme colors), code copy button | ✅ | |
 | FR-05.7 | Editor ⇄ Preview bidirectional scroll sync (paused during edit/selection), double-click block to source line, checkbox toggle | ✅ | |
 | FR-05.8 | Link clicks: web links open in browser, document links open in app, other files show in explorer | ✅ | Matches Ctrl+click behavior in editor |
+| FR-05.9 | Preview right-click menu: Copy/Copy All (rich HTML of selection or whole preview) and Reload (re-render preview) | ✅ | Custom menu in preview pane/iframe; survives Reload |
+| FR-05.10 | Preview image refresh on change: cache-busting query and re-render on window focus | ✅ | mdastRenderer + blockEngine image URLs; focus-triggered `updateContent(true)` |
+
+### FR-08: Folder Sidebar & Search
+
+| ID | Requirement | Status | Notes |
+| --- | --- | --- | --- |
+| FR-08.1 | Folder sidebar (Files/Outline/Search tabs) as flex child in all modes (edit/split/preview); toggle collapses entire panel | ✅ | `packages/core-editor/src/chrome/sidebar.ts` |
+| FR-08.2 | Open folder, file tree with create/rename/delete, show all files | ✅ | `list_folder_tree`; no markdown-only filter |
+| FR-08.3 | VS Code-style search in folder: case/whole-word/regex toggles, grouped results, click-to-open at line, Replace All | ✅ | `src-tauri/src/search.rs`; `searchPanel.ts` |
+| FR-08.4 | Sidebar keyboard shortcuts: Ctrl+Shift+F (search), Ctrl+Shift+E (files) | ✅ | |
+
+### FR-09: Source Control (Git)
+
+| ID | Requirement | Status | Notes |
+| --- | --- | --- | --- |
+| FR-09.1 | Git status panel: staged/changes lists, commit UI, branch checkout | ✅ | `src-tauri/src/git.rs`; `gitPanel.ts` |
+| FR-09.2 | Stage, unstage, commit, discard, diff viewing | ✅ | 5 Rust tests |
+| FR-09.3 | Repository detection for opened folder | ✅ | `git_is_repo` |
 
 ### FR-06: Themes & Appearance (`DES-003`)
 
@@ -100,7 +121,7 @@ Status Legend: ✅ Implemented · ⚠️ Partially Implemented · ⛔ Not Implem
 | Upstream macOS Feature | Porting Policy | Priority | Status |
 | --- | --- | :---: | :---: |
 | `WKWebView` + message handlers | WebView2 + Tauri IPC polyfill | P0 | ✅ |
-| `NSDocument` lifecycle | Rust `DocumentManager` | P0 | ⚠️ (external watcher pending) |
+| `NSDocument` lifecycle | Rust `DocumentManager` | P0 | ✅ (external watcher + reload implemented) |
 | AppKit menu / context menu | Tauri menu (`muda`) / app UI context menu | P0 | ✅ |
 | Keychain (`secretStorage`) | Windows Credential Manager | P1 | ⚠️ (plaintext file) |
 | TextBundle | Rust folder/zip reader and writer | P1 | ⚠️ |
