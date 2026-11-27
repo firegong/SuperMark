@@ -161,7 +161,8 @@ function parseInline(text: string, context: RenderContext): string {
       return full;
     }
     const titleAttr = parsed.title.length > 0 ? ` title="${escapeHtml(parsed.title)}"` : '';
-    return `<img src="${escapeHtml(parsed.href)}" alt="${escapeHtml(alt)}"${titleAttr} class="markedit-preview-image">`;
+    const src = (parsed.href.startsWith('data:') || /^https?:/i.test(parsed.href)) ? parsed.href : `${parsed.href}${parsed.href.includes('?') ? '&' : '?'}v=${Date.now()}`;
+    return `<img src="${escapeHtml(src)}" alt="${escapeHtml(alt)}"${titleAttr} class="markedit-preview-image">`;
   });
 
   result = result.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (full: string, label: string, dest: string) => {

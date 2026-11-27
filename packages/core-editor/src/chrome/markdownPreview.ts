@@ -819,6 +819,13 @@ function handleEditorInputForPreview(): void {
   updateContent();
 }
 
+function handleWindowFocusForPreview(): void {
+  if (previewState.mode === 'editor') {
+    return;
+  }
+  updateContent(true);
+}
+
 function startLiveSync(): void {
   const editor = getEditorView();
   if (editor === undefined) {
@@ -833,6 +840,7 @@ function startLiveSync(): void {
   // including IME composition commits, where MutationObserver can miss changes.
   target.addEventListener('input', handleEditorInputForPreview);
   target.addEventListener('keyup', handleEditorInputForPreview);
+  window.addEventListener('focus', handleWindowFocusForPreview);
 
   if (mutationObserver === null) {
     mutationObserver = new MutationObserver(() => {
@@ -854,6 +862,7 @@ function stopLiveSync(): void {
   editor?.scrollDOM.removeEventListener('scroll', handleEditorScroll);
   editor?.dom.removeEventListener('input', handleEditorInputForPreview);
   editor?.dom.removeEventListener('keyup', handleEditorInputForPreview);
+  window.removeEventListener('focus', handleWindowFocusForPreview);
   mutationObserver?.disconnect();
   mutationObserver = null;
 }

@@ -266,7 +266,8 @@ class MdastRenderer {
       return escapeHtml(alt);
     }
     const titleAttr = title !== null && title !== undefined && title.length > 0 ? ` title="${escapeHtml(title)}"` : '';
-    return `<img src="${escapeHtml(url)}" alt="${escapeHtml(alt)}" class="markedit-preview-image"${titleAttr}>`;
+    const src = (url.startsWith('data:') || /^https?:/i.test(url)) ? url : `${url}${url.includes('?') ? '&' : '?'}v=${Date.now()}`;
+    return `<img src="${escapeHtml(src)}" alt="${escapeHtml(alt)}" class="markedit-preview-image"${titleAttr}>`;
   }
 
   private footnoteReference(identifier: string, label: string): string {
