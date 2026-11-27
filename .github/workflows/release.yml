@@ -95,7 +95,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ steps.tauri.outputs.appVersion }}
           TAG: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', steps.tauri.outputs.appVersion) || github.ref_name }}
         working-directory: src-tauri
@@ -103,4 +103,5 @@ jobs:
           yarn --cwd ../packages/core-editor build
           cargo build --release --features "tauri/custom-protocol portable"
           cp target/release/SuperMark.exe "SuperMark_${VERSION}_x64_portable.exe"
+          gh release view "$TAG" -R firegong/SuperMark >/dev/null 2>&1 || gh release create "$TAG" -R firegong/SuperMark --title "SuperMark v${VERSION}" --draft --notes "Portable build"
           gh release upload "$TAG" "SuperMark_${VERSION}_x64_portable.exe" -R firegong/SuperMark --clobber
