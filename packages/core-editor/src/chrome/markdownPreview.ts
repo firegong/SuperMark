@@ -53,15 +53,128 @@ let editorContainer: HTMLElement | null = null;
 let mutationObserver: MutationObserver | null = null;
 let liveSyncRaf: number | null = null;
 
-// Right-clicking inside the preview re-renders it instead of relying on the
-// (often broken) native "Reload frame" action of the preview iframe.
+let previewContextMenu: HTMLElement | null = null;
+
+function hidePreviewContextMenu(): void {
+  if (previewContextMenu !== null) {
+    previewContextMenu.remove();
+    previewContextMenu = null;
+  }
+}
+
+async function copyPreviewContent(): Promise<void> {
+  const pane = previewState.pane;
+  if (pane === null) {
+    return;
+  }
+  const frame = pane.querySelector<HTMLIFrameElement>('iframe.markedit-preview-frame');
+  let html = '';
+  let text = '';
+  try {
+    const doc = frame?.contentDocument ?? null;
+    const selection = doc?.getSelection() ?? null;
+    if (selection !== null && selection.rangeCount > 0 && !selection.isCollapsed) {
+      const container = document.createElement('div');
+      container.appendChild(selection.getRangeAt(0).cloneContents());
+      html = container.innerHTML;
+      text = selection.toString();
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+    } else if (doc?.body !== null && doc?.body !== undefined) {
+      html = doc.body.innerHTML;
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+      text = doc.body.textContent ?? '';
+    }
+  } catch {
+    // Fall through to pane-level fallback below.
+  }
+  if (html === '') {
+    html = pane.innerHTML;
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+    text = pane.textContent ?? '';
+  }
+  try {
+    const item = new ClipboardItem({
+      'text/html': new Blob([html], { type: 'text/html' }),
+      'text/plain': new Blob([text], { type: 'text/plain' }),
+    });
+    await navigator.clipboard.write([item]);
+  } catch {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      // Clipboard may be unavailable; ignore.
+    }
+  }
+}
+
+function showPreviewContextMenu(x: number, y: number): void {
+  hidePreviewContextMenu();
+  const menu = document.createElement('div');
+  menu.className = 'markedit-preview-context-menu';
+  menu.style.position = 'fixed';
+  menu.style.left = `${x}px`;
+  menu.style.top = `${y}px`;
+  menu.style.zIndex = '100000';
+  menu.style.background = '#ffffff';
+  menu.style.border = '1px solid #d0d0d0';
+  menu.style.borderRadius = '6px';
+  menu.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+  menu.style.padding = '4px 0';
+  menu.style.minWidth = '120px';
+  menu.style.fontFamily = 'system-ui, sans-serif';
+  menu.style.fontSize = '13px';
+
+  const makeItem = (label: string, action: () => void): HTMLElement => {
+    const item = document.createElement('div');
+    item.textContent = label;
+    item.style.padding = '6px 14px';
+    item.style.cursor = 'pointer';
+    item.addEventListener('mouseenter', () => {
+      item.style.background = '#e8f0fe';
+    });
+    item.addEventListener('mouseleave', () => {
+      item.style.background = 'transparent';
+    });
+    item.addEventListener('click', (e) => {
+      e.stopPropagation();
+      hidePreviewContextMenu();
+      action();
+    });
+    return item;
+  };
+
+  menu.appendChild(makeItem('Copy', () => {
+    void copyPreviewContent();
+  }));
+  menu.appendChild(makeItem('Reload', () => {
+    updateContent(true);
+  }));
+
+  document.body.appendChild(menu);
+  previewContextMenu = menu;
+
+  // Keep the menu on screen.
+  const rect = menu.getBoundingClientRect();
+  if (rect.right > window.innerWidth) {
+    menu.style.left = `${Math.max(4, window.innerWidth - rect.width - 4)}px`;
+  }
+  if (rect.bottom > window.innerHeight) {
+    menu.style.top = `${Math.max(4, window.innerHeight - rect.height - 4)}px`;
+  }
+
+  setTimeout(() => {
+    document.addEventListener('click', hidePreviewContextMenu, { once: true });
+    document.addEventListener('contextmenu', hidePreviewContextMenu, { once: true });
+  }, 0);
+}
+
 document.addEventListener('contextmenu', (event: MouseEvent) => {
   const pane = previewState.pane;
   if (pane === null || !(event.target instanceof Node) || !pane.contains(event.target)) {
     return;
   }
   event.preventDefault();
-  updateContent(true);
+  showPreviewContextMenu(event.clientX, event.clientY);
 });
 
 function getEditorView(): typeof window.editor | undefined {
