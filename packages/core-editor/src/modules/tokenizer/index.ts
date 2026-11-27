@@ -155,8 +155,10 @@ export function tokenizePosition(event: MouseEvent) {
  */
 function useBuiltIn(pos: number) {
   // We don't care about ascii characters, tokenization is more meaningful for languages like Chinese and Japanese.
+  // Korean (Hangul) is handled by the default editor behavior so that Backspace deletes one
+  // character at a time, matching macOS text editing instead of native word-token deletion.
   const character = window.editor.state.sliceDoc(pos, pos + 1);
-  return /[ -~]/.test(character);
+  return /[ -~]/.test(character) || /[\u1100-\u11FF\u3130-\u318F\uAC00-\uD7AF]/.test(character);
 }
 
 function hasNativeTokenizer() {

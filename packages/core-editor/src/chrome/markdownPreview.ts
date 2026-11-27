@@ -811,6 +811,14 @@ function applyLayout(): void {
   updateContent(true);
 }
 
+function handleEditorInputForPreview(): void {
+  if (previewState.mode === 'editor') {
+    return;
+  }
+  noteEditorEdits();
+  updateContent();
+}
+
 function startLiveSync(): void {
   const editor = getEditorView();
   if (editor === undefined) {
@@ -821,6 +829,11 @@ function startLiveSync(): void {
   resetSyncPause();
 
   const target = editor.dom;
+  // Reliable update trigger: CodeMirror input/keyup events fire on every edit,
+  // including IME composition commits, where MutationObserver can miss changes.
+  target.addEventListener('input', handleEditorInputForPreview);
+  target.addEventListener('keyup', handleEditorInputForPreview);
+
   if (mutationObserver === null) {
     mutationObserver = new MutationObserver(() => {
       if (previewState.mode !== 'editor') {
@@ -837,7 +850,10 @@ function stopLiveSync(): void {
     clearTimeout(previewState.updateTimeout);
     previewState.updateTimeout = null;
   }
-  getEditorView()?.scrollDOM.removeEventListener('scroll', handleEditorScroll);
+  const editor = getEditorView();
+  editor?.scrollDOM.removeEventListener('scroll', handleEditorScroll);
+  editor?.dom.removeEventListener('input', handleEditorInputForPreview);
+  editor?.dom.removeEventListener('keyup', handleEditorInputForPreview);
   mutationObserver?.disconnect();
   mutationObserver = null;
 }
