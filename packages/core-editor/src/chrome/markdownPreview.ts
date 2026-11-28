@@ -52,6 +52,7 @@ const previewState: {
 let editorContainer: HTMLElement | null = null;
 let mutationObserver: MutationObserver | null = null;
 let liveSyncRaf: number | null = null;
+const contextMenuAttachedFrames = new WeakSet<Document>();
 
 let previewContextMenu: HTMLElement | null = null;
 
@@ -183,6 +184,29 @@ function showPreviewContextMenu(x: number, y: number): void {
   }
 }
 
+function attachPreviewFrameContextMenu(): void {
+  const pane = previewState.pane;
+  if (pane === null) {
+    return;
+  }
+  const frame = pane.querySelector<HTMLIFrameElement>('iframe.markedit-preview-frame');
+  const doc = frame?.contentDocument ?? null;
+  if (doc === null || contextMenuAttachedFrames.has(doc)) {
+    return;
+  }
+  contextMenuAttachedFrames.add(doc);
+  const handler = (event: MouseEvent): void => {
+    event.preventDefault();
+    event.stopPropagation();
+    showPreviewContextMenu(event.clientX, event.clientY);
+  };
+  doc.addEventListener('contextmenu', handler, true);
+  doc.body.addEventListener('contextmenu', handler, true);
+  if (doc.defaultView !== null) {
+    doc.defaultView.addEventListener('contextmenu', handler, true);
+  }
+}
+
 document.addEventListener('contextmenu', (event: MouseEvent) => {
   const pane = previewState.pane;
   if (pane === null) {
@@ -282,20 +306,12 @@ const previewHost: PreviewHost = {
     frameDocument.addEventListener('click', event => handlePreviewLinkClick(event, frameDocument));
     attachFrameScrollSync(frameDocument);
     // Right-click inside the preview frame opens our custom menu (Copy/Copy All + Reload).
-    const showMenuFromEvent = (event: MouseEvent): void => {
-      event.preventDefault();
-      event.stopPropagation();
-      showPreviewContextMenu(event.clientX, event.clientY);
-    };
-    frameDocument.addEventListener('contextmenu', showMenuFromEvent, true);
-    frameDocument.body.addEventListener('contextmenu', showMenuFromEvent, true);
-    if (frameDocument.defaultView !== null) {
-      frameDocument.defaultView.addEventListener('contextmenu', showMenuFromEvent, true);
-    }
+    attachPreviewFrameContextMenu();
     realignAfterRender();
   },
   didChangeLayout() {
     invalidateScrollAnchors();
+    attachPreviewFrameContextMenu();
     realignAfterRender();
   },
 };
@@ -1013,6 +1029,7 @@ function startLiveSync(): void {
       lastDoc = doc;
       handleEditorInputForPreview();
     }
+    attachPreviewFrameContextMenu();
     liveSyncRaf = requestAnimationFrame(tick);
   };
   liveSyncRaf = requestAnimationFrame(tick);
