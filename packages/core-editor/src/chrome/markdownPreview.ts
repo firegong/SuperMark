@@ -285,7 +285,6 @@ const previewHost: PreviewHost = {
     const showMenuFromEvent = (event: MouseEvent): void => {
       event.preventDefault();
       event.stopPropagation();
-      frameDocument.body.style.outline = '3px solid red';
       showPreviewContextMenu(event.clientX, event.clientY);
     };
     frameDocument.addEventListener('contextmenu', showMenuFromEvent, true);
@@ -781,10 +780,12 @@ function handleEditorScroll(): void {
     return;
   }
 
-  // The user is scrolling the preview and the editor moved by itself: it re-measured lines that
-  // had estimated heights. Put it back at the preview's position instead of moving the preview.
   const { editor: editorInput, preview: previewInput } = scrollSyncState.lastInput;
-  if (previewInput > editorInput && now() - previewInput < PREVIEW_DRIVE_MS) {
+
+  // Re-measurement after a preview scroll: only steal the scroll when the user
+  // has not recently interacted with the editor directly.
+  const recentEditorInput = now() - editorInput < 500;
+  if (!recentEditorInput && previewInput > editorInput && now() - previewInput < PREVIEW_DRIVE_MS) {
     syncEditorScroll();
     return;
   }
