@@ -646,13 +646,23 @@ function previewAnchors(surface: PreviewSurface, totalLines: number): ScrollAnch
     return scrollSyncState.anchors;
   }
 
-  const raw: ScrollAnchor[] = [];
+  const allRaw: ScrollAnchor[] = [];
+  const headingRaw: ScrollAnchor[] = [];
   root.querySelectorAll<HTMLElement>('[data-line]').forEach(element => {
     const line = parseInt(element.dataset.line ?? '', 10);
-    if (!Number.isNaN(line) && isRendered(element)) {
-      raw.push({ line, top: surface.offsetOf(element) });
+    if (Number.isNaN(line) || !isRendered(element)) {
+      return;
+    }
+    const anchor = { line, top: surface.offsetOf(element) };
+    allRaw.push(anchor);
+    if (element.querySelector('h1, h2, h3, h4, h5, h6') !== null) {
+      headingRaw.push(anchor);
     }
   });
+
+  // Prefer heading anchors so sections are aligned as whole blocks; fall back to
+  // every block when the document has fewer than two headings.
+  const raw: ScrollAnchor[] = headingRaw.length >= 2 ? headingRaw : allRaw;
 
   // No line attributes (e.g. markdown-it in a frame): match headings by text instead.
   if (raw.length === 0) {
