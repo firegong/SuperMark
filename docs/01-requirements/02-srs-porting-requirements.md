@@ -75,7 +75,7 @@ Status Legend: ✅ Implemented · ⚠️ Partially Implemented · ⛔ Not Implem
 | FR-05.4 | Diagrams (Mermaid, PlantUML, D2, Graphviz, draw.io): local tools with Kroki server fallback | ✅ | |
 | FR-05.5 | Math rendering (LaTeX → MathML, offline) | ✅ | |
 | FR-05.6 | Syntax highlighting in preview code blocks (theme colors), code copy button | ✅ | |
-| FR-05.7 | Editor ⇄ Preview bidirectional scroll sync (paused during edit/selection), double-click block to source line, checkbox toggle | ✅ | |
+| FR-05.7 | Editor ⇄ Preview bidirectional scroll sync (paused during edit/selection), double-click block to source line, checkbox toggle; heading-based section anchors | ✅ | |
 | FR-05.8 | Link clicks: web links open in browser, document links open in app, other files show in explorer | ✅ | Matches Ctrl+click behavior in editor |
 | FR-05.9 | Preview right-click menu: Copy/Copy All (rich HTML of selection or whole preview) and Reload (re-render preview) | ✅ | Custom menu in preview pane/iframe; survives Reload |
 | FR-05.10 | Preview image refresh on change: cache-busting query and re-render on window focus | ✅ | mdastRenderer + blockEngine image URLs; focus-triggered `updateContent(true)` |
