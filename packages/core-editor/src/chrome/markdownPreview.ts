@@ -177,7 +177,6 @@ function showPreviewContextMenu(x: number, y: number): void {
 
     setTimeout(() => {
       document.addEventListener('click', hidePreviewContextMenu, { once: true });
-      document.addEventListener('contextmenu', hidePreviewContextMenu, { once: true });
     }, 0);
   } catch (error) {
     console.error('preview context menu failed', error);
